@@ -95,7 +95,19 @@ function sharedDefaults() {
 }
 
 function draftItem(resource: Resource, patch: Patch, id = uid("new")): AnyItem {
-  const base = { ...sharedDefaults(), id, title: String(patch["title"] ?? "새 항목") };
+  const defaults = sharedDefaults();
+  const base = {
+    ...defaults,
+    id,
+    title: String(patch["title"] ?? "새 항목"),
+    // Keep the optimistic row identical to what the patch asks for, so a flag such as
+    // `favorite` (이번 주 꼭) is visible immediately in demo mode and before the server replies.
+    hidden: Boolean(patch["hidden"] ?? defaults.hidden),
+    favorite: Boolean(patch["favorite"] ?? defaults.favorite),
+    memo: typeof patch["memo"] === "string" ? (patch["memo"] as string) : defaults.memo,
+    sort: typeof patch["sort"] === "number" ? (patch["sort"] as number) : defaults.sort,
+    projectIds: Array.isArray(patch["projectIds"]) ? (patch["projectIds"] as string[]) : defaults.projectIds,
+  };
   if (resource === "calendar") {
     return {
       ...base,

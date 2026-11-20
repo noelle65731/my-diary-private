@@ -9,9 +9,11 @@ import {
   addMonthsISO,
   formatMonthDay,
   isoWeekNumber,
+  memoTitle,
   startOfWeekISO,
   todayISO,
   weekDays,
+  weekKeyOf,
   weekdayKo,
 } from "@/lib/date";
 import { holidayName } from "@/lib/holidays";
@@ -62,6 +64,8 @@ export function CalendarTab() {
   const [eventEditor, setEventEditor] = useState<{ open: boolean; id?: string | null; draft?: EventDraft }>({ open: false });
   const [taskId, setTaskId] = useState<string | null>(null);
   const [routineId, setRoutineId] = useState<string | null>(null);
+  /** A8: the week panel (꼭·목표·메모) folds open inside the week view below xl. */
+  const [weekPanelOpen, setWeekPanelOpen] = useState(false);
 
   useEffect(() => {
     setView(settings.calendarDefaultView);
@@ -74,6 +78,7 @@ export function CalendarTab() {
     setEventEditor({ open: false });
     setTaskId(null);
     setRoutineId(null);
+    setWeekPanelOpen(false);
   });
 
   useEffect(() => {
@@ -191,15 +196,54 @@ export function CalendarTab() {
   };
 
   const addFavorite = async (titleText: string) => {
-    const created = await create("projects", {
+    // A8: one creation turns on 긴급 · 중요 · 별표 together, so the title lands in '이번 주 꼭'
+    // straight away (and stays there after being moved to the inbox).
+    await create("projects", {
       title: titleText,
       kind: "할 일",
       category: "개인",
       date: todayISO(),
       status: "미완료",
+      urgent: true,
+      important: true,
+      favorite: true,
     });
-    if (created) await update("projects", created.id, { favorite: true });
   };
+
+  /** A8: this week's memo — title follows the real writing day, the record joins the week. */
+  const createMemo = async (): Promise<string | null> => {
+    const created = await create("calendar", {
+      title: memoTitle(todayISO(), "주간 메모"),
+      kind: "주간 메모",
+      category: "개인",
+      date: weekStart,
+      weekKey: weekKeyOf(weekStart),
+      baseDate: weekStart,
+      memo: "",
+    });
+    return created?.id ?? null;
+  };
+
+  const renderWeekPanel = () => (
+    <WeekPanel
+      weekStart={weekStart}
+      events={events}
+      tasks={tasks}
+      onCreateGoal={createWeekly}
+      onCreateFavorite={(title) => void addFavorite(title)}
+      onCreateMemo={createMemo}
+      onOpenEvent={openEvent}
+      onOpenTask={openTask}
+      onToggleEventDone={toggleEventDone}
+      onToggleTask={toggleTask}
+      onUpdateEvent={(id, patch) => void update("calendar", id, patch)}
+      onPickDay={(day) => {
+        setCursor(day);
+        setView("day");
+      }}
+      onMonth={(direction) => setCursor((current) => addMonthsISO(current, direction))}
+    />
+  );
 
   const routineTemplates = routines.filter((routine) => routine.kind === "루틴" && !routine.history);
 
@@ -283,6 +327,21 @@ export function CalendarTab() {
         </div>
       </div>
 
+      {view === "week" ? (
+        <div className="mt-3 rounded-2xl border border-paper-300 bg-white/70 xl:hidden">
+          <button
+            type="button"
+            onClick={() => setWeekPanelOpen((open) => !open)}
+            aria-expanded={weekPanelOpen}
+            className="flex w-full items-center justify-between gap-2 px-3.5 py-2.5 text-left"
+          >
+            <span className="text-[0.84rem] font-semibold text-ink-900">이번 주 꼭 · 목표 · 메모</span>
+            <span className="text-[0.68rem] text-ink-400">{weekPanelOpen ? "접기" : "열기"}</span>
+          </button>
+          {weekPanelOpen ? <div className="border-t border-paper-300/70 px-3.5 py-3">{renderWeekPanel()}</div> : null}
+        </div>
+      ) : null}
+
       {view === "year" ? (
         <>
           <div className="mt-4 flex items-center gap-1.5">
@@ -327,12 +386,14 @@ export function CalendarTab() {
               mode={mode}
               weekStartsOn={settings.weekStartsOn}
               showWeekends={settings.showWeekends}
+              dayItems={settings.monthDayItems}
               onSelectDay={(day) => {
                 setCursor(day);
                 setView("day");
               }}
               onOpenEvent={openEvent}
               onOpenTask={openTask}
+              onUpdateEvent={(id, patch) => void update("calendar", id, patch)}
               onCreate={(date) => createEvent(date, null)}
               onRoutineCount={(routine, date, count) => void setRoutineCount(routine, date, count)}
             />
@@ -396,6 +457,7 @@ export function CalendarTab() {
               projects={projects}
               routines={data.routines}
               hiddenIncluded={hiddenIncluded}
+              recordCount={data.binder.filter((entry) => entry.date === cursor && !entry.trash).length}
               onOpenEvent={openEvent}
               onOpenTask={openTask}
               onCreate={createEvent}
@@ -422,23 +484,7 @@ export function CalendarTab() {
 
       {view === "week" ? (
         <aside className="side-panel sticky top-12 hidden max-h-[calc(100dvh-6.5rem)] w-[19rem] flex-none overflow-y-auto pb-8 pl-5 xl:block">
-            <WeekPanel
-              weekStart={weekStart}
-              events={events}
-              tasks={tasks}
-              onCreateGoal={createWeekly}
-              onCreateFavorite={(title) => void addFavorite(title)}
-              onOpenEvent={openEvent}
-              onOpenTask={openTask}
-              onToggleEventDone={toggleEventDone}
-              onToggleTask={toggleTask}
-              onUpdateEvent={(id, patch) => void update("calendar", id, patch)}
-              onPickDay={(day) => {
-                setCursor(day);
-                setView("day");
-              }}
-              onMonth={(direction) => setCursor((current) => addMonthsISO(current, direction))}
-            />
+          {renderWeekPanel()}
         </aside>
       ) : null}
 

@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { CalendarEvent, ProjectTask, Routine } from "@/lib/types";
 import { isSameISO, todayISO, weekdayKo } from "@/lib/date";
 import { holidayName } from "@/lib/holidays";
 import { cn } from "@/lib/utils";
 import { categoryTone, priorityOf, projectEmoji, routineTone, taskTone } from "@/components/common/tone";
-import { CheckIcon } from "@/components/icons";
+import { CheckIcon, ChevronDownIcon, ChevronRightIcon } from "@/components/icons";
 import { eventCoversDay, routineCountForDay } from "@/components/calendar/calendar-utils";
 import { Timeline } from "@/components/calendar/Timeline";
 
@@ -51,6 +51,16 @@ export function WeekBoard({
 }: WeekBoardProps) {
   const today = todayISO();
   const [narrow, setNarrow] = useState(false);
+  /** Lets the timetable take the full height when the user wants every event at once. */
+  const [timeExpanded, setTimeExpanded] = useState(false);
+  /**
+   * A2: on a phone the task title itself is the checkbox — one tap completes, another
+   * clears it. A tap that turned into a swipe or a scroll must never toggle anything,
+   * so the pointer is sampled on down and compared on click.
+   */
+  const tapOrigin = useRef<{ id: string; x: number; y: number; at: number } | null>(null);
+  const scroller = useRef<HTMLDivElement | null>(null);
+  const dayKey = days.join(",");
   useEffect(() => {
     const query = window.matchMedia("(max-width: 767px)");
     const sync = () => setNarrow(query.matches);
@@ -58,6 +68,17 @@ export function WeekBoard({
     query.addEventListener("change", sync);
     return () => query.removeEventListener("change", sync);
   }, []);
+
+  /** Keeps today's column in view when the narrow board scrolls sideways. */
+  useEffect(() => {
+    if (!narrow || !scroller.current) return;
+    const node = scroller.current.querySelector<HTMLElement>("[data-today='true']");
+    if (!node) return;
+    const box = node.getBoundingClientRect();
+    const frame = scroller.current.getBoundingClientRect();
+    const delta = box.left - frame.left;
+    scroller.current.scrollLeft += delta - (scroller.current.clientWidth - box.width) / 2;
+  }, [narrow, dayKey]);
   const gutter = narrow ? "2.6rem" : "7.6rem";
   const grid = useMemo(
     () => ({ gridTemplateColumns: `${gutter} repeat(${days.length}, minmax(0, 1fr))` }),
@@ -92,8 +113,7 @@ export function WeekBoard({
         const pa = a[1].project;
         const pb = b[1].project;
         return (order[(pa?.category ?? "개인") as keyof typeof order] ?? 1) - (order[(pb?.category ?? "개인") as keyof typeof order] ?? 1);
-      })
-      .slice(0, 7);
+      });
   }, [weekTasks, projects]);
 
   const routineGroups = useMemo(() => {
@@ -128,9 +148,16 @@ export function WeekBoard({
 
   return (
     <div className="min-w-0">
+      {/* A2: on a phone the board keeps readable column widths and scrolls sideways a little,
+          so an 8–10 character title is never squeezed into two letters per line. */}
+      <div
+        ref={scroller}
+        className={cn("min-w-0", narrow && "-mx-1 overflow-x-auto overscroll-x-contain pb-1")}
+      >
+        <div className={cn(narrow && "min-w-[42rem]")}>
       {/* week day header */}
       <div className="grid items-end border-b border-paper-300 pb-1" style={grid}>
-        <div className="pb-1 text-right text-[0.62rem] text-ink-400">
+        <div className="sticky left-0 z-20 bg-white pb-1 text-right text-[0.62rem] text-ink-400">
           {allDayBars.length > 0 ? "" : ""}
         </div>
         {days.map((day) => {
@@ -141,6 +168,7 @@ export function WeekBoard({
             <button
               key={day}
               type="button"
+              data-today={isToday ? "true" : undefined}
               onClick={() => onSelectDay(day)}
               className="flex flex-col items-center gap-0.5 pb-0.5 pt-1.5 transition hover:bg-paper-200/40"
             >
@@ -169,7 +197,7 @@ export function WeekBoard({
 
       {/* all-day */}
       <div className="grid border-b border-paper-300" style={grid}>
-        <div className="flex items-start justify-end pr-2 pt-1.5 text-[0.62rem] text-ink-400">종일</div>
+        <div className="sticky left-0 z-20 flex items-start justify-end bg-white pr-2 pt-1.5 text-[0.62rem] text-ink-400">종일</div>
         <div className="relative" style={{ gridColumn: `2 / span ${days.length}`, height: allDayHeight }}>
           <div className="absolute inset-0 grid" style={{ gridTemplateColumns: `repeat(${days.length}, minmax(0, 1fr))` }}>
             {days.map((day) => (
@@ -204,18 +232,38 @@ export function WeekBoard({
         </div>
       </div>
 
-      {/* timeline */}
-      <Timeline
-        days={days}
-        events={visibleEvents.filter((event) => event.kind === "일정")}
-        startHour={startHour}
-        endHour={endHour}
-        hourHeight={narrow ? 34 : 24}
-        gutterWidth={gutter}
-        onOpenEvent={onOpenEvent}
-        onCreate={onCreate}
-        onMoveEvent={onMoveEvent}
-      />
+      {/* timeline — capped to about 2/5 of the screen so the project and routine rows stay the centre of the week */}
+      <div className="flex items-center justify-end gap-2 border-b border-paper-300/70 px-1 py-1">
+        <button
+          type="button"
+          onClick={() => setTimeExpanded((open) => !open)}
+          aria-expanded={timeExpanded}
+          className="inline-flex items-center gap-1 rounded-full bg-paper-200 px-2 py-[3px] text-[0.62rem] font-medium text-ink-600 transition hover:bg-paper-300/70 hover:text-ink-900"
+        >
+          {timeExpanded ? "기본 비율로" : "전체 일정 보기"}
+          <ChevronDownIcon size={10} className={cn("transition", timeExpanded && "rotate-180")} />
+        </button>
+      </div>
+      <div
+        className={cn(
+          "relative overflow-y-auto overflow-x-clip overscroll-contain border-b border-paper-300/60",
+          timeExpanded ? "max-h-[86dvh]" : narrow ? "max-h-[34dvh]" : "max-h-[36dvh]",
+        )}
+      >
+        <div className="pt-1">
+          <Timeline
+            days={days}
+            events={visibleEvents.filter((event) => event.kind === "일정")}
+            startHour={startHour}
+            endHour={endHour}
+            hourHeight={timeExpanded ? (narrow ? 46 : 38) : narrow ? 30 : 24}
+            gutterWidth={gutter}
+            onOpenEvent={onOpenEvent}
+            onCreate={onCreate}
+            onMoveEvent={onMoveEvent}
+          />
+        </div>
+      </div>
 
       {/* attached project rows */}
       <div className="border-t border-paper-300">
@@ -227,15 +275,19 @@ export function WeekBoard({
           const tone = project ? taskTone(project.category) : null;
           return (
             <div key={key} className="grid border-b border-paper-300/80" style={grid}>
-              <div className="flex min-h-[2.2rem] items-center gap-1.5 py-1 pr-1.5">
-                <span
+              <div className="sticky left-0 z-20 flex min-h-[2.2rem] items-center gap-1.5 bg-white py-1 pr-1.5">
+                <button
+                  type="button"
+                  onClick={() => (project ? onOpenTask(project.id) : onCreateTaskForProject(""))}
+                  aria-label={project?.title ?? "받은함"}
+                  title={project?.title ?? "받은함"}
                   className={cn(
                     "flex h-6 w-6 flex-none items-center justify-center rounded-lg text-[0.72rem]",
                     tone ? tone.soft : "bg-paper-200",
                   )}
                 >
                   {project ? projectEmoji(project.id, project.category) : "🗂️"}
-                </span>
+                </button>
                 {narrow ? null : (
                   <button
                     type="button"
@@ -261,36 +313,73 @@ export function WeekBoard({
               {days.map((day) => {
                 const cell = row.tasks.filter((task) => task.date === day || task.due === day);
                 return (
-                  <div key={day} className="min-h-[2.2rem] border-l border-paper-300/80 px-1 py-1">
-                    <div className="space-y-1.5">
+                  <div
+                    key={day}
+                    className={cn("min-h-[2.2rem] border-l border-paper-300/80 py-1", narrow ? "px-[3px]" : "px-1")}
+                  >
+                    <div className={cn(narrow ? "space-y-1.5" : "space-y-1")}>
                       {cell.map((task) => {
                         const done = task.status === "완료";
+                        const waiting = task.status === "대기 중";
                         const priority = priorityOf(task);
                         const taskColor = taskTone(task.category);
+                        const memoLine = task.memo ? task.memo.split(/\r?\n/)[0]!.trim() : "";
                         return (
-                          <div key={task.id} className="flex items-start gap-1.5">
+                          <div key={task.id} className={cn("flex items-start", narrow ? "gap-0.5" : "gap-1.5")}>
+                            {narrow ? null : (
+                              <button
+                                type="button"
+                                onClick={() => onToggleTask(task)}
+                                aria-label={done ? "완료 취소" : "완료"}
+                                className={cn(
+                                  "mt-[1px] flex h-[15px] w-[15px] flex-none items-center justify-center rounded-[4px] border transition",
+                                  done ? cn(taskColor.solid, taskColor.solidText, "border-transparent") : "border-dashed border-ink-300 hover:border-ink-500",
+                                )}
+                              >
+                                {done ? <CheckIcon size={9} /> : null}
+                              </button>
+                            )}
                             <button
                               type="button"
-                              onClick={() => onToggleTask(task)}
-                              aria-label={done ? "완료 취소" : "완료"}
-                              className={cn(
-                                "mt-[1px] flex h-[15px] w-[15px] flex-none items-center justify-center rounded-[4px] border transition",
-                                done ? cn(taskColor.solid, taskColor.solidText, "border-transparent") : "border-dashed border-ink-300 hover:border-ink-500",
-                              )}
+                              onPointerDown={
+                                narrow
+                                  ? (event) => {
+                                      tapOrigin.current = { id: task.id, x: event.clientX, y: event.clientY, at: Date.now() };
+                                    }
+                                  : undefined
+                              }
+                              onClick={(event) => {
+                                if (!narrow) {
+                                  onOpenTask(task.id);
+                                  return;
+                                }
+                                const origin = tapOrigin.current;
+                                tapOrigin.current = null;
+                                const travelled = origin && origin.id === task.id ? Math.hypot(event.clientX - origin.x, event.clientY - origin.y) : 0;
+                                const elapsed = origin ? Date.now() - origin.at : 0;
+                                if (travelled > 10 || elapsed > 900) return;
+                                onToggleTask(task);
+                              }}
+                              aria-label={narrow ? `${task.title} ${done ? "완료 해제" : "완료"}` : undefined}
+                              title={narrow ? (done ? "한 번 더 누르면 완료 해제" : "한 번 누르면 완료") : undefined}
+                              className="min-w-0 flex-1 touch-manipulation select-none text-left"
                             >
-                              {done ? <CheckIcon size={9} /> : null}
-                            </button>
-                            <button type="button" onClick={() => onOpenTask(task.id)} className="min-w-0 flex-1 text-left">
-                              <span className="flex items-center gap-1">
+                              <span className={cn("flex gap-1", narrow ? "items-start" : "items-center")}>
+                                {narrow && done ? (
+                                  <span className={cn("mt-[5px] h-[5px] w-[5px] flex-none rounded-full", taskColor.solid)} />
+                                ) : null}
                                 <span
                                   className={cn(
-                                    "truncate text-[0.72rem] leading-[1.25] text-ink-800",
+                                    "min-w-0 text-ink-800",
+                                    narrow
+                                      ? "line-clamp-2 break-words text-[0.7rem] leading-[1.2]"
+                                      : "truncate text-[0.72rem] leading-[1.25]",
                                     done && "text-ink-400 line-through",
                                   )}
                                 >
                                   {task.title}
                                 </span>
-                                {priority !== "기타" ? (
+                                {!narrow && priority !== "기타" ? (
                                   <span
                                     className={cn(
                                       "h-[5px] w-[5px] flex-none rounded-full",
@@ -298,9 +387,40 @@ export function WeekBoard({
                                     )}
                                   />
                                 ) : null}
+                                {!narrow && waiting ? (
+                                  <span className="flex-none rounded bg-paper-200 px-1 text-[0.56rem] font-medium leading-[1.4] text-ink-500">대기</span>
+                                ) : null}
                               </span>
-                              {task.memo ? <span className="mt-0.5 block truncate text-[0.64rem] leading-tight text-ink-400">{task.memo}</span> : null}
+                              {narrow && (priority !== "기타" || waiting) ? (
+                                <span className="mt-0.5 flex flex-wrap items-center gap-1">
+                                  {priority !== "기타" ? (
+                                    <span
+                                      className={cn(
+                                        "h-[5px] w-[5px] rounded-full",
+                                        priority === "긴급·중요" ? "bg-red-500" : priority === "중요" ? "bg-blue-500" : "bg-amber-500",
+                                      )}
+                                    />
+                                  ) : null}
+                                  {waiting ? (
+                                    <span className="rounded bg-paper-200 px-[3px] text-[0.55rem] font-medium leading-[1.35] text-ink-500">대기</span>
+                                  ) : null}
+                                </span>
+                              ) : null}
+                              {memoLine ? (
+                                <span className="mt-0.5 block truncate text-[0.62rem] leading-tight text-ink-400">{memoLine}</span>
+                              ) : null}
                             </button>
+                            {narrow ? (
+                              <button
+                                type="button"
+                                onClick={() => onOpenTask(task.id)}
+                                aria-label="상세 열기"
+                                title="상세 열기"
+                                className="mt-[1px] flex h-[20px] w-[15px] flex-none items-center justify-center rounded text-ink-300 transition hover:text-ink-800"
+                              >
+                                <ChevronRightIcon size={11} />
+                              </button>
+                            ) : null}
                           </div>
                         );
                       })}
@@ -317,7 +437,7 @@ export function WeekBoard({
       {routineGroups.map((group) => (
         <div key={group.category} className="border-b border-paper-300/80">
           <div className="grid" style={grid}>
-            <div className="flex items-center gap-1.5 py-1.5 pl-0.5 text-[0.68rem] text-ink-500">
+            <div className="sticky left-0 z-20 flex items-center gap-1.5 bg-white py-1.5 pl-0.5 text-[0.68rem] text-ink-500">
               루틴
               <span className={cn("h-[5px] w-[5px] rounded-full", group.category === "개인" ? "bg-amber-400" : "bg-dusk-500")} />
               {group.category}
@@ -332,7 +452,7 @@ export function WeekBoard({
                 <button
                   type="button"
                   onClick={() => onOpenRoutine(routine.id)}
-                  className="flex min-w-0 items-center gap-1 py-[3px] pr-1 text-left text-[0.68rem] text-ink-700 hover:text-ink-900 md:gap-1.5 md:pr-2 md:text-[0.72rem]"
+                  className="sticky left-0 z-20 flex min-w-0 items-center gap-1 bg-white py-[3px] pr-1 text-left text-[0.68rem] text-ink-700 hover:text-ink-900 md:gap-1.5 md:pr-2 md:text-[0.72rem]"
                 >
                   <span className={cn("h-[5px] w-[5px] flex-none rounded-full", tone.dot)} />
                   <span className="truncate">{routine.title}</span>
@@ -372,7 +492,7 @@ export function WeekBoard({
             <button
               type="button"
               onClick={onCreateRoutine}
-              className="py-1 pl-0.5 text-left text-[0.68rem] text-ink-400 hover:text-ink-700"
+              className="sticky left-0 z-20 bg-white py-1 pl-0.5 text-left text-[0.68rem] text-ink-400 hover:text-ink-700"
             >
               + 루틴
             </button>
@@ -383,11 +503,11 @@ export function WeekBoard({
 
       {routineGroups.length === 0 ? (
         <div className="grid border-b border-paper-300/80" style={grid}>
-          <div className="py-1.5 text-[0.68rem] text-ink-400">루틴</div>
+          <div className="sticky left-0 z-20 bg-white py-1.5 text-[0.68rem] text-ink-400">루틴</div>
           <button
             type="button"
             onClick={onCreateRoutine}
-            className="py-1.5 text-left text-[0.68rem] text-ink-400 hover:text-ink-700"
+            className="sticky left-0 z-20 bg-white py-1.5 text-left text-[0.68rem] text-ink-400 hover:text-ink-700"
             style={{ gridColumn: `2 / span ${days.length}` }}
           >
             + 루틴 추가
@@ -395,7 +515,13 @@ export function WeekBoard({
         </div>
       ) : null}
 
-      <p className="mt-2 text-[0.64rem] text-ink-300">빈 칸을 누르면 일정이 추가되고, 일정 블록은 끌어서 옮길 수 있습니다.</p>
+        </div>
+      </div>
+      <p className="mt-2 text-[0.64rem] text-ink-300">
+        {narrow
+          ? "시간표는 위아래로 밀어 볼 수 있고, ‘전체 일정 보기’로 넓게 볼 수 있어요. 할 일 제목을 한 번 누르면 완료, 다시 누르면 해제되고 오른쪽 › 를 누르면 상세가 열립니다."
+          : "시간표는 위아래로 스크롤되고 ‘전체 일정 보기’로 넓게 볼 수 있습니다. 빈 칸을 누르면 일정이 추가되고, 일정 블록은 끌어서 옮길 수 있습니다."}
+      </p>
     </div>
   );
 }

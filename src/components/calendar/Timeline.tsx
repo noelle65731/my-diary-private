@@ -93,7 +93,7 @@ export function Timeline({
         </div>
       ) : null}
       <div className="grid" style={{ gridTemplateColumns: `${gutterWidth} repeat(${days.length}, minmax(0, 1fr))` }}>
-        <div className="relative" style={{ height: totalHeight }}>
+        <div className="sticky left-0 z-20 bg-white" style={{ height: totalHeight }}>
           {marks.map((minutes) => (
             <div
               key={minutes}
@@ -150,6 +150,12 @@ export function Timeline({
                 const tone = categoryTone(event.category);
                 const width = `calc(${100 / lanes}% - 4px)`;
                 const left = `calc(${(lane * 100) / lanes}% + 2px)`;
+                const timeLabel = event.startTime
+                  ? `${event.startTime}${event.endTime ? `–${event.endTime}` : ""}`
+                  : "";
+                // A8: a 30-minute card is only 18px tall, so the start time and the title
+                // share one compact line instead of the time being cut below the fold.
+                const compactCard = height < 34;
                 return (
                   <button
                     key={`${event.id}-${day}`}
@@ -164,28 +170,51 @@ export function Timeline({
                       onOpenEvent(event.id);
                     }}
                     className={cn(
-                      "absolute overflow-hidden rounded-md border px-1.5 py-[3px] text-left transition hover:brightness-[0.99]",
+                      "absolute overflow-hidden rounded-md border text-left transition hover:brightness-[0.99]",
+                      compactCard ? "px-1 py-[1px]" : "px-1.5 py-[3px]",
                       tone.bg,
                       tone.border,
                       event.canceled && "opacity-50",
                     )}
                     style={{ top, height, width, left }}
                   >
-                    <span
-                      className={cn(
-                        "block whitespace-normal break-words text-[0.6rem] font-medium leading-[1.2] md:truncate md:whitespace-nowrap md:text-[0.68rem]",
-                        tone.text,
-                        event.canceled && "line-through",
-                      )}
-                    >
-                      {event.title}
-                    </span>
-                    {height > 34 ? (
-                      <span className={cn("mt-0.5 hidden truncate text-[0.6rem] leading-tight opacity-80 md:block", tone.text)}>
-                        {event.startTime}
-                        {event.endTime ? `–${event.endTime}` : ""}
+                    {timeLabel ? (
+                      <span
+                        className={cn(
+                          "flex items-center gap-1 tabular-nums opacity-85",
+                          compactCard ? "text-[0.56rem] leading-[1.1]" : "text-[0.58rem] leading-[1.15]",
+                          tone.text,
+                        )}
+                      >
+                        <span className={cn("flex-none", compactCard && "font-semibold")}>{timeLabel}</span>
+                        {compactCard ? (
+                          <span
+                            className={cn(
+                              "min-w-0 truncate text-[0.56rem] font-medium leading-[1.1]",
+                              event.canceled && "line-through",
+                            )}
+                          >
+                            {event.title}
+                          </span>
+                        ) : null}
                       </span>
                     ) : null}
+                    {compactCard && !timeLabel ? (
+                      <span className={cn("block truncate text-[0.56rem] font-medium leading-[1.1]", tone.text, event.canceled && "line-through")}>
+                        {event.title}
+                      </span>
+                    ) : null}
+                    {compactCard ? null : (
+                      <span
+                        className={cn(
+                          "mt-0.5 block whitespace-normal break-words text-[0.6rem] font-medium leading-[1.2] md:text-[0.66rem]",
+                          tone.text,
+                          event.canceled && "line-through",
+                        )}
+                      >
+                        {event.title}
+                      </span>
+                    )}
                   </button>
                 );
               })}

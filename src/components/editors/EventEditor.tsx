@@ -5,7 +5,7 @@ import { useData } from "@/state/store";
 import { Modal, Segmented, TextArea, TextInput, Toggle } from "@/components/common/primitives";
 import { EditorFooter, ErrorNote, ProjectPicker } from "@/components/editors/shared";
 import { CalendarIcon, StarIcon } from "@/components/icons";
-import { startOfWeekISO, todayISO, weekKeyOf } from "@/lib/date";
+import { memoTitle, startOfWeekISO, todayISO, weekKeyOf } from "@/lib/date";
 import { cn } from "@/lib/utils";
 import {
   CALENDAR_CATEGORIES,
@@ -59,11 +59,14 @@ function formFromEvent(event: CalendarEvent): FormState {
 }
 
 function formFromDraft(draft?: EventDraft): FormState {
+  const kind = draft?.kind ?? "일정";
+  const date = draft?.date ?? todayISO();
   return {
-    title: "",
-    kind: draft?.kind ?? "일정",
+    // A8/A9: a new 주간·월간 메모 is named after the day it is written.
+    title: kind === "주간 메모" || kind === "월간 메모" ? memoTitle(todayISO(), kind) : "",
+    kind,
     category: "개인",
-    date: draft?.date ?? todayISO(),
+    date,
     allDay: !draft?.startTime,
     startTime: draft?.startTime ?? "09:00",
     endTime: "",

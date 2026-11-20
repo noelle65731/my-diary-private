@@ -20,7 +20,8 @@ export interface Settings {
   showWeekends: boolean;
   weekStartHour: number;
   weekEndHour: number;
-  allDayCollapse: number;
+  /** How many items a month cell shows before the rest collapses into a count. */
+  monthDayItems: 3 | 4 | 5;
   calendarDefaultView: CalendarViewKey;
   calendarShowHidden: boolean;
   projectTaskPreview: number;
@@ -36,7 +37,7 @@ export const DEFAULT_SETTINGS: Settings = {
   showWeekends: true,
   weekStartHour: 9,
   weekEndHour: 19,
-  allDayCollapse: 3,
+  monthDayItems: 3,
   calendarDefaultView: "week",
   calendarShowHidden: false,
   projectTaskPreview: 4,

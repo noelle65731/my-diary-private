@@ -171,6 +171,12 @@ export function formatFullKo(iso: string): string {
   return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일 ${WEEKDAYS_KO[d.getDay()]}요일`;
 }
 
+/** `YYYY년 MM월 DD일 주간 메모` / `월간 메모` — the title rule, dated by the day it was written. */
+export function memoTitle(iso: string, kind: "주간 메모" | "월간 메모"): string {
+  const d = fromISO(iso);
+  return `${d.getFullYear()}년 ${pad2(d.getMonth() + 1)}월 ${pad2(d.getDate())}일 ${kind}`;
+}
+
 export function formatMonthKo(iso: string): string {
   const d = fromISO(iso);
   return `${d.getFullYear()}년 ${d.getMonth() + 1}월`;

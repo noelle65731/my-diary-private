@@ -4,7 +4,7 @@
  * Nothing is ever written back to Notion in this mode.
  */
 
-import { addDaysISO, todayISO, weekKeyOf, startOfWeekISO, isoWeekNumber } from "./date";
+import { addDaysISO, memoTitle, todayISO, weekKeyOf, startOfWeekISO, isoWeekNumber } from "./date";
 import type {
   AllData,
   ArchiveEntry,
@@ -84,10 +84,17 @@ export function buildDemoData(): AllData {
       baseDate: monday,
       category: "개인",
     }),
-    event("demo-ev-13", "이번 주는 마감이 몰린 주. 저녁 약속은 하나만.", monday, {
+    event("demo-ev-13", memoTitle(today, "주간 메모"), monday, {
       kind: "주간 메모",
       weekKey: wk,
       baseDate: monday,
+      memo: "이번 주는 마감이 몰린 주. 저녁 약속은 하나만.",
+    }),
+    event("demo-ev-16", memoTitle(addDaysISO(today, -7), "주간 메모"), addDaysISO(monday, -7), {
+      kind: "주간 메모",
+      weekKey: weekKeyOf(addDaysISO(monday, -7)),
+      baseDate: addDaysISO(monday, -7),
+      memo: "지난주: 지원서 3곳 마감, 운동은 2번. 다음 주엔 저녁 약속 줄이기.",
     }),
     event("demo-ev-14", "11월은 지원서 정리와 루틴 회복의 달", `${today.slice(0, 7)}-01`, {
       kind: "월간 메모",

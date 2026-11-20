@@ -162,18 +162,21 @@ export function SettingsDialog() {
                 </label>
               </div>
               <div>
-                <div className="mb-1 flex items-baseline justify-between">
-                  <p className="text-[0.86rem] text-ink-800">종일 일정 접기 기준</p>
-                  <span className="text-[0.72rem] text-ink-400">{settings.allDayCollapse}개 이상</span>
-                </div>
-                <input
-                  type="range"
-                  min={2}
-                  max={8}
-                  value={settings.allDayCollapse}
-                  onChange={(event) => set("allDayCollapse", Number(event.target.value))}
-                  className="w-full accent-ink-900"
+                <p className="label">월간 하루 표시</p>
+                <Segmented<"3" | "4" | "5">
+                  value={String(settings.monthDayItems) as "3" | "4" | "5"}
+                  onChange={(value) => set("monthDayItems", Number(value) as 3 | 4 | 5)}
+                  size="sm"
+                  options={[
+                    { value: "3", label: "3개" },
+                    { value: "4", label: "4개" },
+                    { value: "5", label: "5개" },
+                  ]}
                 />
+                <p className="mt-1 text-[0.7rem] leading-relaxed text-ink-400">
+                  월간 달력의 하루 칸에 제목을 보여 줄 항목 수입니다. 넘치는 항목은 ‘할 일 N’·‘+N 더’로 접히고, 누르면 그 날짜 전체
+                  목록이 열립니다.
+                </p>
               </div>
               <Toggle
                 checked={settings.calendarShowHidden}

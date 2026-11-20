@@ -12,6 +12,7 @@ import {
   routineCountForDay,
   routinesForDay,
   tasksForDay,
+  timedEventsForDay,
 } from "@/components/calendar/calendar-utils";
 import { Timeline } from "@/components/calendar/Timeline";
 
@@ -29,6 +30,8 @@ interface DayViewProps {
   onRoutineCount: (routine: Routine, date: string, count: number) => void;
   onWriteDiary: (date: string) => void;
   onCreateTaskForProject: (projectId: string) => void;
+  /** A8: how many diary/note records the day holds (`기록 N`). */
+  recordCount: number;
 }
 
 export function DayView({
@@ -45,15 +48,18 @@ export function DayView({
   onRoutineCount,
   onWriteDiary,
   onCreateTaskForProject,
+  recordCount,
 }: DayViewProps) {
   const visible = events.filter((event) => !event.trash && (hiddenIncluded || !event.hidden));
   const allDay = allDayEventsForDay(visible, day);
+  const timed = timedEventsForDay(visible, day).filter((event) => !event.canceled);
   const dayTasks = tasksForDay(
     tasks.filter((task) => !task.trash && (hiddenIncluded || !task.hidden)),
     day,
   ).filter((task) => task.status !== "취소");
   const dueRoutines = routinesForDay(routines, day).filter((routine) => !routine.trash && (hiddenIncluded || !routine.hidden));
   const holiday = holidayName(day);
+  const scheduleCount = allDay.filter((event) => !event.canceled).length + timed.length;
 
   const groups = useMemo(() => {
     const map = new Map<string, { project: ProjectTask | null; tasks: ProjectTask[] }>();
@@ -70,7 +76,19 @@ export function DayView({
   return (
     <div className="grid grid-cols-2 gap-3 lg:gap-5 xl:grid-cols-[minmax(0,1fr)_23rem]">
       <div className="min-w-0">
-        <p className="mb-2 text-[0.68rem] text-ink-400">일정</p>
+        <div className="mb-2 border-b border-paper-300 pb-2">
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[0.66rem] text-ink-400">
+            <span>일정 <b className="font-semibold text-ink-700">{scheduleCount}</b></span>
+            <span className="text-paper-400">·</span>
+            <span>할 일 <b className="font-semibold text-ink-700">{dayTasks.length}</b></span>
+            <span className="text-paper-400">·</span>
+            <span>기록 <b className="font-semibold text-ink-700">{recordCount}</b></span>
+          </p>
+          <p className="mt-1 text-[0.78rem] font-medium text-ink-800">
+            {formatFullKo(day)}
+            {holiday ? <span className="ml-1 text-[0.72rem] font-normal text-red-500">{holiday}</span> : null}
+          </p>
+        </div>
 
         {allDay.length > 0 ? (
           <div className="mb-2 flex flex-wrap items-center gap-1.5 border-b border-paper-300 pb-2">
@@ -102,11 +120,7 @@ export function DayView({
           onCreate={onCreate}
         />
 
-        <div className="mt-3 flex items-center justify-between border-t border-paper-300 pt-2 text-[0.68rem] text-ink-400">
-          <span>
-            {formatFullKo(day)}
-            {holiday ? ` · ${holiday}` : ""}
-          </span>
+        <div className="mt-3 flex items-center justify-end border-t border-paper-300 pt-2 text-[0.68rem] text-ink-400">
           <button type="button" onClick={() => onCreate(day, "09:00")} className="text-ink-500 hover:text-ink-900">
             + 일정
           </button>
