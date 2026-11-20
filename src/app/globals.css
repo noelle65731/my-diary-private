@@ -47,6 +47,13 @@
     font: inherit;
   }
 
+  button,
+  a,
+  [role="button"] {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
   * {
     scrollbar-width: thin;
     scrollbar-color: rgba(185, 173, 152, 0.55) transparent;
