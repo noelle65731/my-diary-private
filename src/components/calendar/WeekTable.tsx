@@ -5,7 +5,7 @@ import type { ProjectTask, Routine } from "@/lib/types";
 import { formatShort, weekdayKo, weekDays } from "@/lib/date";
 import { cn } from "@/lib/utils";
 import { taskTone } from "@/components/common/tone";
-import { CheckIcon, ChevronDownIcon } from "@/components/icons";
+import { ChevronDownIcon } from "@/components/icons";
 import { routineCountForDay } from "@/components/calendar/calendar-utils";
 
 interface WeekTableProps {
@@ -174,25 +174,5 @@ export function WeekTable({
         </div>
       ) : null}
     </section>
-  );
-}
-
-export function WeekTableSummary({
-  tasks,
-  routines,
-  weekStart,
-}: {
-  tasks: ProjectTask[];
-  routines: Routine[];
-  weekStart: string;
-}) {
-  const weekEnd = weekStart ? weekStart : weekStart;
-  void weekEnd;
-  const open = tasks.filter((task) => task.kind === "할 일" && !task.trash && task.status !== "완료" && task.status !== "취소");
-  const doneToday = tasks.filter((task) => task.status === "완료").length;
-  return (
-    <span className="inline-flex items-center gap-1 text-[0.62rem] text-ink-400">
-      <CheckIcon size={10} /> 열린 할 일 {open.length} · 완료 {doneToday} · 루틴 {routines.length}
-    </span>
   );
 }

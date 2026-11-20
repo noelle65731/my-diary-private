@@ -106,8 +106,7 @@ export function CalendarTab() {
     () => data.routines.filter((routine) => !routine.trash && (mode === "all" || !routine.hidden)),
     [data.routines, mode],
   );
-  const allProjects = useMemo(() => data.projects.filter((task) => task.kind === "프로젝트" && !task.trash), [data.projects]);
-
+  
   const title = useMemo(() => {
     if (view === "year") return `${year}년`;
     if (view === "month" || view === "habit") return `${cursor.slice(0, 4)}년 ${Number(cursor.slice(5, 7))}월`;
@@ -334,7 +333,7 @@ export function CalendarTab() {
               />
               <WeekTable
                 weekStart={weekStart}
-                tasks={allProjects.length > 0 ? data.projects : data.projects}
+                tasks={data.projects}
                 routines={data.routines}
                 onOpenTask={openTask}
                 onOpenRoutine={(id) => setRoutineId(id)}

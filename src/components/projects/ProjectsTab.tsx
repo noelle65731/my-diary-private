@@ -42,7 +42,7 @@ const MODES: { value: ModeFilter; label: string }[] = [
 export function ProjectsTab() {
   const { data, create, update, setRoutineCount } = useData();
   const { settings } = useSettings();
-  const { focus, clearFocus, openItem } = useUi();
+  const { focus, clearFocus } = useUi();
 
   const [view, setView] = useState<ProjectView>("tracks");
   const [mode, setMode] = useState<ModeFilter>("now");
@@ -374,7 +374,6 @@ export function ProjectsTab() {
           onRestoreTask={(task) => void update("projects", task.id, { status: "미완료", doneAt: null })}
           onRestoreRoutine={(routine) => void update("routines", routine.id, { history: false })}
           onRestoreProject={(project) => void update("projects", project.id, { status: "미완료" })}
-          onOpenItem={openItem}
         />
       ) : null}
 
@@ -515,7 +514,6 @@ function HistoryView({
   onRestoreTask: (task: ProjectTask) => void;
   onRestoreRoutine: (routine: Routine) => void;
   onRestoreProject: (project: ProjectTask) => void;
-  onOpenItem: (resource: "projects" | "routines", id: string) => void;
 }) {
   const finishedProjects = projects.filter((project) => project.status === "완료" || project.status === "취소" || project.history);
   const pastRoutines = routines.filter((routine) => routine.history || routine.trash);

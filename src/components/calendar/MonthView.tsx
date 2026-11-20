@@ -2,20 +2,11 @@
 
 import { useMemo, useState } from "react";
 import type { CalendarEvent, ModeFilter, ProjectTask, Routine } from "@/lib/types";
-import {
-  addDaysISO,
-  daysInMonth,
-  formatShort,
-  isSameISO,
-  monthMatrix,
-  todayISO,
-  weekdayKo,
-  weekdayIndexMon,
-} from "@/lib/date";
+import { daysInMonth, formatShort, isSameISO, monthMatrix, todayISO, weekdayKo } from "@/lib/date";
 import { holidayName, isRedDay } from "@/lib/holidays";
 import { cn } from "@/lib/utils";
 import { categoryTone } from "@/components/common/tone";
-import { CheckIcon, PlusIcon } from "@/components/icons";
+import { PlusIcon } from "@/components/icons";
 import { routineCountForDay } from "@/components/calendar/calendar-utils";
 
 interface MonthViewProps {

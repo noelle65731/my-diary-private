@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import type { CalendarEvent, ModeFilter, ProjectTask, Routine } from "@/lib/types";
-import { addDaysISO, formatShort, isSameISO, minutesToTime, timeToMinutes, todayISO, weekdayKo } from "@/lib/date";
+import { formatShort, isSameISO, minutesToTime, todayISO, weekdayKo } from "@/lib/date";
 import { holidayName, isRedDay } from "@/lib/holidays";
 import { cn } from "@/lib/utils";
 import { categoryTone } from "@/components/common/tone";
@@ -355,26 +355,4 @@ export function TimeGrid({
       </div>
     </div>
   );
-}
-
-/** Helper used by the day view for hour list bounds. */
-export function dayBounds(events: CalendarEvent[], fallbackStart: number, fallbackEnd: number) {
-  let start = fallbackStart * 60;
-  let end = fallbackEnd * 60;
-  for (const event of events) {
-    if (event.allDay || event.kind !== "일정") continue;
-    start = Math.min(start, Math.floor(eventStartMinutes(event) / 60) * 60);
-    end = Math.max(end, Math.ceil(eventEndMinutes(event) / 60) * 60);
-  }
-  return { start, end };
-}
-
-export function nextDay(day: string): string {
-  return addDaysISO(day, 1);
-}
-
-export function timeLabel(time: string | null): string {
-  if (!time) return "종일";
-  const minutes = timeToMinutes(time);
-  return minutesToTime(minutes);
 }

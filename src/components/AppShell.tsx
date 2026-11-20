@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useData } from "@/state/store";
 import { useUi, type TabKey } from "@/state/ui";
 import { cn } from "@/lib/utils";
-import { addDaysISO, formatFullKo, todayISO, weekdayKo, weekKeyOf } from "@/lib/date";
+import { formatFullKo, todayISO, weekdayKo, weekKeyOf } from "@/lib/date";
 import { holidayName } from "@/lib/holidays";
 import {
   ArchiveIcon,
