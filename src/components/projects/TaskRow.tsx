@@ -1,0 +1,61 @@
+"use client";
+
+import type { ProjectTask } from "@/lib/types";
+import { cn } from "@/lib/utils";
+import { formatShort, todayISO, weekdayKo } from "@/lib/date";
+import { taskTone } from "@/components/common/tone";
+import { CheckIcon, FlagIcon } from "@/components/icons";
+
+export function TaskRow({
+  task,
+  onOpen,
+  onToggle,
+  compact = false,
+  showProjectName,
+}: {
+  task: ProjectTask;
+  onOpen: () => void;
+  onToggle: () => void;
+  compact?: boolean;
+  showProjectName?: string | null;
+}) {
+  const done = task.status === "완료";
+  const overdue = task.due && task.due < todayISO() && !done && task.status !== "취소";
+  return (
+    <li className={cn("group flex items-start gap-2", compact ? "py-1" : "py-1.5")}>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-label={done ? "완료 취소" : "완료"}
+        className={cn(
+          "mt-0.5 flex h-4 w-4 flex-none items-center justify-center rounded-[4px] border transition",
+          done ? "border-sage-400 bg-sage-400 text-white" : "border-paper-400 hover:border-ink-600",
+        )}
+      >
+        {done ? <CheckIcon size={10} /> : null}
+      </button>
+      <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-left">
+        <span className={cn("flex items-center gap-1 truncate text-[0.8rem] text-ink-800", done && "text-ink-400 line-through")}>
+          {task.urgent ? <FlagIcon size={11} className="flex-none text-rose-400" /> : null}
+          <span className="truncate">{task.title}</span>
+        </span>
+        {!compact ? (
+          <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[0.62rem] text-ink-400">
+            <span className={cn("chip py-0", taskTone(task.category).bg, taskTone(task.category).text)}>{task.category}</span>
+            {showProjectName ? <span className="truncate">{showProjectName}</span> : null}
+            {task.date ? <span>{formatShort(task.date)} {weekdayKo(task.date)}</span> : null}
+            {task.due ? (
+              <span className={cn(overdue && "font-medium text-rose-500")}>
+                마감 {formatShort(task.due)}
+              </span>
+            ) : null}
+            {task.status === "대기 중" ? (
+              <span className="chip bg-amber-100 text-amber-700">{task.waitFor ? `${task.waitFor} 대기` : "대기 중"}</span>
+            ) : null}
+            {task.status === "취소" ? <span className="text-ink-300">취소됨</span> : null}
+          </span>
+        ) : null}
+      </button>
+    </li>
+  );
+}

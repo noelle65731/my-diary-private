@@ -1,0 +1,84 @@
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+import { isAuthorized } from "@/lib/auth";
+import { archivePage, hasNotionToken, NotionError, updatePage, isNotionPageId } from "@/lib/notion";
+import type { NotionPage } from "@/lib/notion";
+import { buildProperties, mappers } from "@/lib/notion-map";
+import { isResourceKey } from "@/lib/db-config";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+function fail(error: unknown) {
+  const message = error instanceof NotionError ? error.message : "요청을 처리하지 못했습니다.";
+  const code = error instanceof NotionError ? error.code : "server_error";
+  const status = error instanceof NotionError && error.status >= 400 ? error.status : 500;
+  return NextResponse.json({ ok: false, error: { message, code } }, { status });
+}
+
+export async function PATCH(
+  request: NextRequest,
+  context: { params: Promise<{ resource: string; id: string }> },
+) {
+  const { resource, id } = await context.params;
+  if (!isResourceKey(resource) || !isNotionPageId(id)) {
+    return NextResponse.json({ ok: false, error: { message: "잘못된 대상입니다.", code: "bad_target" } }, { status: 400 });
+  }
+  if (!(await isAuthorized(request))) {
+    return NextResponse.json({ ok: false, error: { message: "로그인이 필요합니다.", code: "unauthorized" } }, { status: 401 });
+  }
+  if (!hasNotionToken()) {
+    return NextResponse.json(
+      { ok: false, error: { message: "NOTION_TOKEN 이 설정되지 않았습니다.", code: "missing_token" } },
+      { status: 503 },
+    );
+  }
+
+  let patch: Record<string, unknown>;
+  try {
+    patch = (await request.json()) as Record<string, unknown>;
+  } catch {
+    return NextResponse.json({ ok: false, error: { message: "잘못된 요청입니다.", code: "bad_request" } }, { status: 400 });
+  }
+
+  try {
+    const page = await updatePage(id, buildProperties(resource, patch));
+    const map = mappers[resource] as (page: NotionPage) => unknown;
+    return NextResponse.json({ ok: true, data: map(page) });
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function DELETE(
+  request: NextRequest,
+  context: { params: Promise<{ resource: string; id: string }> },
+) {
+  const { resource, id } = await context.params;
+  if (!isResourceKey(resource) || !isNotionPageId(id)) {
+    return NextResponse.json({ ok: false, error: { message: "잘못된 대상입니다.", code: "bad_target" } }, { status: 400 });
+  }
+  if (!(await isAuthorized(request))) {
+    return NextResponse.json({ ok: false, error: { message: "로그인이 필요합니다.", code: "unauthorized" } }, { status: 401 });
+  }
+  if (!hasNotionToken()) {
+    return NextResponse.json(
+      { ok: false, error: { message: "NOTION_TOKEN 이 설정되지 않았습니다.", code: "missing_token" } },
+      { status: 503 },
+    );
+  }
+
+  const permanent = new URL(request.url).searchParams.get("permanent") === "1";
+
+  try {
+    if (permanent) {
+      await archivePage(id);
+      return NextResponse.json({ ok: true, deleted: true });
+    }
+    const page = await updatePage(id, buildProperties(resource, { trash: true }));
+    const map = mappers[resource] as (page: NotionPage) => unknown;
+    return NextResponse.json({ ok: true, data: map(page) });
+  } catch (error) {
+    return fail(error);
+  }
+}
