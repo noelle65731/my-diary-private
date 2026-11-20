@@ -117,6 +117,19 @@ export interface AllData {
   archive: ArchiveEntry[];
 }
 
+export interface DbStatus {
+  /** Human name of the database, e.g. `Calendar 기록`. */
+  label: string;
+  /** Environment variable that holds its ID. */
+  envKey: string;
+  /** True when the environment variable holds an ID. */
+  configured: boolean;
+  /** True when Notion answered for that ID (only checked while a token exists). */
+  ok: boolean;
+  /** `연결됨` / setup guidance / the Notion error. */
+  message: string;
+}
+
 export interface StatusPayload {
   ok: boolean;
   needsToken: boolean;
@@ -125,6 +138,10 @@ export interface StatusPayload {
   demo?: boolean;
   missing?: string[];
   message?: string;
+  /** Connection state of the five databases, keyed by resource. */
+  dbs?: Partial<Record<Resource, DbStatus>>;
+  /** Resources whose DB ID is empty — they are skipped, never queried. */
+  unconfigured?: Resource[];
 }
 
 export const CALENDAR_KINDS: CalendarKind[] = ["일정", "주간 목표", "주간 메모", "월간 메모"];

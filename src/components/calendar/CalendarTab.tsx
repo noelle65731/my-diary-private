@@ -204,7 +204,7 @@ export function CalendarTab() {
   const routineTemplates = routines.filter((routine) => routine.kind === "루틴" && !routine.history);
 
   return (
-    <div className="flex items-start gap-6">
+    <div className="flex items-start gap-6 xl:gap-8">
       <div className="min-w-0 flex-1">
       {/* toolbar */}
       <div className="flex flex-col gap-3">
@@ -421,7 +421,7 @@ export function CalendarTab() {
       </div>
 
       {view === "week" ? (
-        <aside className="side-panel sticky top-14 hidden max-h-[calc(100dvh-4rem)] w-[19rem] flex-none overflow-y-auto pb-8 pl-5 xl:block">
+        <aside className="side-panel sticky top-12 hidden max-h-[calc(100dvh-6.5rem)] w-[19rem] flex-none overflow-y-auto pb-8 pl-5 xl:block">
             <WeekPanel
               weekStart={weekStart}
               events={events}
@@ -443,7 +443,7 @@ export function CalendarTab() {
       ) : null}
 
       {view === "month" ? (
-        <aside className="side-panel sticky top-14 hidden max-h-[calc(100dvh-4rem)] w-[19rem] flex-none overflow-y-auto pb-8 pl-5 xl:block">
+        <aside className="side-panel sticky top-12 hidden max-h-[calc(100dvh-6.5rem)] w-[19rem] flex-none overflow-y-auto pb-8 pl-5 xl:block">
             <div className="flex items-center justify-between">
               <h3 className="text-[1.05rem] font-semibold text-ink-900">루틴</h3>
               <span className="text-[0.66rem] text-ink-400">칸을 눌러 체크</span>

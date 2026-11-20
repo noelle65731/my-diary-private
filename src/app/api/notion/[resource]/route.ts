@@ -4,7 +4,7 @@ import { isAuthorized } from "@/lib/auth";
 import { createPage, hasNotionToken, NotionError, queryDatabase } from "@/lib/notion";
 import type { NotionPage } from "@/lib/notion";
 import { buildProperties, defaultPatch, mappers } from "@/lib/notion-map";
-import { DB_IDS, isResourceKey } from "@/lib/db-config";
+import { DB_ENV_KEYS, DB_IDS, DB_LABELS, dbSetupMessage, isResourceKey, type ResourceKey } from "@/lib/db-config";
 import { TASK_CATEGORIES, TASK_STATUSES } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -15,6 +15,23 @@ function fail(error: unknown, status = 500) {
   const code = error instanceof NotionError ? error.code : "server_error";
   const httpStatus = error instanceof NotionError && error.status >= 400 ? error.status : status;
   return NextResponse.json({ ok: false, error: { message, code } }, { status: httpStatus });
+}
+
+/** Notion is never called for a database whose ID is empty. */
+function notConfigured(resource: ResourceKey) {
+  return NextResponse.json(
+    {
+      ok: false,
+      error: {
+        message: dbSetupMessage(resource),
+        code: "db_not_configured",
+        db: DB_LABELS[resource],
+        envKey: DB_ENV_KEYS[resource],
+        resource,
+      },
+    },
+    { status: 503 },
+  );
 }
 
 export async function GET(request: NextRequest, context: { params: Promise<{ resource: string }> }) {
@@ -28,6 +45,7 @@ export async function GET(request: NextRequest, context: { params: Promise<{ res
   if (!hasNotionToken()) {
     return NextResponse.json({ ok: true, needsToken: true, needs_token: true, data: [] });
   }
+  if (!DB_IDS[resource]) return notConfigured(resource);
 
   try {
     const pages = await queryDatabase(DB_IDS[resource]);
@@ -52,6 +70,7 @@ export async function POST(request: NextRequest, context: { params: Promise<{ re
       { status: 503 },
     );
   }
+  if (!DB_IDS[resource]) return notConfigured(resource);
 
   let patch: Record<string, unknown>;
   try {

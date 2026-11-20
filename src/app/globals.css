@@ -17,6 +17,7 @@
 
   body {
     @apply bg-white text-ink-900 antialiased;
+    font-family: theme("fontFamily.sans");
     font-feature-settings: "tnum" 0;
   }
 
@@ -138,12 +139,12 @@
   }
 
   .display {
-    font-family: "Pretendard Variable", Pretendard, sans-serif;
+    font-family: theme("fontFamily.display");
     letter-spacing: -0.03em;
   }
 
   .serif {
-    font-family: "Pretendard Variable", Pretendard, sans-serif;
+    font-family: theme("fontFamily.serif");
     letter-spacing: -0.02em;
   }
 

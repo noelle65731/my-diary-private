@@ -4,7 +4,7 @@ import { isAuthorized } from "@/lib/auth";
 import { archivePage, hasNotionToken, NotionError, updatePage, isNotionPageId } from "@/lib/notion";
 import type { NotionPage } from "@/lib/notion";
 import { buildProperties, mappers } from "@/lib/notion-map";
-import { isResourceKey } from "@/lib/db-config";
+import { DB_ENV_KEYS, DB_IDS, DB_LABELS, dbSetupMessage, isResourceKey, type ResourceKey } from "@/lib/db-config";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,6 +14,23 @@ function fail(error: unknown) {
   const code = error instanceof NotionError ? error.code : "server_error";
   const status = error instanceof NotionError && error.status >= 400 ? error.status : 500;
   return NextResponse.json({ ok: false, error: { message, code } }, { status });
+}
+
+/** Notion is never called for a database whose ID is empty. */
+function notConfigured(resource: ResourceKey) {
+  return NextResponse.json(
+    {
+      ok: false,
+      error: {
+        message: dbSetupMessage(resource),
+        code: "db_not_configured",
+        db: DB_LABELS[resource],
+        envKey: DB_ENV_KEYS[resource],
+        resource,
+      },
+    },
+    { status: 503 },
+  );
 }
 
 export async function PATCH(
@@ -33,6 +50,7 @@ export async function PATCH(
       { status: 503 },
     );
   }
+  if (!DB_IDS[resource]) return notConfigured(resource);
 
   let patch: Record<string, unknown>;
   try {
@@ -67,6 +85,7 @@ export async function DELETE(
       { status: 503 },
     );
   }
+  if (!DB_IDS[resource]) return notConfigured(resource);
 
   const permanent = new URL(request.url).searchParams.get("permanent") === "1";
 

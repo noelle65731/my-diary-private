@@ -5,9 +5,11 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
+        /* One Korean stack everywhere — Pretendard Variable first, Noto Sans KR fallback. */
         sans: [
           "Pretendard Variable",
           "Pretendard",
+          "Noto Sans KR",
           "-apple-system",
           "BlinkMacSystemFont",
           "system-ui",
@@ -18,11 +20,22 @@ const config: Config = {
         serif: [
           "Pretendard Variable",
           "Pretendard",
+          "Noto Sans KR",
           "-apple-system",
           "BlinkMacSystemFont",
           "system-ui",
           "sans-serif",
         ],
+        display: [
+          "Pretendard Variable",
+          "Pretendard",
+          "Noto Sans KR",
+          "-apple-system",
+          "BlinkMacSystemFont",
+          "system-ui",
+          "sans-serif",
+        ],
+        mono: ["ui-monospace", "SFMono-Regular", "Menlo", "Consolas", "monospace"],
       },
       colors: {
         /* neutral surfaces — pure white canvas, cool gray support */

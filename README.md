@@ -31,6 +31,8 @@ npm run typecheck
 npm run build
 ```
 
+GitHub Actions(`.github/workflows/ci.yml`)가 push·PR마다 Node 20으로 `npm ci` → `npm run typecheck` → `npm run build` 를 실행합니다.
+
 ---
 
 ## 2. Notion 준비
@@ -48,18 +50,20 @@ npm run build
 
 ### 2-3. DB 다섯 개
 
-이 앱은 아래 다섯 DB를 사용합니다. 다른 DB를 쓰려면 `.env`의 ID만 바꾸면 됩니다.
+이 앱은 아래 다섯 DB를 사용합니다. **이 저장소에는 기본 DB ID가 없습니다.** 다섯 개 모두 내 노션에서 새로 만들고, 내 ID를 환경변수에 넣어야 합니다. 비워 둔 DB는 `미연결`로 표시되고 조회·저장이 중단됩니다(다른 사람의 DB를 가리키는 폴백 없음).
 
-| 환경변수 | 기본 DB | 용도 |
+| 환경변수 | 기본값 | 용도 |
 | --- | --- | --- |
-| `NOTION_CALENDAR_DB_ID` | `41d6ed96-9c5d-81d9-b6e9-c1e1becd2b91` | 일정 · 주간 목표 · 주간 메모 · 월간 메모 |
-| `NOTION_PROJECTS_DB_ID` | `41d6ed96-9c5d-8168-81d2-db94f71eae36` | 프로젝트 · 할 일 |
-| `NOTION_ROUTINE_DB_ID` | `41d6ed96-9c5d-81f2-9ffe-c119024e6a0d` | 루틴 · 체크 기록 |
-| `NOTION_BINDER_DB_ID` | `41d6ed96-9c5d-818e-8dd4-ded353ee362f` | 일기 · 노트 |
-| `NOTION_ARCHIVE_DB_ID` | `41d6ed96-9c5d-81f2-983a-e865c94e692c` | 아카이브 |
+| `NOTION_CALENDAR_DB_ID` | (없음 · 비워 두면 미연결) | 일정 · 주간 목표 · 주간 메모 · 월간 메모 |
+| `NOTION_PROJECTS_DB_ID` | (없음 · 비워 두면 미연결) | 프로젝트 · 할 일 |
+| `NOTION_ROUTINE_DB_ID` | (없음 · 비워 두면 미연결) | 루틴 · 체크 기록 |
+| `NOTION_BINDER_DB_ID` | (없음 · 비워 두면 미연결) | 일기 · 노트 |
+| `NOTION_ARCHIVE_DB_ID` | (없음 · 비워 두면 미연결) | 아카이브 |
 
 > 데이터베이스 ID는 노션 URL의 32자리 문자열입니다.
 > `https://www.notion.so/<workspace>/<DB_ID>?v=...`
+>
+> 빈 DB 다섯 개의 이름·속성·타입 표와 설치 지시문은 공개 키트 페이지 `/kit` 에서 볼 수 있습니다.
 
 ### 2-4. 속성 이름 (그대로 유지해 주세요)
 
@@ -119,6 +123,7 @@ npm run build
 ## 4. 보안 · 개인정보
 
 - `NOTION_TOKEN` 은 **서버 라우트에서만** 사용됩니다. 브라우저 번들에 포함되지 않습니다.
+- DB ID 기본값이 없으므로, 이 저장소를 복제한 사람은 자기 DB를 직접 만들고 자기 환경변수에 넣어야 합니다.
 - `DIARY_PASSWORD` 를 설정하면 접속 시 비밀번호를 묻고, HMAC 서명 쿠키(30일, httpOnly)로 세션을 유지합니다. 비밀번호를 바꾸면 기존 세션이 모두 무효가 됩니다.
 - **이 저장소는 공개(public) 상태일 수 있습니다.** 코드에는 토큰이 없지만, DB ID 기본값과 앱 구조는 누구나 볼 수 있습니다. 일기 내용은 토큰 없이 접근할 수 없으므로 안전하지만, 배포 주소를 아는 사람이 비밀번호 없이 들어오는 것을 막으려면 `DIARY_PASSWORD` 를 꼭 설정하세요. 저장소 자체를 비공개로 돌리려면 GitHub → Settings → General → Danger zone → Change visibility.
 - 검색 엔진에는 노출되지 않도록 `robots: noindex` 가 설정되어 있습니다.
@@ -178,13 +183,27 @@ npm run build
 
 | 경로 | 메서드 | 설명 |
 | --- | --- | --- |
-| `/api/status` | GET | 토큰·비밀번호·세션 상태 |
+| `/api/status` | GET | 토큰·비밀번호·세션 상태 + `dbs`(DB별 `label`·`envKey`·`configured`·`ok`·`message`) + `unconfigured` |
 | `/api/auth` | POST / DELETE / GET | 로그인 / 잠그기 / 세션 확인 |
-| `/api/notion/all` | GET | 다섯 DB를 한 번에 (앱 시작 시) |
-| `/api/notion/{resource}` | GET / POST | 목록 / 생성 (`calendar` `projects` `routines` `binder` `archive`) |
-| `/api/notion/{resource}/{id}` | PATCH / DELETE | 수정 / 휴지통(`?permanent=1`이면 페이지 보관) |
+| `/api/notion/all` | GET | 연결된 DB만 한 번에 (앱 시작 시). 미연결 DB는 `unconfigured` 목록으로 반환 |
+| `/api/notion/{resource}` | GET / POST | 목록 / 생성 (`calendar` `projects` `routines` `binder` `archive`). DB ID가 비면 `503 db_not_configured` |
+| `/api/notion/{resource}/{id}` | PATCH / DELETE | 수정 / 휴지통(`?permanent=1`이면 페이지 보관). DB ID가 비면 `503 db_not_configured` |
 
 모든 응답은 `{ ok: true, data }` 또는 `{ ok: false, error: { message, code } }` 형태입니다.
+미연결 DB 오류는 `code: "db_not_configured"` 와 함께 DB 이름(`db`)·환경변수명(`envKey`)·설정 안내(`message`)를 담습니다.
+
+---
+
+## 6-1. 공개 키트 페이지
+
+`/kit` 은 비밀번호 없이 열리는 공개 페이지입니다.
+
+- 제작자·버전(`v2.0`), 빈 Notion 템플릿 표(5개 DB 이름·필수 속성·타입), 환경변수 안내
+- HTML 키트 가이드 · 설치 가이드(Markdown) · AI 설치 지시문(txt) 다운로드
+- 다른 AI에 그대로 붙여넣을 한국어 설치 지시문(복사 버튼)
+
+제작자의 노션 계정·비밀번호·DB ID·비밀 키는 들어 있지 않습니다. 로그인 화면과 설정 → 연결 탭의
+`내 다이어리 만들기 (공개 키트)` 링크로 들어갈 수 있습니다.
 
 ---
 
@@ -193,14 +212,16 @@ npm run build
 ```
 src/
   app/
-    layout.tsx            메타데이터 · Pretendard · PWA
+    layout.tsx            메타데이터 · Pretendard Variable + Noto Sans KR · PWA
     page.tsx              앱 진입
-    globals.css           종이 질감 · 공통 클래스
+    kit/page.tsx          공개 키트 페이지 (비밀번호 없이 열림)
+    globals.css           공통 클래스 · 15px 기준 글자 크기 · 폰트 스택
     api/
       status/ auth/ notion/[resource]/ notion/all/
   components/
     AppShell.tsx          사이드바 · 헤더 · 하단 탭 · 토스트
     SearchDialog.tsx  SettingsDialog.tsx  LoginScreen.tsx
+    kit/KitGuide.tsx      공개 키트 화면 (복사 · 다운로드)
     calendar/             TimeGrid · Month · Year · Day · Habit · WeekPanels · WeekTable
     projects/             Tracks · Priority · History · ProjectDrawer · RoutineCard
     binder/  archive/
@@ -210,6 +231,9 @@ src/
     notion.ts             서버 REST 클라이언트 (레거시 → 데이터 소스 폴백)
     notion-map.ts         속성 이름 ↔ 데이터 모델
     auth.ts               HMAC 세션
+    db-config.ts          환경변수 → DB ID (기본값 없음 · 비면 미연결)
+    db-meta.ts            DB 이름·환경변수·속성표 (클라이언트 공용)
+    kit-content.ts        공개 키트 본문 · 설치 지시문 · 다운로드 파일
     date.ts  holidays.ts  markdown.tsx  demo-data.ts  types.ts
   state/
     store.tsx             데이터 로드 · 낙관적 저장 · 오류 복구
@@ -224,7 +248,7 @@ public/
 
 - **색·폰트** — `tailwind.config.ts` 의 `paper / ink / accent / sage / dusk` 팔레트와 `globals.css` 의 배경.
 - **공휴일** — `src/lib/holidays.ts`. 임시공휴일이 생기면 여기에 한 줄 추가하면 캘린더·바인더에 바로 반영됩니다.
-- **기본 DB ID** — `src/lib/db-config.ts` (또는 환경변수).
+- **기본 DB ID** — 기본값은 없습니다. `src/lib/db-config.ts` 가 환경변수만 읽고, 비어 있으면 미연결로 처리합니다.
 - **속성 이름** — `src/lib/notion-map.ts` 의 문자열만 바꾸면 다른 템플릿에도 붙일 수 있습니다.
 - **시작 탭** — `src/state/ui.tsx` 의 초기값.
 

@@ -1,24 +1,33 @@
 /**
  * Notion database wiring.
  *
- * Values come from environment variables so this repository can be forked and
- * used as a generic kit. The defaults below point at the original workspace.
+ * Values come from environment variables only. This kit ships **no** database
+ * IDs: an empty variable means that database is not connected, and the app
+ * shows setup guidance instead of falling back to somebody else's workspace.
+ *
+ * Labels, env var names and setup steps live in `db-meta.ts` so client
+ * components can read them without touching `process.env`.
  */
 
-function env(name: string, fallback: string): string {
+import { DB_ENV_KEYS, DB_LABELS } from "./db-meta";
+import type { Resource } from "./types";
+
+export { DB_ENV_KEYS, DB_LABELS };
+
+function env(name: string): string {
   const value = process.env[name];
-  return value && value.trim().length > 0 ? value.trim() : fallback;
+  return value && value.trim().length > 0 ? value.trim() : "";
 }
 
-export const DB_IDS = {
-  calendar: env("NOTION_CALENDAR_DB_ID", "41d6ed96-9c5d-81d9-b6e9-c1e1becd2b91"),
-  projects: env("NOTION_PROJECTS_DB_ID", "41d6ed96-9c5d-8168-81d2-db94f71eae36"),
-  routines: env("NOTION_ROUTINE_DB_ID", "41d6ed96-9c5d-81f2-9ffe-c119024e6a0d"),
-  binder: env("NOTION_BINDER_DB_ID", "41d6ed96-9c5d-818e-8dd4-ded353ee362f"),
-  archive: env("NOTION_ARCHIVE_DB_ID", "41d6ed96-9c5d-81f2-983a-e865c94e692c"),
-} as const;
+export const DB_IDS: Record<Resource, string> = {
+  calendar: env(DB_ENV_KEYS.calendar),
+  projects: env(DB_ENV_KEYS.projects),
+  routines: env(DB_ENV_KEYS.routines),
+  binder: env(DB_ENV_KEYS.binder),
+  archive: env(DB_ENV_KEYS.archive),
+};
 
-export type ResourceKey = keyof typeof DB_IDS;
+export type ResourceKey = Resource;
 
 export const RESOURCES: ResourceKey[] = ["calendar", "projects", "routines", "binder", "archive"];
 
@@ -26,21 +35,17 @@ export function isResourceKey(value: string): value is ResourceKey {
   return (RESOURCES as string[]).includes(value);
 }
 
-export const DB_LABELS: Record<ResourceKey, string> = {
-  calendar: "Calendar 기록",
-  projects: "프로젝트 · 할 일",
-  routines: "루틴 · 체크 기록",
-  binder: "일기 · 노트",
-  archive: "아카이브",
-};
+/** A database is connected only when its environment variable holds an ID. */
+export function isDbConfigured(resource: ResourceKey): boolean {
+  return DB_IDS[resource].length > 0;
+}
 
-/** Titles used in the setup screen, so a fork knows what to point at. */
-export const ENV_KEYS: { key: string; label: string; defaultValue: string }[] = [
-  { key: "NOTION_TOKEN", label: "Notion 통합 토큰", defaultValue: "(필수)" },
-  { key: "NOTION_CALENDAR_DB_ID", label: "캘린더 DB", defaultValue: DB_IDS.calendar },
-  { key: "NOTION_PROJECTS_DB_ID", label: "프로젝트 DB", defaultValue: DB_IDS.projects },
-  { key: "NOTION_ROUTINE_DB_ID", label: "루틴 DB", defaultValue: DB_IDS.routines },
-  { key: "NOTION_BINDER_DB_ID", label: "일기·노트 DB", defaultValue: DB_IDS.binder },
-  { key: "NOTION_ARCHIVE_DB_ID", label: "아카이브 DB", defaultValue: DB_IDS.archive },
-  { key: "DIARY_PASSWORD", label: "접속 비밀번호 (선택)", defaultValue: "(없으면 공개)" },
-];
+export function unconfiguredResources(): ResourceKey[] {
+  return RESOURCES.filter((resource) => !isDbConfigured(resource));
+}
+
+/** Message shown in the UI and returned by the API when a DB is missing. */
+export function dbSetupMessage(resource: ResourceKey): string {
+  const envKey = DB_ENV_KEYS[resource];
+  return `${DB_LABELS[resource]} DB가 연결되지 않았습니다. 서버 환경변수 ${envKey} 에 노션 DB ID를 넣고 다시 배포하면 사용할 수 있습니다. (설정 → 연결에서 상태를 확인할 수 있습니다.)`;
+}

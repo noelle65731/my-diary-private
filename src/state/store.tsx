@@ -13,6 +13,7 @@ import {
 import { buildDemoData } from "@/lib/demo-data";
 import { todayISO } from "@/lib/date";
 import { uid } from "@/lib/utils";
+import { useUi } from "@/state/ui";
 import {
   emptyData,
   type AllData,
@@ -174,6 +175,7 @@ function draftItem(resource: Resource, patch: Patch, id = uid("new")): AnyItem {
 }
 
 export function DataProvider({ children }: { children: ReactNode }) {
+  const { notify } = useUi();
   const [data, setData] = useState<AllData>(emptyData());
   const [status, setStatus] = useState<StatusPayload | null>(null);
   const [loading, setLoading] = useState(true);
@@ -191,12 +193,31 @@ export function DataProvider({ children }: { children: ReactNode }) {
     errorTimer.current = setTimeout(() => setSaveError(null), 6000);
   }, []);
 
-  const load = useCallback(async () => {
+  /**
+   * A database whose ID is missing is not writable — the server would answer
+   * 503, so the client stops before drawing an optimistic row and explains why.
+   */
+  const blockReason = useCallback(
+    (resource: Resource): string | null => {
+      if (demo || !status) return null;
+      const db = status.dbs?.[resource];
+      const configured = db ? db.configured : !(status.unconfigured ?? []).includes(resource);
+      if (configured) return null;
+      const label = db?.label ?? resource;
+      const envKey = db?.envKey ?? "";
+      return envKey
+        ? `${label} DB가 연결되지 않았습니다. 서버 환경변수 ${envKey} 를 설정하면 저장할 수 있어요.`
+        : `${label} DB가 연결되지 않았습니다. 설정 → 연결에서 상태를 확인해 주세요.`;
+    },
+    [demo, status],
+  );
+
+  const load = useCallback(async (fresh = false) => {
     setLoading(true);
     setFatalError(null);
     setResourceErrors({});
     try {
-      const nextStatus = await requestJson<StatusPayload>("/api/status");
+      const nextStatus = await requestJson<StatusPayload>(`/api/status${fresh ? "?fresh=1" : ""}`);
       setStatus(nextStatus);
       if (!nextStatus.authenticated) {
         setDemo(false);
@@ -260,6 +281,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const create = useCallback<DataContextValue["create"]>(
     async (resource, patch) => {
+      const blocked = blockReason(resource);
+      if (blocked) {
+        notify(blocked, "error");
+        return null;
+      }
+
       const optimistic = draftItem(resource, patch);
       setData((current) => ({
         ...current,
@@ -296,11 +323,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setSavingCount((n) => Math.max(0, n - 1));
       }
     },
-    [demo, reportError],
+    [blockReason, demo, notify, reportError],
   );
 
   const update = useCallback<DataContextValue["update"]>(
     async (resource, id, patch) => {
+      const blocked = blockReason(resource);
+      if (blocked) {
+        notify(blocked, "error");
+        return false;
+      }
+
       const list = data[resource] as AnyItem[];
       const previous = list.find((item) => item.id === id);
       if (!previous) return false;
@@ -338,7 +371,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setSavingCount((n) => Math.max(0, n - 1));
       }
     },
-    [data, demo, reportError],
+    [blockReason, data, demo, notify, reportError],
   );
 
   const remove = useCallback<DataContextValue["remove"]>(
@@ -350,6 +383,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const destroy = useCallback<DataContextValue["destroy"]>(
     async (resource, id) => {
+      const blocked = blockReason(resource);
+      if (blocked) {
+        notify(blocked, "error");
+        return;
+      }
       if (!demo) {
         setSavingCount((n) => n + 1);
         try {
@@ -367,7 +405,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       }) as AllData);
       setLastSavedAt(Date.now());
     },
-    [demo, reportError],
+    [blockReason, demo, notify, reportError],
   );
 
   const setRoutineCount = useCallback<DataContextValue["setRoutineCount"]>(
@@ -417,7 +455,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       savingCount,
       saveError,
       lastSavedAt,
-      refresh: load,
+      refresh: () => load(true),
       login,
       logout,
       create,

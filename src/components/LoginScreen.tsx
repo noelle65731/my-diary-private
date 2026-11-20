@@ -57,6 +57,13 @@ export function LoginScreen() {
         <p className="mt-4 text-center text-[0.68rem] leading-relaxed text-ink-400">
           이 비밀번호는 Vercel 환경변수 <span className="font-mono">DIARY_PASSWORD</span> 로 설정되어 있습니다.
         </p>
+
+        <a
+          href="/kit"
+          className="mt-4 flex items-center justify-center gap-1 text-[0.74rem] text-ink-500 underline decoration-paper-400 underline-offset-2 hover:text-ink-900"
+        >
+          내 다이어리 만들기 (공개 키트)
+        </a>
       </div>
     </div>
   );

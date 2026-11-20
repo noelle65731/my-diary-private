@@ -8,11 +8,11 @@ import { AppShell } from "@/components/AppShell";
 export function AppRoot() {
   return (
     <SettingsProvider>
-      <DataProvider>
-        <UiProvider>
+      <UiProvider>
+        <DataProvider>
           <AppShell />
-        </UiProvider>
-      </DataProvider>
+        </DataProvider>
+      </UiProvider>
     </SettingsProvider>
   );
 }

@@ -7,6 +7,7 @@ import { useUi } from "@/state/ui";
 import { Modal, Segmented, Toggle } from "@/components/common/primitives";
 import { cn } from "@/lib/utils";
 import { ARCHIVE_KINDS } from "@/lib/types";
+import { DB_ENV_KEYS, DB_LABELS, DB_ORDER, DB_PURPOSES, DB_SETUP_STEPS, KIT_VERSION } from "@/lib/db-meta";
 
 const SECTIONS = [
   { key: "look", label: "모양" },
@@ -21,11 +22,11 @@ type SectionKey = (typeof SECTIONS)[number]["key"];
 
 const ENV_LIST = [
   { key: "NOTION_TOKEN", label: "Notion 통합 토큰", required: true },
-  { key: "NOTION_CALENDAR_DB_ID", label: "캘린더 DB" },
-  { key: "NOTION_PROJECTS_DB_ID", label: "프로젝트 DB" },
-  { key: "NOTION_ROUTINE_DB_ID", label: "루틴 DB" },
-  { key: "NOTION_BINDER_DB_ID", label: "일기·노트 DB" },
-  { key: "NOTION_ARCHIVE_DB_ID", label: "아카이브 DB" },
+  { key: DB_ENV_KEYS.calendar, label: "캘린더 DB" },
+  { key: DB_ENV_KEYS.projects, label: "프로젝트 DB" },
+  { key: DB_ENV_KEYS.routines, label: "루틴 DB" },
+  { key: DB_ENV_KEYS.binder, label: "일기·노트 DB" },
+  { key: DB_ENV_KEYS.archive, label: "아카이브 DB" },
   { key: "DIARY_PASSWORD", label: "접속 비밀번호 (선택)" },
 ];
 
@@ -272,24 +273,70 @@ export function SettingsDialog() {
                 </span>
               </div>
 
-              <ol className="space-y-2 text-[0.78rem] leading-relaxed text-ink-600">
-                <li>
-                  <span className="font-medium text-ink-900">1.</span> notion.so/my-integrations 에서 통합을 만들고
-                  내부 통합 토큰을 복사합니다.
-                </li>
-                <li>
-                  <span className="font-medium text-ink-900">2.</span> 노션에서 다섯 개 DB(캘린더 · 프로젝트 · 루틴 ·
-                  일기/노트 · 아카이브)를 열고 <span className="font-mono">···</span> → Connections 에 통합을 추가합니다.
-                </li>
-                <li>
-                  <span className="font-medium text-ink-900">3.</span> Vercel 프로젝트 → Settings → Environment Variables
-                  에 아래 값을 추가하고 재배포합니다.
-                </li>
-                <li>
-                  <span className="font-medium text-ink-900">4.</span> 폰에서 Safari로 열고 <b>공유 → 홈 화면에 추가</b>를
-                  누르면 앱처럼 쓸 수 있습니다.
-                </li>
-              </ol>
+              <div>
+                <div className="mb-1.5 flex items-baseline justify-between">
+                  <p className="text-[0.86rem] font-medium text-ink-800">데이터베이스 5개</p>
+                  <span className="text-[0.68rem] text-ink-400">각각 따로 연결·차단됩니다</span>
+                </div>
+                <ul className="space-y-1.5">
+                  {DB_ORDER.map((resource) => {
+                    const db = status?.dbs?.[resource];
+                    const configured = db?.configured ?? false;
+                    const ok = db?.ok ?? false;
+                    const state = !configured ? "미연결" : ok ? "연결됨" : "오류";
+                    return (
+                      <li
+                        key={resource}
+                        className={cn(
+                          "rounded-xl border px-3 py-2",
+                          !configured
+                            ? "border-amber-200 bg-amber-50/60"
+                            : ok
+                              ? "border-sage-200 bg-sage-50/50"
+                              : "border-rose-200 bg-rose-50/60",
+                        )}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[0.8rem] font-medium text-ink-900">{db?.label ?? DB_LABELS[resource]}</span>
+                          <span
+                            className={cn(
+                              "chip border text-[0.68rem]",
+                              !configured
+                                ? "border-amber-300 bg-white text-amber-700"
+                                : ok
+                                  ? "border-sage-200 bg-white text-sage-500"
+                                  : "border-rose-200 bg-white text-rose-600",
+                            )}
+                          >
+                            {state}
+                          </span>
+                        </div>
+                        <p className="mt-0.5 text-[0.68rem] text-ink-400">{DB_PURPOSES[resource]}</p>
+                        <p className="mt-1 break-all font-mono text-[0.68rem] text-ink-600">{db?.envKey ?? DB_ENV_KEYS[resource]}</p>
+                        {!ok && db?.message ? (
+                          <p className="mt-1 text-[0.7rem] leading-relaxed text-ink-600">{db.message}</p>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+
+              <div>
+                <p className="mb-1.5 text-[0.86rem] font-medium text-ink-800">설정 방법</p>
+                <ol className="space-y-1.5 text-[0.78rem] leading-relaxed text-ink-600">
+                  {DB_SETUP_STEPS.map((step, index) => (
+                    <li key={step} className="flex gap-1.5">
+                      <span className="font-medium text-ink-900">{index + 1}.</span>
+                      <span className="min-w-0">{step}</span>
+                    </li>
+                  ))}
+                  <li className="flex gap-1.5">
+                    <span className="font-medium text-ink-900">6.</span>
+                    <span className="min-w-0">폰에서는 Safari로 열고 <b>공유 → 홈 화면에 추가</b>를 누르면 앱처럼 쓸 수 있습니다.</span>
+                  </li>
+                </ol>
+              </div>
 
               <div className="rounded-xl border border-paper-300 bg-paper-50/70 p-3">
                 <p className="mb-2 text-[0.7rem] font-semibold uppercase tracking-[0.1em] text-ink-500">환경변수</p>
@@ -305,7 +352,8 @@ export function SettingsDialog() {
                   ))}
                 </ul>
                 <p className="mt-2 text-[0.68rem] leading-relaxed text-ink-400">
-                  DB ID를 비워 두면 이 저장소의 기본값이 쓰입니다. 다른 사람의 DB로 쓰려면 값을 바꾸면 됩니다.
+                  DB ID를 비워 두면 그 DB는 <b>미연결</b>로 표시되고, 해당 화면은 조회가 비어 있고 저장이 중단됩니다. 다른 사람의
+                  DB를 가리키는 기본값은 없습니다.
                 </p>
               </div>
 
@@ -335,6 +383,17 @@ export function SettingsDialog() {
                 </a>
                 <a href="https://vercel.com/dashboard" target="_blank" rel="noreferrer" className="btn-outline btn-xs">
                   Vercel 대시보드
+                </a>
+              </div>
+
+              <div className="rounded-xl border border-paper-300 bg-white p-3">
+                <p className="text-[0.8rem] font-medium text-ink-900">내 다이어리 만들기 (공개 키트) {KIT_VERSION}</p>
+                <p className="mt-1 text-[0.72rem] leading-relaxed text-ink-500">
+                  빈 노션 템플릿 구성표, 환경변수, 다른 AI에 붙여넣을 설치 지시문을 공개 페이지에서 내려받을 수 있습니다. 제작자
+                  계정·비밀번호·DB ID·키는 들어 있지 않습니다.
+                </p>
+                <a href="/kit" className="btn-outline btn-xs mt-2">
+                  공개 키트 열기
                 </a>
               </div>
             </>

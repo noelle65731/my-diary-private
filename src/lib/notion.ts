@@ -214,6 +214,39 @@ export async function archivePage(pageId: string): Promise<void> {
   }
 }
 
+export interface DatabaseProbe {
+  ok: boolean;
+  message: string;
+}
+
+/**
+ * Lightweight connection check for one database (metadata only, no rows).
+ * Used by `/api/status` so the UI can tell which of the five DBs are wired.
+ */
+export async function probeDatabase(databaseId: string): Promise<DatabaseProbe> {
+  if (!databaseId.trim()) return { ok: false, message: "DB ID가 비어 있어 연결되지 않았습니다." };
+  try {
+    await request(`/databases/${databaseId}`, {}, V_LEGACY);
+    return { ok: true, message: "연결됨" };
+  } catch (error) {
+    // Databases migrated to the data-source model answer 400 on the legacy endpoint.
+    if (error instanceof NotionError && error.status === 400) {
+      try {
+        await request(`/databases/${databaseId}`, {}, V_DATA_SOURCE);
+        return { ok: true, message: "연결됨" };
+      } catch (fallback) {
+        return { ok: false, message: messageOf(fallback) };
+      }
+    }
+    return { ok: false, message: messageOf(error) };
+  }
+}
+
+function messageOf(error: unknown): string {
+  if (error instanceof NotionError) return error.message;
+  return "Notion 연결을 확인하지 못했습니다.";
+}
+
 export function isNotionPageId(value: string): boolean {
   return /^[0-9a-f]{32}$|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 }

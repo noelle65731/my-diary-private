@@ -56,9 +56,13 @@ interface SettingsContextValue {
 
 const SettingsContext = createContext<SettingsContextValue | null>(null);
 
+/**
+ * Step 3 is the default and equals the `html { font-size: 15px }` baseline in
+ * globals.css, so a stored setting never shifts text size on hydration.
+ */
 function fontSizeToPx(level: number): number {
   const clamped = Math.max(1, Math.min(6, level));
-  return 13.5 + (clamped - 1) * 0.9;
+  return 13.2 + (clamped - 1) * 0.9;
 }
 
 export function SettingsProvider({ children }: { children: ReactNode }) {

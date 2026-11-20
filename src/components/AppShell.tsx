@@ -118,13 +118,19 @@ export function AppShell() {
 
   const errorEntries = useMemo(() => Object.entries(resourceErrors), [resourceErrors]);
 
+  const unconfigured = status?.unconfigured ?? [];
+  const unconfiguredLabels = useMemo(
+    () => unconfigured.map((resource) => status?.dbs?.[resource]?.label ?? resource),
+    [status?.dbs, unconfigured],
+  );
+
   if (!status && loading) return <Splash />;
   if (status?.authRequired && !status.authenticated) return <LoginScreen />;
 
   return (
     <div className="flex min-h-dvh flex-col bg-white">
       <header className="sticky top-0 z-30 border-b border-paper-300 bg-white/95 backdrop-blur">
-        <div className="mx-auto flex h-10 w-full max-w-[1680px] items-center justify-between gap-3 px-4 md:px-8">
+        <div className="mx-auto flex h-11 w-full max-w-[1680px] items-center justify-between gap-3 px-4 md:px-6 lg:px-8">
           <div className="flex min-w-0 items-center gap-2">
             <span className="flex h-5 w-5 flex-none items-center justify-center rounded-md bg-ink-900 text-white">
               <SparkIcon size={11} />
@@ -145,7 +151,7 @@ export function AppShell() {
 
       {demo ? (
         <div className="border-b border-paper-300 bg-paper-200/60">
-          <div className="mx-auto flex w-full max-w-[1680px] items-center gap-2 px-4 py-1.5 text-[0.72rem] text-ink-600 md:px-8">
+          <div className="mx-auto flex w-full max-w-[1680px] items-center gap-2 px-4 py-1.5 text-[0.72rem] text-ink-600 md:px-6 lg:px-8">
             <span className="flex-none font-semibold text-ink-800">데모 미리보기</span>
             <p className="min-w-0 flex-1 truncate">
               아직 Notion에 연결되지 않아 예시 기록을 보여 줍니다.
@@ -158,8 +164,22 @@ export function AppShell() {
         </div>
       ) : null}
 
+      {!demo && unconfigured.length > 0 ? (
+        <div className="border-b border-amber-200 bg-amber-50/70">
+          <div className="mx-auto flex w-full max-w-[1680px] flex-col gap-1 px-4 py-1.5 text-[0.72rem] text-amber-800 sm:flex-row sm:items-center md:px-6 lg:px-8">
+            <p className="min-w-0 flex-1">
+              미연결 DB: {unconfiguredLabels.join(" · ")}
+              <span className="hidden sm:inline"> — 이 DB를 쓰는 화면은 조회·저장되지 않습니다. 설정 → 연결에서 상태를 확인하세요.</span>
+            </p>
+            <button type="button" onClick={() => setSettingsOpen(true)} className="flex-none self-start rounded-full border border-amber-300 px-2 py-0.5 text-[0.68rem] hover:bg-white sm:self-auto">
+              연결 설정
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {fatalError ? (
-        <div className="border-b border-red-200 bg-red-50 px-4 py-1.5 md:px-8">
+        <div className="border-b border-red-200 bg-red-50 px-4 py-1.5 md:px-6 lg:px-8">
           <div className="mx-auto flex w-full max-w-[1680px] items-center gap-2 text-[0.74rem] text-red-600">
             <p className="min-w-0 flex-1">{fatalError}</p>
             <button type="button" onClick={() => void refresh()} className="btn-outline btn-xs flex-none">
@@ -170,7 +190,7 @@ export function AppShell() {
       ) : null}
 
       {errorEntries.length > 0 && !fatalError ? (
-        <div className="border-b border-paper-300 bg-paper-200/50 px-4 py-1.5 md:px-8">
+        <div className="border-b border-paper-300 bg-paper-200/50 px-4 py-1.5 md:px-6 lg:px-8">
           <div className="mx-auto flex w-full max-w-[1680px] flex-col gap-1 text-[0.72rem] text-ink-600 sm:flex-row sm:items-center">
             <p className="min-w-0 flex-1">
               일부 DB를 불러오지 못했습니다: {errorEntries.map(([key]) => key).join(", ")} ·{" "}
@@ -183,7 +203,7 @@ export function AppShell() {
         </div>
       ) : null}
 
-      <main className="min-w-0 flex-1 px-4 pb-[calc(4.6rem+env(safe-area-inset-bottom))] pt-5 md:px-8 md:pt-6 lg:px-10">
+      <main className="min-w-0 flex-1 px-4 pb-[calc(4.6rem+env(safe-area-inset-bottom))] pt-4 md:px-6 md:pt-5 lg:px-8">
         <div className="mx-auto w-full max-w-[1680px]">
           {tab === "calendar" ? <CalendarTab /> : null}
           {tab === "projects" ? <ProjectsTab /> : null}
@@ -193,7 +213,7 @@ export function AppShell() {
       </main>
 
       <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-paper-300 bg-white/95 pb-safe backdrop-blur">
-        <div className="relative mx-auto flex h-[3.4rem] w-full max-w-[1680px] items-center gap-0.5 px-2 pr-[4.4rem] md:px-6 md:pr-[5rem]">
+        <div className="relative mx-auto flex h-[3.4rem] w-full max-w-[1680px] items-center gap-0.5 px-2 pr-[4.4rem] md:px-6 md:pr-[5rem] lg:px-8">
           {TABS.map((item) => {
             const active = tab === item.key;
             return (
