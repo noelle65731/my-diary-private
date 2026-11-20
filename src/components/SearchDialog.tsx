@@ -136,7 +136,7 @@ export function SearchDialog() {
               onChange={(event) => setIncludeHidden(event.target.checked)}
               className="h-3.5 w-3.5 rounded border-paper-400 accent-ink-900"
             />
-            NOW 숨김 항목까지 검색
+            숨긴 항목까지 검색
           </label>
           <span className="text-[0.68rem] text-ink-400">↑↓ 이동 · Enter 열기</span>
         </div>

@@ -1,23 +1,25 @@
 "use client";
 
+import { useMemo } from "react";
 import type { CalendarEvent, ProjectTask, Routine } from "@/lib/types";
-import { formatFullKo, formatTimeKo, todayISO, weekdayKo } from "@/lib/date";
+import { formatFullKo } from "@/lib/date";
 import { holidayName } from "@/lib/holidays";
 import { cn } from "@/lib/utils";
-import { categoryTone, taskTone } from "@/components/common/tone";
-import { CheckIcon, ClockIcon, FlagIcon, PlusIcon, RepeatIcon } from "@/components/icons";
+import { categoryTone, projectEmoji, routineTone, taskTone } from "@/components/common/tone";
+import { CheckIcon, PencilIcon, PlusIcon } from "@/components/icons";
 import {
   allDayEventsForDay,
   routineCountForDay,
   routinesForDay,
   tasksForDay,
-  timedEventsForDay,
 } from "@/components/calendar/calendar-utils";
+import { Timeline } from "@/components/calendar/Timeline";
 
 interface DayViewProps {
   day: string;
   events: CalendarEvent[];
   tasks: ProjectTask[];
+  projects: ProjectTask[];
   routines: Routine[];
   hiddenIncluded: boolean;
   onOpenEvent: (id: string) => void;
@@ -26,12 +28,14 @@ interface DayViewProps {
   onToggleTask: (task: ProjectTask) => void;
   onRoutineCount: (routine: Routine, date: string, count: number) => void;
   onWriteDiary: (date: string) => void;
+  onCreateTaskForProject: (projectId: string) => void;
 }
 
 export function DayView({
   day,
   events,
   tasks,
+  projects,
   routines,
   hiddenIncluded,
   onOpenEvent,
@@ -40,10 +44,10 @@ export function DayView({
   onToggleTask,
   onRoutineCount,
   onWriteDiary,
+  onCreateTaskForProject,
 }: DayViewProps) {
   const visible = events.filter((event) => !event.trash && (hiddenIncluded || !event.hidden));
   const allDay = allDayEventsForDay(visible, day);
-  const timed = timedEventsForDay(visible, day).sort((a, b) => (a.startTime ?? "").localeCompare(b.startTime ?? ""));
   const dayTasks = tasksForDay(
     tasks.filter((task) => !task.trash && (hiddenIncluded || !task.hidden)),
     day,
@@ -51,204 +55,180 @@ export function DayView({
   const dueRoutines = routinesForDay(routines, day).filter((routine) => !routine.trash && (hiddenIncluded || !routine.hidden));
   const holiday = holidayName(day);
 
+  const groups = useMemo(() => {
+    const map = new Map<string, { project: ProjectTask | null; tasks: ProjectTask[] }>();
+    for (const task of dayTasks) {
+      const id = task.projectIds[0] ?? "";
+      const project = projects.find((item) => item.id === id) ?? null;
+      const key = project?.id ?? "inbox";
+      if (!map.has(key)) map.set(key, { project, tasks: [] });
+      map.get(key)!.tasks.push(task);
+    }
+    return [...map.values()];
+  }, [dayTasks, projects]);
+
   return (
-    <div className="grid gap-4 lg:grid-cols-[1.55fr_1fr]">
-      <div className="space-y-3">
-        <div className="card px-4 py-3">
-          <div className="flex items-baseline justify-between gap-2">
-            <div>
-              <p className="serif text-[1.1rem] text-ink-900">{formatFullKo(day)}</p>
-              <p className={cn("mt-0.5 text-[0.72rem]", holiday ? "text-accent-500" : "text-ink-400")}>
-                {holiday ?? `${weekdayKo(day)}요일`} · 일정 {allDay.length + timed.length}개
-              </p>
-            </div>
-            <button type="button" onClick={() => onCreate(day, "09:00")} className="btn-outline btn-xs">
-              <PlusIcon size={13} /> 일정
-            </button>
-          </div>
-        </div>
+    <div className="grid grid-cols-2 gap-3 lg:gap-5 xl:grid-cols-[minmax(0,1fr)_23rem]">
+      <div className="min-w-0">
+        <p className="mb-2 text-[0.68rem] text-ink-400">일정</p>
 
-        <div className="card overflow-hidden">
-          <div className="flex items-center justify-between border-b border-paper-300/70 px-4 py-2">
-            <h3 className="section-title">하루 흐름</h3>
-            <span className="text-[0.66rem] text-ink-400">눌러서 수정</span>
-          </div>
-          {allDay.length > 0 ? (
-            <div className="flex flex-wrap gap-1.5 border-b border-paper-300/60 bg-paper-50/50 px-4 py-2">
-              <span className="text-[0.64rem] text-ink-400">종일</span>
-              {allDay.map((event) => {
-                const tone = categoryTone(event.category);
-                return (
-                  <button
-                    key={event.id}
-                    type="button"
-                    onClick={() => onOpenEvent(event.id)}
-                    className={cn("chip border", tone.bg, tone.border, tone.text, event.canceled && "line-through opacity-50")}
-                  >
-                    {event.title}
-                  </button>
-                );
-              })}
-            </div>
-          ) : null}
-
-          <div className="divide-y divide-paper-300/50">
-            {timed.length === 0 && allDay.length === 0 ? (
-              <div className="px-4 py-8 text-center">
-                <p className="text-[0.84rem] text-ink-500">비어 있는 하루입니다.</p>
-                <button type="button" onClick={() => onCreate(day, "10:00")} className="btn-outline btn-xs mt-2">
-                  <PlusIcon size={13} /> 일정 추가
-                </button>
-              </div>
-            ) : null}
-            {timed.map((event) => {
+        {allDay.length > 0 ? (
+          <div className="mb-2 flex flex-wrap items-center gap-1.5 border-b border-paper-300 pb-2">
+            <span className="text-[0.64rem] text-ink-400">종일</span>
+            {allDay.map((event) => {
               const tone = categoryTone(event.category);
               return (
                 <button
                   key={event.id}
                   type="button"
                   onClick={() => onOpenEvent(event.id)}
-                  className={cn(
-                    "flex w-full items-start gap-3 px-4 py-2.5 text-left transition hover:bg-paper-100/60",
-                    event.canceled && "opacity-55",
-                  )}
+                  className={cn("rounded-md border px-2 py-0.5 text-[0.7rem]", tone.bg, tone.border, tone.text, event.canceled && "line-through opacity-50")}
                 >
-                  <div className="w-[3.6rem] flex-none pt-0.5 text-right">
-                    <p className="text-[0.72rem] font-medium tabular-nums text-ink-700">{event.startTime}</p>
-                    <p className="text-[0.6rem] tabular-nums text-ink-400">{event.endTime ?? ""}</p>
-                  </div>
-                  <span className={cn("mt-1 h-8 w-1 flex-none rounded-full", tone.dot)} />
-                  <div className="min-w-0 flex-1">
-                    <p className={cn("truncate text-[0.88rem] font-medium text-ink-900", event.canceled && "line-through")}>
-                      {event.title}
-                    </p>
-                    <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[0.66rem] text-ink-500">
-                      <span className={cn("chip", tone.bg, tone.text)}>{event.category}</span>
-                      {event.favorite ? <FlagIcon size={11} className="text-amber-500" /> : null}
-                      {event.done ? (
-                        <span className="inline-flex items-center gap-0.5 text-sage-500">
-                          <CheckIcon size={11} /> 완료
-                        </span>
-                      ) : null}
-                      {event.memo ? <span className="truncate text-ink-400">{event.memo}</span> : null}
-                    </p>
-                  </div>
+                  {event.title}
                 </button>
               );
             })}
           </div>
-        </div>
+        ) : null}
 
-        <div className="card overflow-hidden">
-          <div className="flex items-center justify-between border-b border-paper-300/70 px-4 py-2">
-            <h3 className="section-title">이 날의 할 일</h3>
-            <span className="text-[0.66rem] text-ink-400">{dayTasks.length}개</span>
-          </div>
-          {dayTasks.length === 0 ? (
-            <p className="px-4 py-5 text-center text-[0.78rem] text-ink-400">이 날 예정된 할 일이 없습니다.</p>
-          ) : (
-            <ul className="divide-y divide-paper-300/40">
-              {dayTasks.map((task) => (
-                <li key={task.id} className="flex items-start gap-2.5 px-4 py-2">
-                  <button
-                    type="button"
-                    onClick={() => onToggleTask(task)}
-                    aria-label="완료 토글"
-                    className={cn(
-                      "mt-0.5 flex h-4 w-4 flex-none items-center justify-center rounded-[4px] border transition",
-                      task.status === "완료" ? "border-sage-400 bg-sage-400 text-white" : "border-paper-400 hover:border-ink-500",
-                    )}
-                  >
-                    {task.status === "완료" ? <CheckIcon size={10} /> : null}
-                  </button>
-                  <button type="button" onClick={() => onOpenTask(task.id)} className="min-w-0 flex-1 text-left">
-                    <span className={cn("block truncate text-[0.84rem] text-ink-800", task.status === "완료" && "text-ink-400 line-through")}>
-                      {task.title}
-                    </span>
-                    <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[0.62rem] text-ink-400">
-                      <span className={cn("chip", taskTone(task.category).bg, taskTone(task.category).text)}>{task.category}</span>
-                      {task.due ? <span>마감 {task.due.slice(5)}</span> : null}
-                      {task.status === "대기 중" && task.waitFor ? <span>· {task.waitFor} 대기</span> : null}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
+        <Timeline
+          days={[day]}
+          events={visible.filter((event) => event.kind === "일정")}
+          startHour={7}
+          endHour={22}
+          hourHeight={34}
+          gutterWidth="3.4rem"
+          onOpenEvent={onOpenEvent}
+          onCreate={onCreate}
+        />
+
+        <div className="mt-3 flex items-center justify-between border-t border-paper-300 pt-2 text-[0.68rem] text-ink-400">
+          <span>
+            {formatFullKo(day)}
+            {holiday ? ` · ${holiday}` : ""}
+          </span>
+          <button type="button" onClick={() => onCreate(day, "09:00")} className="text-ink-500 hover:text-ink-900">
+            + 일정
+          </button>
         </div>
       </div>
 
-      <div className="space-y-3">
-        <div className="card px-4 py-3">
-          <div className="mb-2 flex items-center justify-between">
-            <h3 className="section-title">루틴</h3>
-            <span className="text-[0.64rem] text-ink-400">{dueRoutines.length}개</span>
-          </div>
+      <aside className="min-w-0 space-y-3">
+        <h3 className="text-[0.82rem] text-ink-400">오늘 할 일</h3>
+
+        {groups.length === 0 ? (
+          <div className="rounded-2xl bg-paper-200/50 px-3 py-5 text-center text-[0.72rem] text-ink-400">오늘 예정된 할 일이 없습니다.</div>
+        ) : null}
+
+        {groups.map(({ project, tasks: items }) => {
+          const tone = taskTone(project?.category ?? "개인");
+          return (
+            <section key={project?.id ?? "inbox"} className="rounded-2xl bg-paper-200/50 px-3 py-2.5">
+              <header className="flex items-center gap-2">
+                <span className={cn("flex h-7 w-7 flex-none items-center justify-center rounded-lg bg-white text-[0.78rem]")}>
+                  {project ? projectEmoji(project.id, project.category) : "🗂️"}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => (project ? onOpenTask(project.id) : undefined)}
+                  className="line-clamp-2 min-w-0 flex-1 text-left text-[0.86rem] font-semibold leading-snug text-ink-900 md:line-clamp-1 md:text-[0.9rem]"
+                >
+                  {project?.title ?? "받은함"}
+                </button>
+              </header>
+              <ul className="mt-1.5 space-y-1">
+                {items.map((task) => {
+                  const done = task.status === "완료";
+                  return (
+                    <li key={task.id} className="flex items-start gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => onToggleTask(task)}
+                        aria-label="완료"
+                        className={cn(
+                          "mt-[2px] flex h-[17px] w-[17px] flex-none items-center justify-center rounded-[5px] border transition",
+                          done ? cn(tone.solid, "border-transparent text-white") : "border-paper-300 bg-white hover:border-ink-400",
+                        )}
+                      >
+                        {done ? <CheckIcon size={10} /> : null}
+                      </button>
+                      <button type="button" onClick={() => onOpenTask(task.id)} className="min-w-0 flex-1 text-left">
+                        <span className={cn("block text-[0.8rem] leading-snug text-ink-800", done && "text-ink-400 line-through")}>
+                          {task.title}
+                        </span>
+                        {task.memo ? <span className="mt-0.5 block text-[0.68rem] leading-snug text-ink-400">{task.memo}</span> : null}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+              {project ? (
+                <button
+                  type="button"
+                  onClick={() => onCreateTaskForProject(project.id)}
+                  className="mt-1.5 text-[0.7rem] text-ink-400 transition hover:text-ink-700"
+                >
+                  + 추가
+                </button>
+              ) : null}
+            </section>
+          );
+        })}
+
+        <section className="rounded-2xl bg-paper-200/50 px-3 py-2.5">
+          <header className="flex items-center gap-2">
+            <span className="flex h-7 w-7 flex-none items-center justify-center rounded-lg bg-white text-[0.78rem]">🔁</span>
+            <h4 className="min-w-0 flex-1 text-[0.9rem] font-semibold text-ink-900">루틴</h4>
+          </header>
           {dueRoutines.length === 0 ? (
-            <p className="text-[0.76rem] text-ink-400">오늘 예정된 루틴이 없습니다.</p>
+            <p className="mt-1 text-[0.7rem] text-ink-400">오늘 예정된 루틴이 없습니다.</p>
           ) : (
-            <ul className="space-y-1.5">
-              {dueRoutines.map((routine) => {
+            <ul className="mt-1 space-y-1.5">
+              {dueRoutines.map((routine, index) => {
                 const target = routine.targetCount ?? 1;
                 const count = routineCountForDay(routines, routine, day);
+                const done = count >= target;
+                const tone = routineTone(index);
                 return (
                   <li key={routine.id} className="flex items-center gap-2">
-                    <RepeatIcon size={13} className={count >= target ? "text-sage-400" : "text-ink-400"} />
-                    <span className="min-w-0 flex-1 truncate text-[0.8rem] text-ink-700">{routine.title}</span>
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => onRoutineCount(routine, day, Math.max(0, count - 1))}
-                        className="flex h-6 w-6 items-center justify-center rounded-full bg-paper-200 text-ink-500 hover:bg-paper-300"
-                      >
-                        −
-                      </button>
-                      <span className="w-9 text-center text-[0.74rem] tabular-nums text-ink-700">
-                        {count}/{target}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => onRoutineCount(routine, day, Math.min(target, count + 1))}
-                        className="flex h-6 w-6 items-center justify-center rounded-full bg-paper-200 text-ink-500 hover:bg-paper-300"
-                      >
-                        +
-                      </button>
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() => onRoutineCount(routine, day, done ? 0 : count + 1)}
+                      aria-label="루틴 체크"
+                      className={cn(
+                        "flex h-[17px] w-[17px] flex-none items-center justify-center rounded-[5px] border transition",
+                        done ? cn(tone.solid, "text-white") : "border-dashed border-ink-300 bg-white hover:border-ink-500",
+                      )}
+                    >
+                      {done ? <CheckIcon size={10} /> : null}
+                    </button>
+                    <span className={cn("min-w-0 flex-1 truncate text-[0.78rem] text-ink-700", done && "text-ink-400")}>{routine.title}</span>
+                    <span className="flex-none text-[0.66rem] tabular-nums text-ink-400">
+                      {count}/{target}
+                    </span>
                   </li>
                 );
               })}
             </ul>
           )}
-        </div>
+        </section>
 
-        <div className="card px-4 py-3">
-          <h3 className="section-title mb-2">기록</h3>
-          <p className="text-[0.76rem] leading-relaxed text-ink-500">오늘의 일기를 남겨 두면 주간 보기에서 세 줄로 미리 보입니다.</p>
-          <button type="button" onClick={() => onWriteDiary(day)} className="btn-primary btn-xs mt-2 w-full">
-            이 날 일기 쓰기
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => onWriteDiary(day)}
+          className="flex w-full items-center justify-center gap-1.5 rounded-2xl border border-paper-300 px-3 py-2 text-[0.76rem] text-ink-600 transition hover:bg-paper-200/60"
+        >
+          <PencilIcon size={13} /> 이 날 일기 쓰기
+        </button>
 
-        <div className="card-quiet px-4 py-3">
-          <h3 className="section-title mb-1.5">빠른 추가</h3>
-          <div className="flex flex-col gap-1.5">
-            <button type="button" onClick={() => onCreate(day, "09:00")} className="flex items-center gap-1.5 text-left text-[0.8rem] text-ink-600 hover:text-ink-900">
-              <ClockIcon size={13} /> 시간 있는 일정
-            </button>
-            <button type="button" onClick={() => onCreate(day, null)} className="flex items-center gap-1.5 text-left text-[0.8rem] text-ink-600 hover:text-ink-900">
-              <PlusIcon size={13} /> 종일 일정
-            </button>
-          </div>
-        </div>
-      </div>
+        <button
+          type="button"
+          onClick={() => onCreate(day, null)}
+          className="flex w-full items-center justify-center gap-1.5 rounded-2xl border border-dashed border-paper-300 px-3 py-2 text-[0.72rem] text-ink-400 transition hover:border-ink-300 hover:text-ink-600"
+        >
+          <PlusIcon size={12} /> 종일 일정 추가
+        </button>
+      </aside>
     </div>
   );
-}
-
-export function formatDayTitle(day: string): string {
-  return `${formatFullKo(day)}${holidayName(day) ? ` · ${holidayName(day)}` : ""}`;
-}
-
-export function timeSummary(event: CalendarEvent): string {
-  return event.allDay ? "종일" : `${formatTimeKo(event.startTime)}${event.endTime ? ` – ${formatTimeKo(event.endTime)}` : ""}`;
 }

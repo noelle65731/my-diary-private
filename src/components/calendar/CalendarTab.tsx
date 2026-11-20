@@ -7,44 +7,41 @@ import { useTabReset, useUi } from "@/state/ui";
 import {
   addDaysISO,
   addMonthsISO,
-  formatFullKo,
-  formatShort,
+  formatMonthDay,
+  isoWeekNumber,
   startOfWeekISO,
   todayISO,
   weekDays,
-  weekKeyOf,
   weekdayKo,
 } from "@/lib/date";
 import { holidayName } from "@/lib/holidays";
 import { cn, matchesMode } from "@/lib/utils";
 import type { CalendarEvent, CalendarKind, ModeFilter, ProjectTask, Routine } from "@/lib/types";
-import { ChevronLeftIcon, ChevronRightIcon, PlusIcon, StarIcon } from "@/components/icons";
-import { TimeGrid } from "@/components/calendar/TimeGrid";
-import { MonthView } from "@/components/calendar/MonthView";
+import { ChevronLeftIcon, ChevronRightIcon, PlusIcon, SearchIcon } from "@/components/icons";
+import { WeekBoard } from "@/components/calendar/WeekBoard";
+import { WeekPanel } from "@/components/calendar/WeekPanel";
+import { MonthView, RoutineHeat } from "@/components/calendar/MonthView";
 import { YearView } from "@/components/calendar/YearView";
 import { DayView } from "@/components/calendar/DayView";
 import { HabitView } from "@/components/calendar/HabitView";
-import { WeekPanels } from "@/components/calendar/WeekPanels";
-import { WeekTable } from "@/components/calendar/WeekTable";
 import { EventEditor, type EventDraft } from "@/components/editors/EventEditor";
 import { TaskEditor } from "@/components/editors/TaskEditor";
 import { RoutineEditor } from "@/components/editors/RoutineEditor";
 
 const VIEWS: { value: CalendarViewKey; label: string }[] = [
-  { value: "year", label: "연" },
-  { value: "month", label: "월" },
-  { value: "week", label: "주" },
+  { value: "month", label: "월간" },
+  { value: "week", label: "주간" },
   { value: "three", label: "3일" },
-  { value: "day", label: "일" },
+  { value: "day", label: "일간" },
+  { value: "year", label: "연간" },
   { value: "habit", label: "루틴" },
 ];
 
-const MODES: { value: ModeFilter; label: string }[] = [
-  { value: "now", label: "NOW" },
-  { value: "all", label: "전체" },
-  { value: "업무", label: "업무" },
-  { value: "개인", label: "개인" },
-  { value: "공부", label: "공부" },
+const MODES: { value: ModeFilter; label: string; dot?: string }[] = [
+  { value: "now", label: "전체" },
+  { value: "업무", label: "업무", dot: "bg-accent-400" },
+  { value: "개인", label: "개인", dot: "bg-sage-400" },
+  { value: "공부", label: "공부", dot: "bg-dusk-500" },
 ];
 
 function eventMode(event: CalendarEvent): "업무" | "개인" | "공부" {
@@ -53,9 +50,9 @@ function eventMode(event: CalendarEvent): "업무" | "개인" | "공부" {
 }
 
 export function CalendarTab() {
-  const { data, update, setRoutineCount, findItem } = useData();
+  const { data, update, setRoutineCount, findItem, create } = useData();
   const { settings } = useSettings();
-  const { focus, clearFocus, openBinderForDate } = useUi();
+  const { focus, clearFocus, openBinderForDate, setSearchOpen } = useUi();
 
   const today = todayISO();
   const [view, setView] = useState<CalendarViewKey>(settings.calendarDefaultView);
@@ -90,7 +87,6 @@ export function CalendarTab() {
   }, [focus, data.calendar, clearFocus]);
 
   const weekStart = startOfWeekISO(cursor, settings.weekStartsOn);
-  const weekEnd = addDaysISO(weekStart, 6);
   const threeStart = cursor;
   const hiddenIncluded = mode === "all" || settings.calendarShowHidden;
 
@@ -102,18 +98,42 @@ export function CalendarTab() {
     () => data.projects.filter((task) => task.kind === "할 일" && matchesMode(mode, task, task.category)),
     [data.projects, mode],
   );
+  const projects = useMemo(() => data.projects.filter((task) => task.kind === "프로젝트" && !task.trash), [data.projects]);
   const routines = useMemo(
     () => data.routines.filter((routine) => !routine.trash && (mode === "all" || !routine.hidden)),
     [data.routines, mode],
   );
-  
+
+  const allWeekDays = weekDays(weekStart, settings.weekStartsOn);
+  const weekVisibleDays = settings.showWeekends
+    ? allWeekDays
+    : allWeekDays.filter((day) => {
+        const dow = new Date(`${day}T12:00:00`).getDay();
+        return (dow !== 0 && dow !== 6) || day === today;
+      });
+  const threeDays = useMemo(
+    () => [threeStart, addDaysISO(threeStart, 1), addDaysISO(threeStart, 2)],
+    [threeStart],
+  );
+
   const title = useMemo(() => {
     if (view === "year") return `${year}년`;
-    if (view === "month" || view === "habit") return `${cursor.slice(0, 4)}년 ${Number(cursor.slice(5, 7))}월`;
-    if (view === "week") return `${formatShort(weekStart)} – ${formatShort(weekEnd)}`;
-    if (view === "three") return `${formatShort(threeStart)} – ${formatShort(addDaysISO(threeStart, 2))}`;
-    return formatFullKo(cursor);
-  }, [view, year, cursor, weekStart, weekEnd, threeStart]);
+    if (view === "month") return `${Number(cursor.slice(5, 7))}월`;
+    if (view === "habit") return "루틴";
+    if (view === "week") {
+      return `${formatMonthDay(weekStart)} – ${Number(addDaysISO(weekStart, 6).slice(8, 10))}일`;
+    }
+    if (view === "three") return `${formatMonthDay(threeStart)} – ${Number(addDaysISO(threeStart, 2).slice(8, 10))}일`;
+    return `${formatMonthDay(cursor)} ${weekdayKo(cursor)}요일`;
+  }, [view, year, cursor, weekStart, threeStart]);
+
+  const meta = useMemo(() => {
+    if (view === "year") return "연간 보기";
+    if (view === "month" || view === "habit") return `${cursor.slice(0, 4)}`;
+    if (view === "week") return `${isoWeekNumber(weekStart)}주차 · ${weekStart.slice(0, 4)}`;
+    if (view === "three") return `${isoWeekNumber(threeStart)}주차 · ${threeStart.slice(0, 4)}`;
+    return `${cursor.slice(0, 4)} · ${holidayName(cursor) ?? "하루 보기"}`;
+  }, [view, cursor, weekStart, threeStart]);
 
   const step = (direction: number) => {
     if (view === "year") {
@@ -139,8 +159,7 @@ export function CalendarTab() {
   const openTask = (id: string) => setTaskId(id);
   const createEvent = (date: string, time?: string | null) =>
     setEventEditor({ open: true, draft: { date, startTime: time ?? null } });
-  const createWeekly = (kind: CalendarKind) =>
-    setEventEditor({ open: true, draft: { date: weekStart, kind } });
+  const createWeekly = (kind: CalendarKind) => setEventEditor({ open: true, draft: { date: weekStart, kind } });
 
   const toggleTask = (task: ProjectTask) => {
     const done = task.status === "완료";
@@ -171,52 +190,60 @@ export function CalendarTab() {
     });
   };
 
-  const currentWeekDays = weekDays(cursor, settings.weekStartsOn);
+  const addFavorite = async (titleText: string) => {
+    const created = await create("projects", {
+      title: titleText,
+      kind: "할 일",
+      category: "개인",
+      date: todayISO(),
+      status: "미완료",
+    });
+    if (created) await update("projects", created.id, { favorite: true });
+  };
+
+  const routineTemplates = routines.filter((routine) => routine.kind === "루틴" && !routine.history);
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-col gap-2.5">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-1">
-            <button type="button" className="icon-btn h-8 w-8" onClick={() => step(-1)} aria-label="이전">
-              <ChevronLeftIcon size={17} />
-            </button>
-            <button type="button" className="btn-outline btn-xs" onClick={() => setCursor(todayISO())}>
-              오늘
-            </button>
-            <button type="button" className="icon-btn h-8 w-8" onClick={() => step(1)} aria-label="다음">
-              <ChevronRightIcon size={17} />
-            </button>
-            <div className="ml-1 min-w-0">
-              <p className="truncate text-[0.95rem] font-medium text-ink-900">{title}</p>
-              <p className="text-[0.62rem] text-ink-400">
-                {view === "week" ? `${weekKeyOf(weekStart)} · ${weekdayKo(weekStart)}요일 시작` : holidayName(cursor) ?? "나의 기록"}
-              </p>
-            </div>
+    <div className="flex items-start gap-6">
+      <div className="min-w-0 flex-1">
+      {/* toolbar */}
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
+          <div className="min-w-0">
+            <p className="text-[0.66rem] tracking-[0.02em] text-ink-400">{meta}</p>
+            <h1 className="mt-1.5 truncate text-[1.95rem] font-semibold leading-none tracking-[-0.035em] text-ink-900 md:text-[2.3rem]">
+              {title}
+            </h1>
           </div>
 
-          <div className="flex w-full items-center gap-2 overflow-x-auto pb-0.5 md:w-auto">
-            <div className="no-scrollbar flex flex-none items-center gap-0.5 rounded-full border border-paper-300 bg-white/60 p-0.5">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="seg-track">
               {VIEWS.map((item) => (
                 <button
                   key={item.value}
                   type="button"
                   onClick={() => setView(item.value)}
-                  className={cn(
-                    "rounded-full px-2.5 py-1 text-[0.74rem] font-medium transition",
-                    view === item.value ? "bg-ink-900 text-paper-50" : "text-ink-600 hover:text-ink-900",
-                  )}
+                  className={cn("seg-item", view === item.value && "seg-item-active")}
                 >
                   {item.label}
                 </button>
               ))}
             </div>
-            <button
-              type="button"
-              onClick={() => createEvent(cursor, view === "day" ? "09:00" : null)}
-              className="btn-primary btn-xs ml-auto flex-none"
-            >
-              <PlusIcon size={13} /> 새 일정
+
+            <div className="flex items-center gap-0.5 rounded-full bg-paper-200 p-0.5">
+              <button type="button" onClick={() => step(-1)} className="icon-btn h-7 w-7" aria-label="이전">
+                <ChevronLeftIcon size={14} />
+              </button>
+              <button type="button" onClick={() => setCursor(todayISO())} className="px-2 py-1 text-[0.76rem] font-medium text-ink-700 hover:text-ink-900">
+                오늘
+              </button>
+              <button type="button" onClick={() => step(1)} className="icon-btn h-7 w-7" aria-label="다음">
+                <ChevronRightIcon size={14} />
+              </button>
+            </div>
+
+            <button type="button" onClick={() => setSearchOpen(true)} className="icon-btn hidden bg-paper-200 hover:bg-paper-300/70 md:inline-flex" aria-label="검색">
+              <SearchIcon size={15} />
             </button>
           </div>
         </div>
@@ -228,32 +255,45 @@ export function CalendarTab() {
               type="button"
               onClick={() => setMode(item.value)}
               className={cn(
-                "chip border transition",
+                "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[0.76rem] font-medium transition",
                 mode === item.value
-                  ? "border-ink-900 bg-ink-900 text-paper-50"
-                  : "border-paper-400 bg-white/50 text-ink-500 hover:border-ink-400 hover:text-ink-800",
+                  ? "bg-ink-900 text-white"
+                  : "bg-paper-200 text-ink-500 hover:bg-paper-300/70 hover:text-ink-800",
               )}
             >
+              {item.dot ? <span className={cn("h-[6px] w-[6px] rounded-full", item.dot, mode === item.value && "bg-white")} /> : null}
               {item.label}
             </button>
           ))}
           {mode !== "all" && data.calendar.some((event) => event.hidden && !event.trash) ? (
-            <span className="ml-1 text-[0.64rem] text-ink-400">숨긴 항목은 '전체'에서 보입니다</span>
+            <button
+              type="button"
+              onClick={() => setMode("all")}
+              className="ml-1 text-[0.68rem] text-ink-400 underline-offset-2 hover:text-ink-700 hover:underline"
+            >
+              숨긴 항목 포함
+            </button>
           ) : null}
+
+          <div className={cn("ml-auto hidden items-center gap-1.5 md:flex", (view === "habit" || view === "year") && "md:hidden")}>
+            <button type="button" onClick={() => createEvent(cursor, view === "day" ? "09:00" : null)} className="btn-primary btn-xs">
+              <PlusIcon size={12} /> 새 일정
+            </button>
+          </div>
         </div>
       </div>
 
       {view === "year" ? (
         <>
-          <div className="flex items-center gap-1.5">
+          <div className="mt-4 flex items-center gap-1.5">
             {[2026, 2027].map((option) => (
               <button
                 key={option}
                 type="button"
                 onClick={() => setYear(option)}
                 className={cn(
-                  "chip border",
-                  year === option ? "border-ink-900 bg-ink-900 text-paper-50" : "border-paper-400 bg-white/60 text-ink-600",
+                  "rounded-full px-3 py-1 text-[0.76rem] font-medium transition",
+                  year === option ? "bg-ink-900 text-white" : "bg-paper-200 text-ink-500 hover:text-ink-800",
                 )}
               >
                 {option}
@@ -261,121 +301,178 @@ export function CalendarTab() {
             ))}
             <span className="ml-auto text-[0.64rem] text-ink-400">날짜를 누르면 하루 보기로 이동합니다</span>
           </div>
-          <YearView
-            year={year}
-            events={events}
-            tasks={tasks}
-            hiddenIncluded={hiddenIncluded}
-            onPickDay={(day) => {
-              setCursor(day);
-              setView("day");
-            }}
-          />
+          <div className="mt-3">
+            <YearView
+              year={year}
+              events={events}
+              tasks={tasks}
+              hiddenIncluded={hiddenIncluded}
+              onPickDay={(day) => {
+                setCursor(day);
+                setView("day");
+              }}
+            />
+          </div>
         </>
       ) : null}
 
-      {view === "month" ? (
-        <MonthView
-          cursor={cursor}
-          events={data.calendar}
-          tasks={data.projects}
-          routines={data.routines}
-          mode={mode}
-          weekStartsOn={settings.weekStartsOn}
-          onSelectDay={(day) => {
-            setCursor(day);
-            setView("day");
-          }}
-          onOpenEvent={openEvent}
-          onOpenTask={openTask}
-          onCreate={(date) => createEvent(date, null)}
-          onRoutineCount={(routine, date, count) => void setRoutineCount(routine, date, count)}
-          onOpenRoutine={(id) => setRoutineId(id)}
-        />
-      ) : null}
+      <div className="mt-4">
+        <div className="min-w-0">
+          {view === "month" ? (
+            <MonthView
+              cursor={cursor}
+              events={data.calendar}
+              tasks={data.projects}
+              routines={data.routines}
+              mode={mode}
+              weekStartsOn={settings.weekStartsOn}
+              showWeekends={settings.showWeekends}
+              onSelectDay={(day) => {
+                setCursor(day);
+                setView("day");
+              }}
+              onOpenEvent={openEvent}
+              onOpenTask={openTask}
+              onCreate={(date) => createEvent(date, null)}
+              onRoutineCount={(routine, date, count) => void setRoutineCount(routine, date, count)}
+            />
+          ) : null}
 
-      {view === "week" || view === "three" ? (
-        <div className="space-y-3">
-          <TimeGrid
-            days={view === "week" ? currentWeekDays : [threeStart, addDaysISO(threeStart, 1), addDaysISO(threeStart, 2)]}
-            events={events}
-            tasks={tasks}
-            routines={data.routines}
-            mode={mode}
-            showWeekends={view === "week" ? settings.showWeekends : true}
-            startHour={settings.weekStartHour}
-            endHour={settings.weekEndHour}
-            allDayCollapse={settings.allDayCollapse}
-            onSelectDay={(day) => {
-              setCursor(day);
-              setView("day");
-            }}
-            onOpenEvent={openEvent}
-            onOpenTask={openTask}
-            onCreate={createEvent}
-            onMoveEvent={moveEvent}
-            onToggleTask={toggleTask}
-            onRoutineCount={(routine, date, count) => void setRoutineCount(routine, date, count)}
-          />
           {view === "week" ? (
-            <>
-              <WeekPanels
-                weekStart={weekStart}
-                events={events}
-                tasks={tasks}
-                hiddenIncluded={hiddenIncluded}
-                onCreateWeeklyGoal={createWeekly}
-                onOpenEvent={openEvent}
-                onOpenTask={openTask}
-                onToggleEventDone={toggleEventDone}
-                onToggleTask={toggleTask}
-                onUpdateEvent={(id, patch) => void update("calendar", id, patch)}
-              />
-              <WeekTable
-                weekStart={weekStart}
-                tasks={data.projects}
-                routines={data.routines}
-                onOpenTask={openTask}
-                onOpenRoutine={(id) => setRoutineId(id)}
-                onRoutineCount={(routine, date, count) => void setRoutineCount(routine, date, count)}
-                onCreateTaskForProject={(projectId) => setTaskId(`new:${projectId}`)}
-              />
-            </>
+            <WeekBoard
+              days={weekVisibleDays}
+              events={events}
+              tasks={tasks}
+              projects={projects}
+              routines={data.routines}
+              startHour={settings.weekStartHour}
+              endHour={settings.weekEndHour}
+              onSelectDay={(day) => {
+                setCursor(day);
+                setView("day");
+              }}
+              onOpenEvent={openEvent}
+              onOpenTask={openTask}
+              onOpenRoutine={(id) => setRoutineId(id)}
+              onCreate={createEvent}
+              onMoveEvent={moveEvent}
+              onToggleTask={toggleTask}
+              onRoutineCount={(routine, date, count) => void setRoutineCount(routine, date, count)}
+              onCreateTaskForProject={(projectId) => setTaskId(projectId ? `new:${projectId}` : "new:")}
+              onCreateRoutine={() => setRoutineId("new")}
+            />
+          ) : null}
+
+          {view === "three" ? (
+            <WeekBoard
+              days={threeDays}
+              events={events}
+              tasks={tasks}
+              projects={projects}
+              routines={data.routines}
+              startHour={settings.weekStartHour}
+              endHour={settings.weekEndHour}
+              onSelectDay={(day) => {
+                setCursor(day);
+                setView("day");
+              }}
+              onOpenEvent={openEvent}
+              onOpenTask={openTask}
+              onOpenRoutine={(id) => setRoutineId(id)}
+              onCreate={createEvent}
+              onMoveEvent={moveEvent}
+              onToggleTask={toggleTask}
+              onRoutineCount={(routine, date, count) => void setRoutineCount(routine, date, count)}
+              onCreateTaskForProject={(projectId) => setTaskId(projectId ? `new:${projectId}` : "new:")}
+              onCreateRoutine={() => setRoutineId("new")}
+            />
+          ) : null}
+
+          {view === "day" ? (
+            <DayView
+              day={cursor}
+              events={events}
+              tasks={tasks}
+              projects={projects}
+              routines={data.routines}
+              hiddenIncluded={hiddenIncluded}
+              onOpenEvent={openEvent}
+              onOpenTask={openTask}
+              onCreate={createEvent}
+              onToggleTask={toggleTask}
+              onRoutineCount={(routine, date, count) => void setRoutineCount(routine, date, count)}
+              onWriteDiary={openBinderForDate}
+              onCreateTaskForProject={(projectId) => setTaskId(projectId ? `new:${projectId}` : "new:")}
+            />
+          ) : null}
+
+          {view === "habit" ? (
+            <HabitView
+              cursor={cursor}
+              routines={data.routines}
+              hiddenIncluded={hiddenIncluded}
+              onRoutineCount={(routine, date, count) => void setRoutineCount(routine, date, count)}
+              onOpenRoutine={(id) => setRoutineId(id)}
+              onCreateRoutine={() => setRoutineId("new")}
+            />
           ) : null}
         </div>
+      </div>
+      </div>
+
+      {view === "week" ? (
+        <aside className="side-panel sticky top-14 hidden max-h-[calc(100dvh-4rem)] w-[19rem] flex-none overflow-y-auto pb-8 pl-5 xl:block">
+            <WeekPanel
+              weekStart={weekStart}
+              events={events}
+              tasks={tasks}
+              onCreateGoal={createWeekly}
+              onCreateFavorite={(title) => void addFavorite(title)}
+              onOpenEvent={openEvent}
+              onOpenTask={openTask}
+              onToggleEventDone={toggleEventDone}
+              onToggleTask={toggleTask}
+              onUpdateEvent={(id, patch) => void update("calendar", id, patch)}
+              onPickDay={(day) => {
+                setCursor(day);
+                setView("day");
+              }}
+              onMonth={(direction) => setCursor((current) => addMonthsISO(current, direction))}
+            />
+        </aside>
       ) : null}
 
-      {view === "day" ? (
-        <DayView
-          day={cursor}
-          events={events}
-          tasks={tasks}
-          routines={data.routines}
-          hiddenIncluded={hiddenIncluded}
-          onOpenEvent={openEvent}
-          onOpenTask={openTask}
-          onCreate={createEvent}
-          onToggleTask={toggleTask}
-          onRoutineCount={(routine, date, count) => void setRoutineCount(routine, date, count)}
-          onWriteDiary={openBinderForDate}
-        />
-      ) : null}
-
-      {view === "habit" ? (
-        <HabitView
-          cursor={cursor}
-          routines={data.routines}
-          hiddenIncluded={hiddenIncluded}
-          onRoutineCount={(routine, date, count) => void setRoutineCount(routine, date, count)}
-          onOpenRoutine={(id) => setRoutineId(id)}
-          onCreateRoutine={() => setRoutineId("new")}
-        />
-      ) : null}
-
-      {view === "week" && events.length === 0 && tasks.length === 0 ? (
-        <p className="flex items-center justify-center gap-1 text-[0.7rem] text-ink-400">
-          <StarIcon size={12} /> 이번 주 기록이 비어 있습니다. 표를 눌러 첫 일정을 추가해 보세요.
-        </p>
+      {view === "month" ? (
+        <aside className="side-panel sticky top-14 hidden max-h-[calc(100dvh-4rem)] w-[19rem] flex-none overflow-y-auto pb-8 pl-5 xl:block">
+            <div className="flex items-center justify-between">
+              <h3 className="text-[1.05rem] font-semibold text-ink-900">루틴</h3>
+              <span className="text-[0.66rem] text-ink-400">칸을 눌러 체크</span>
+            </div>
+            <div className="mt-3 space-y-2.5">
+              {routineTemplates.length === 0 ? (
+                <button
+                  type="button"
+                  onClick={() => setRoutineId("new")}
+                  className="w-full rounded-2xl border border-dashed border-paper-300 px-3 py-8 text-[0.72rem] text-ink-400 hover:border-ink-300 hover:text-ink-600"
+                >
+                  + 루틴 추가
+                </button>
+              ) : (
+                routineTemplates.map((routine, index) => (
+                  <RoutineHeat
+                    key={routine.id}
+                    routine={routine as Routine}
+                    routines={data.routines}
+                    days={Array.from({ length: Number(new Date(Number(cursor.slice(0, 4)), Number(cursor.slice(5, 7)), 0).getDate()) }, (_, i) =>
+                      `${cursor.slice(0, 7)}-${String(i + 1).padStart(2, "0")}`,
+                    )}
+                    index={index}
+                    onCount={(date, count) => void setRoutineCount(routine, date, count)}
+                  />
+                ))
+              )}
+            </div>
+        </aside>
       ) : null}
 
       <EventEditor
@@ -387,7 +484,7 @@ export function CalendarTab() {
       <TaskEditor
         open={taskId !== null}
         taskId={taskId && !taskId.startsWith("new:") ? taskId : null}
-        draft={taskId?.startsWith("new:") ? { kind: "할 일", projectId: taskId.slice(4), date: cursor } : undefined}
+        draft={taskId?.startsWith("new:") ? { kind: "할 일", projectId: taskId.slice(4) || undefined, date: cursor } : undefined}
         onClose={() => setTaskId(null)}
       />
       <RoutineEditor

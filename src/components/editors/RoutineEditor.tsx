@@ -198,8 +198,8 @@ function RoutineEditorInner({ routineId, onClose }: { routineId: string | null; 
         </label>
 
         <div className="rounded-xl border border-paper-300/80 bg-paper-50/60 px-3 py-1">
-          <Toggle checked={form.hidden} onChange={(value) => patch("hidden", value)} label="NOW 숨김" />
-          <Toggle checked={form.history} onChange={(value) => patch("history", value)} label="History (지난 루틴)" />
+          <Toggle checked={form.hidden} onChange={(value) => patch("hidden", value)} label="기본 보기에서 숨김" />
+          <Toggle checked={form.history} onChange={(value) => patch("history", value)} label="지난 루틴으로 보내기" />
         </div>
 
         <ErrorNote message={error} />

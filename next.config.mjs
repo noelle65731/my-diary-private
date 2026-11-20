@@ -4,6 +4,8 @@ const nextConfig = {
   distDir: process.env.NEXT_DIST_DIR || ".next",
   reactStrictMode: true,
   poweredByHeader: false,
+  // keep the dev overlay badge out of local previews and screenshots
+  devIndicators: false,
 };
 
 export default nextConfig;

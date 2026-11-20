@@ -2,8 +2,8 @@
 
 import { useMemo } from "react";
 import type { CalendarEvent, ProjectTask } from "@/lib/types";
-import { monthMatrix, todayISO, weekdayKo } from "@/lib/date";
-import { holidayName, isRedDay } from "@/lib/holidays";
+import { monthMatrix, todayISO } from "@/lib/date";
+import { holidayName } from "@/lib/holidays";
 import { cn } from "@/lib/utils";
 
 interface YearViewProps {
@@ -39,26 +39,21 @@ export function YearView({ year, events, tasks, hiddenIncluded, onPickDay }: Yea
     return map;
   }, [events, tasks, hiddenIncluded]);
 
-  const quarters = [0, 1, 2, 3];
-
   return (
-    <div className="space-y-4">
-      {quarters.map((quarter) => (
-        <section key={quarter} className="card px-3 py-3 md:px-4 md:py-4">
+    <div>
+      {[0, 1, 2, 3].map((quarter) => (
+        <section key={quarter} className="border-b border-paper-300 py-3 last:border-b-0">
           <div className="mb-2 flex items-baseline justify-between">
-            <h3 className="section-title">{year} · {quarter + 1}분기</h3>
-            <span className="text-[0.66rem] text-ink-400">{MONTH_NAMES[quarter * 3]} – {MONTH_NAMES[quarter * 3 + 2]}</span>
+            <h3 className="text-[0.74rem] text-ink-500">
+              {year} · {quarter + 1}분기
+            </h3>
+            <span className="text-[0.66rem] text-ink-300">
+              {MONTH_NAMES[quarter * 3]} – {MONTH_NAMES[quarter * 3 + 2]}
+            </span>
           </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
             {[quarter * 3, quarter * 3 + 1, quarter * 3 + 2].map((month0) => (
-              <MonthMini
-                key={month0}
-                year={year}
-                month0={month0}
-                today={today}
-                counts={counts}
-                onPickDay={onPickDay}
-              />
+              <MonthMini key={month0} year={year} month0={month0} today={today} counts={counts} onPickDay={onPickDay} />
             ))}
           </div>
         </section>
@@ -84,16 +79,13 @@ function MonthMini({
   const monthKey = `${year}-${String(month0 + 1).padStart(2, "0")}`;
 
   return (
-    <div className="rounded-xl border border-paper-300/50 bg-paper-50/40 px-2 py-2">
-      <div className="mb-1 flex items-baseline justify-between px-1">
-        <p className="serif text-[0.86rem] text-ink-800">{MONTH_NAMES[month0]}</p>
-        <p className="text-[0.56rem] text-ink-400">{year}</p>
-      </div>
-      <div className="grid grid-cols-7 gap-y-0.5 text-center">
+    <div>
+      <p className="mb-1.5 text-[0.9rem] font-semibold text-ink-900">{MONTH_NAMES[month0]}</p>
+      <div className="grid grid-cols-7 gap-y-1 text-center">
         {["월", "화", "수", "목", "금", "토", "일"].map((label, index) => (
           <span
             key={label}
-            className={cn("text-[0.5rem]", index === 6 ? "text-accent-400" : index === 5 ? "text-dusk-400" : "text-ink-300")}
+            className={cn("text-[0.58rem]", index === 6 ? "text-red-400" : index === 5 ? "text-blue-500" : "text-ink-300")}
           >
             {label}
           </span>
@@ -103,6 +95,7 @@ function MonthMini({
           const count = counts.get(day) ?? 0;
           const holiday = holidayName(day);
           const isToday = day === today;
+          const dow = new Date(`${day}T12:00:00`).getDay();
           if (!inMonth) return <span key={day} className="h-5" />;
           return (
             <button
@@ -110,23 +103,16 @@ function MonthMini({
               type="button"
               onClick={() => onPickDay(day)}
               className={cn(
-                "relative mx-auto flex h-5 w-5 items-center justify-center rounded-[4px] text-[0.58rem] tabular-nums transition hover:bg-paper-200",
-                isToday && "bg-ink-900 text-paper-50 hover:bg-ink-800",
-                !isToday && isRedDay(day) && "text-accent-500",
-                !isToday && !isRedDay(day) && "text-ink-600",
-                holiday && !isToday && "font-medium",
+                "relative mx-auto flex h-5 w-5 items-center justify-center rounded-full text-[0.62rem] tabular-nums transition hover:bg-paper-200",
+                isToday && "bg-ink-900 font-semibold text-white hover:bg-ink-800",
+                !isToday && (holiday || dow === 0) && "text-red-500",
+                !isToday && dow === 6 && "text-blue-600",
+                !isToday && !holiday && dow !== 0 && dow !== 6 && "text-ink-700",
               )}
               title={holiday ? `${day} ${holiday}` : day}
             >
               {Number(day.slice(8, 10))}
-              {count > 0 && !isToday ? (
-                <span
-                  className={cn(
-                    "absolute bottom-[1px] h-[3px] w-[3px] rounded-full",
-                    count >= 3 ? "bg-accent-400" : "bg-sage-400",
-                  )}
-                />
-              ) : null}
+              {count > 0 && !isToday ? <span className="absolute bottom-[1px] h-[3px] w-[3px] rounded-full bg-sky-500" /> : null}
             </button>
           );
         })}

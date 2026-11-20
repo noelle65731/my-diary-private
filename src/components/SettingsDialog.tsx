@@ -76,7 +76,7 @@ export function SettingsDialog() {
                   step={1}
                   value={settings.fontSize}
                   onChange={(event) => set("fontSize", Number(event.target.value))}
-                  className="w-full accent-accent-500"
+                  className="w-full accent-ink-900"
                 />
                 <div className="mt-3 rounded-xl border border-paper-300 bg-paper-50 px-3 py-2.5">
                   <p className="serif text-[1rem] text-ink-900">오늘의 기록</p>
@@ -171,13 +171,13 @@ export function SettingsDialog() {
                   max={8}
                   value={settings.allDayCollapse}
                   onChange={(event) => set("allDayCollapse", Number(event.target.value))}
-                  className="w-full accent-accent-500"
+                  className="w-full accent-ink-900"
                 />
               </div>
               <Toggle
                 checked={settings.calendarShowHidden}
                 onChange={(value) => set("calendarShowHidden", value)}
-                label="처음부터 NOW 숨김 표시"
+                label="처음부터 숨긴 항목 표시"
                 description="끄면 숨긴 항목은 '전체' 모드에서만 보입니다"
               />
             </>
@@ -196,7 +196,7 @@ export function SettingsDialog() {
                   max={8}
                   value={settings.projectTaskPreview}
                   onChange={(event) => set("projectTaskPreview", Number(event.target.value))}
-                  className="w-full accent-accent-500"
+                  className="w-full accent-ink-900"
                 />
               </div>
               <Toggle
@@ -221,7 +221,7 @@ export function SettingsDialog() {
                   max={6}
                   value={settings.binderPreviewLines}
                   onChange={(event) => set("binderPreviewLines", Number(event.target.value))}
-                  className="w-full accent-accent-500"
+                  className="w-full accent-ink-900"
                 />
               </div>
               <Toggle

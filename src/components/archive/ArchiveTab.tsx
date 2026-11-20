@@ -5,17 +5,10 @@ import { useData } from "@/state/store";
 import { useSettings } from "@/state/settings";
 import { useTabReset, useUi } from "@/state/ui";
 import { cn, truncate } from "@/lib/utils";
-import { formatShort, todayISO } from "@/lib/date";
+import { formatShort, todayISO, weekdayKo } from "@/lib/date";
 import { ARCHIVE_KINDS, type ArchiveKind } from "@/lib/types";
 import { archiveTone } from "@/components/common/tone";
-import {
-  ArchiveIcon,
-  ArrowUpRightIcon,
-  PlusIcon,
-  SearchIcon,
-  StarIcon,
-  TrashIcon,
-} from "@/components/icons";
+import { ArchiveIcon, ArrowUpRightIcon, PlusIcon, SearchIcon, StarIcon, TrashIcon } from "@/components/icons";
 import { EmptyState, StarRating } from "@/components/common/primitives";
 import { ArchiveEditor } from "@/components/editors/ArchiveEditor";
 
@@ -27,7 +20,9 @@ export function ArchiveTab() {
   const { focus, clearFocus } = useUi();
 
   const [category, setCategory] = useState<"전체" | ArchiveKind>(settings.archiveDefaultCategory);
+  const [tag, setTag] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
   const [sort, setSort] = useState<SortKey>("recent");
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [trashMode, setTrashMode] = useState(false);
@@ -42,7 +37,9 @@ export function ArchiveTab() {
 
   useTabReset("archive", () => {
     setCategory(settings.archiveDefaultCategory);
+    setTag(null);
     setQuery("");
+    setSearchOpen(false);
     setSort("recent");
     setFavoritesOnly(false);
     setTrashMode(false);
@@ -56,10 +53,12 @@ export function ArchiveTab() {
     clearFocus();
   }, [focus, clearFocus]);
 
+  const base = useMemo(() => data.archive.filter((item) => item.trash === trashMode), [data.archive, trashMode]);
+
   const items = useMemo(() => {
-    const base = data.archive.filter((item) => item.trash === trashMode);
     const filtered = base
       .filter((item) => (category === "전체" ? true : item.kind === category))
+      .filter((item) => (tag ? item.tags.includes(tag) : true))
       .filter((item) => (favoritesOnly ? item.favorite : true))
       .filter((item) =>
         query.trim() ? `${item.title} ${item.body} ${item.tags.join(" ")}`.toLowerCase().includes(query.trim().toLowerCase()) : true,
@@ -69,18 +68,23 @@ export function ArchiveTab() {
       if (sort === "title") return a.title.localeCompare(b.title, "ko");
       return (b.date ?? "").localeCompare(a.date ?? "");
     });
-  }, [data.archive, trashMode, category, favoritesOnly, query, sort]);
+  }, [base, category, tag, favoritesOnly, query, sort]);
 
   const counts = useMemo(() => {
-    const map: Record<string, number> = { 전체: 0 };
+    const map: Record<string, number> = { 전체: base.length };
     for (const kind of ARCHIVE_KINDS) map[kind] = 0;
-    for (const item of data.archive) {
-      if (item.trash !== trashMode) continue;
-      map["전체"] = (map["전체"] ?? 0) + 1;
-      map[item.kind] = (map[item.kind] ?? 0) + 1;
-    }
+    for (const item of base) map[item.kind] = (map[item.kind] ?? 0) + 1;
     return map;
-  }, [data.archive, trashMode]);
+  }, [base]);
+
+  const tags = useMemo(() => {
+    const seen = new Map<string, number>();
+    for (const item of data.archive) {
+      if (item.trash) continue;
+      for (const itemTag of item.tags) seen.set(itemTag, (seen.get(itemTag) ?? 0) + 1);
+    }
+    return [...seen.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
+  }, [data.archive]);
 
   const addQuick = async () => {
     if (!quickTitle.trim() || busy) return;
@@ -98,70 +102,98 @@ export function ArchiveTab() {
   };
 
   return (
-    <div className="space-y-3">
-      <div className="card flex flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-center">
-        <div className="flex min-w-0 flex-1 items-center gap-2">
-          <ArchiveIcon size={16} className="flex-none text-ink-400" />
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              void addQuick();
-            }}
-            className="flex min-w-0 flex-1 items-center gap-2"
-          >
-            <input
-              value={quickTitle}
-              onChange={(event) => setQuickTitle(event.target.value)}
-              placeholder={category === "전체" ? "빠르게 메모 담기" : `빠르게 ${category} 담기`}
-              className="min-w-0 flex-1 border-none bg-transparent px-1 py-1 text-[0.86rem] outline-none placeholder:text-ink-400"
-            />
-            <button type="submit" disabled={!quickTitle.trim() || busy} className="btn-primary btn-xs flex-none">
-              <PlusIcon size={12} /> 담기
-            </button>
-          </form>
+    <div className="pb-16">
+      <div className="flex items-end justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-[0.66rem] text-ink-400">
+            {ARCHIVE_KINDS.filter((kind) => (counts[kind] ?? 0) > 0)
+              .map((kind) => `${kind} ${counts[kind]}`)
+              .join(" · ") || "아직 담긴 것이 없습니다"}
+          </p>
+          <h1 className="mt-1.5 text-[1.95rem] font-semibold leading-none tracking-[-0.035em] text-ink-900 md:text-[2.3rem]">아카이브</h1>
         </div>
+
+        <div className="flex flex-none items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setSearchOpen((current) => !current)}
+            className={cn(
+              "flex h-9 w-9 items-center justify-center rounded-full text-ink-600 transition",
+              searchOpen ? "bg-ink-900 text-white" : "bg-paper-200 hover:bg-paper-300/70",
+            )}
+            aria-label="검색"
+          >
+            <SearchIcon size={16} />
+          </button>
+        </div>
+      </div>
+
+      {searchOpen ? (
+        <div className="mt-3">
+          <input
+            autoFocus
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="제목·내용·태그 검색"
+            className="w-full rounded-full bg-paper-200 px-3.5 py-2 text-[0.8rem] text-ink-900 placeholder:text-ink-400 focus:bg-paper-200 focus:outline-none"
+          />
+        </div>
+      ) : null}
+
+      <div className="mt-3 flex flex-wrap items-center gap-1.5">
+        {(["전체", ...ARCHIVE_KINDS] as const).map((kind) => {
+          const active = category === kind;
+          return (
+            <button
+              key={kind}
+              type="button"
+              onClick={() => {
+                setCategory(kind);
+                setTag(null);
+              }}
+              className={cn(
+                "inline-flex items-center gap-1 rounded-full px-3 py-1 text-[0.76rem] font-medium transition",
+                active ? "bg-ink-900 text-white" : "bg-paper-200 text-ink-500 hover:bg-paper-300/70 hover:text-ink-800",
+              )}
+            >
+              {kind}
+              {counts[kind] ? (
+                <span className={cn("text-[0.66rem]", active ? "text-white/70" : "text-ink-400")}>{counts[kind]}</span>
+              ) : null}
+            </button>
+          );
+        })}
+        {tags.map(([itemTag]) => (
+          <button
+            key={itemTag}
+            type="button"
+            onClick={() => setTag(tag === itemTag ? null : itemTag)}
+            className={cn(
+              "rounded-full px-2.5 py-1 text-[0.72rem] transition",
+              tag === itemTag ? "bg-ink-900 text-white" : "bg-paper-200/70 text-ink-500 hover:bg-paper-300/60",
+            )}
+          >
+            #{itemTag}
+          </button>
+        ))}
         <button
           type="button"
           onClick={() => {
             setDraft({ kind: category === "전체" ? "메모" : category, date: todayISO() });
             setEditorId(null);
           }}
-          className="btn-outline btn-xs self-start sm:self-auto"
+          className="rounded-full border border-dashed border-paper-400 px-2.5 py-1 text-[0.72rem] text-ink-400 transition hover:border-ink-300 hover:text-ink-700"
         >
-          자세히 담기
+          + 담기
         </button>
       </div>
 
-      <div className="flex flex-wrap items-center gap-1.5">
-        {(["전체", ...ARCHIVE_KINDS] as const).map((kind) => (
-          <button
-            key={kind}
-            type="button"
-            onClick={() => setCategory(kind)}
-            className={cn(
-              "chip border transition",
-              category === kind
-                ? "border-ink-900 bg-ink-900 text-paper-50"
-                : "border-paper-400 bg-white/50 text-ink-500 hover:border-ink-400 hover:text-ink-800",
-            )}
-          >
-            {kind}
-            <span className={cn("text-[0.6rem]", category === kind ? "text-paper-300" : "text-ink-400")}>{counts[kind] ?? 0}</span>
-          </button>
-        ))}
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative min-w-[8rem] flex-1 sm:max-w-[15rem]">
-          <SearchIcon size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-400" />
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="제목·내용·태그"
-            className="input py-1.5 pl-8 text-[0.78rem]"
-          />
-        </div>
-        <select value={sort} onChange={(event) => setSort(event.target.value as SortKey)} className="input w-auto py-1.5 text-[0.76rem]">
+      <div className="mt-2 flex items-center gap-2 text-[0.68rem] text-ink-400">
+        <select
+          value={sort}
+          onChange={(event) => setSort(event.target.value as SortKey)}
+          className="rounded-md bg-transparent py-0.5 text-[0.68rem] text-ink-400 focus:outline-none"
+        >
           <option value="recent">최신순</option>
           <option value="rating">별점순</option>
           <option value="title">제목순</option>
@@ -169,102 +201,98 @@ export function ArchiveTab() {
         <button
           type="button"
           onClick={() => setFavoritesOnly((current) => !current)}
-          className={cn(
-            "chip border",
-            favoritesOnly ? "border-amber-300 bg-amber-50 text-amber-700" : "border-paper-400 bg-white/50 text-ink-500",
-          )}
+          className={cn("inline-flex items-center gap-1 rounded-full px-1.5 py-0.5", favoritesOnly && "bg-amber-50 text-amber-700")}
         >
           <StarIcon size={11} filled={favoritesOnly} /> 즐겨찾기
         </button>
         <button
           type="button"
           onClick={() => setTrashMode((current) => !current)}
-          className={cn(
-            "chip border",
-            trashMode ? "border-rose-200 bg-rose-50 text-rose-600" : "border-paper-400 bg-white/50 text-ink-500",
-          )}
+          className={cn("inline-flex items-center gap-1 rounded-full px-1.5 py-0.5", trashMode && "bg-red-50 text-red-500")}
         >
-          <TrashIcon size={11} /> {trashMode ? "휴지통 보는 중" : "휴지통"}
+          <TrashIcon size={11} /> {trashMode ? "휴지통" : "휴지통"}
         </button>
-        <span className="ml-auto text-[0.66rem] text-ink-400">{items.length}개</span>
+        <span className="ml-auto">{items.length}개</span>
       </div>
 
       {items.length === 0 ? (
-        <EmptyState
-          icon={<ArchiveIcon size={22} />}
-          title={trashMode ? "휴지통이 비어 있습니다" : "아직 담긴 것이 없습니다"}
-          description={trashMode ? "삭제한 기록은 여기서 되살릴 수 있습니다." : "책, 영화, 레퍼런스, 읽을거리를 모아 두세요."}
-          action={
-            trashMode ? undefined : (
-              <button
-                type="button"
-                onClick={() => {
-                  setDraft({ kind: category === "전체" ? "메모" : category, date: todayISO() });
-                  setEditorId(null);
-                }}
-                className="btn-outline btn-xs"
-              >
-                <PlusIcon size={12} /> 첫 기록 담기
-              </button>
-            )
-          }
-        />
+        <div className="mt-3">
+          <EmptyState
+            icon={<ArchiveIcon size={22} />}
+            title={trashMode ? "휴지통이 비어 있습니다" : "아직 담긴 것이 없습니다"}
+            description={trashMode ? "삭제한 기록은 여기서 되살릴 수 있습니다." : "책, 영화, 레퍼런스, 읽을거리를 모아 두세요."}
+            action={
+              trashMode ? undefined : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDraft({ kind: category === "전체" ? "메모" : category, date: todayISO() });
+                    setEditorId(null);
+                  }}
+                  className="btn-outline btn-xs"
+                >
+                  <PlusIcon size={12} /> 첫 기록 담기
+                </button>
+              )
+            }
+          />
+        </div>
       ) : (
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5">
           {items.map((item) => {
             const tone = archiveTone(item.kind);
             return (
-              <article key={item.id} className="card flex flex-col px-3.5 py-3 transition hover:shadow-lift">
-                <div className="flex items-start justify-between gap-2">
+              <article key={item.id} className="group relative flex flex-col rounded-2xl border border-paper-300 px-4 py-3.5 pb-3 transition hover:border-paper-400">
+                <p className={cn("text-[0.68rem] font-medium", tone.text)}>{item.kind}</p>
+                <div className="mt-1 flex items-start justify-between gap-2">
                   <button type="button" onClick={() => setEditorId(item.id)} className="min-w-0 flex-1 text-left">
-                    <span className={cn("chip mb-1 border", tone.bg, tone.border, tone.text)}>{item.kind}</span>
-                    <p className="line-clamp-2 text-[0.9rem] font-medium leading-snug text-ink-900">{item.title}</p>
+                    <p className="line-clamp-2 text-[0.98rem] font-semibold leading-snug tracking-tight text-ink-900">{item.title}</p>
+                    {item.memo ? <p className="mt-0.5 truncate text-[0.74rem] text-ink-400">{item.memo}</p> : null}
                   </button>
                   <button
                     type="button"
                     onClick={() => void update("archive", item.id, { favorite: !item.favorite })}
-                    className={cn("flex-none rounded p-1 transition", item.favorite ? "text-amber-400" : "text-ink-300 hover:text-ink-500")}
+                    className={cn("flex-none rounded p-0.5 transition", item.favorite ? "text-amber-400" : "text-ink-300 hover:text-ink-500")}
                     aria-label="즐겨찾기"
                   >
-                    <StarIcon size={15} filled={item.favorite} />
+                    <StarIcon size={14} filled={item.favorite} />
                   </button>
                 </div>
 
-                <div className="mt-1 flex items-center gap-2">
-                  <StarRating
-                    value={item.rating}
-                    size={12}
-                    onChange={trashMode ? undefined : (value) => void update("archive", item.id, { rating: value })}
-                  />
-                  <span className="text-[0.62rem] text-ink-400">{item.date ? formatShort(item.date) : ""}</span>
+                {item.body ? (
+                  <button type="button" onClick={() => setEditorId(item.id)} className="mt-1.5 line-clamp-2 text-left text-[0.76rem] leading-relaxed text-ink-500">
+                    {truncate(item.body.replace(/\n/g, " "), 120)}
+                  </button>
+                ) : null}
+
+                {item.tags.length > 0 ? (
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {item.tags.slice(0, 3).map((itemTag) => (
+                      <button
+                        key={itemTag}
+                        type="button"
+                        onClick={() => setTag(itemTag)}
+                        className="rounded-full bg-paper-200/70 px-1.5 py-0.5 text-[0.62rem] text-ink-500 hover:bg-paper-300/60"
+                      >
+                        #{itemTag}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+
+                <div className="mt-2 flex items-center gap-1.5 pt-1">
+                  <StarRating value={item.rating} size={12} />
+                  <span className="text-[0.66rem] text-ink-400">
+                    {item.date ? `${formatShort(item.date)} ${weekdayKo(item.date)}` : ""}
+                  </span>
                   {item.link ? (
-                    <a href={item.link} target="_blank" rel="noreferrer" className="ml-auto text-ink-400 hover:text-accent-600" aria-label="링크 열기">
+                    <a href={item.link} target="_blank" rel="noreferrer" className="ml-auto text-ink-300 hover:text-ink-600" aria-label="링크 열기">
                       <ArrowUpRightIcon size={13} />
                     </a>
                   ) : null}
                 </div>
 
-                {item.body ? (
-                  <button
-                    type="button"
-                    onClick={() => setEditorId(item.id)}
-                    className="mt-1.5 line-clamp-2 text-left text-[0.74rem] leading-relaxed text-ink-500"
-                  >
-                    {truncate(item.body.replace(/\n/g, " "), 90)}
-                  </button>
-                ) : null}
-
-                {item.tags.length > 0 ? (
-                  <div className="mt-1.5 flex flex-wrap gap-1">
-                    {item.tags.slice(0, 4).map((tag) => (
-                      <span key={tag} className="chip bg-paper-100 text-[0.6rem] text-ink-500">
-                        #{tag}
-                      </span>
-                    ))}
-                  </div>
-                ) : null}
-
-                <div className="mt-2 flex items-center justify-end gap-1 border-t border-paper-300/40 pt-1.5">
+                <div className="absolute bottom-2 right-3 flex items-center gap-1 rounded-full bg-white/90 px-1 opacity-0 transition group-hover:opacity-100">
                   {trashMode ? (
                     <>
                       <button
@@ -277,7 +305,7 @@ export function ArchiveTab() {
                       <button
                         type="button"
                         onClick={() => void destroy("archive", item.id)}
-                        className="rounded px-1.5 py-0.5 text-[0.64rem] text-rose-500 hover:bg-rose-50"
+                        className="rounded px-1.5 py-0.5 text-[0.64rem] text-red-500 hover:bg-red-50"
                       >
                         완전 삭제
                       </button>
@@ -286,7 +314,7 @@ export function ArchiveTab() {
                     <button
                       type="button"
                       onClick={() => void update("archive", item.id, { trash: true })}
-                      className="rounded px-1.5 py-0.5 text-[0.64rem] text-ink-400 hover:bg-paper-200 hover:text-rose-500"
+                      className="rounded px-1.5 py-0.5 text-[0.62rem] text-ink-300 hover:bg-paper-200 hover:text-red-500"
                     >
                       휴지통
                     </button>
@@ -297,6 +325,27 @@ export function ArchiveTab() {
           })}
         </div>
       )}
+
+      <div className="pointer-events-none fixed inset-x-0 bottom-[calc(3.4rem+env(safe-area-inset-bottom))] z-20 px-4 md:px-8 lg:px-10">
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            void addQuick();
+          }}
+          className="pointer-events-auto mx-auto flex w-full max-w-[46rem] items-center gap-2 rounded-full border border-paper-300 bg-white/95 px-4 py-2 shadow-lift backdrop-blur"
+        >
+          <ArchiveIcon size={15} className="flex-none text-ink-400" />
+          <input
+            value={quickTitle}
+            onChange={(event) => setQuickTitle(event.target.value)}
+            placeholder="링크 붙여넣기 또는 메모 입력 후 Enter"
+            className="min-w-0 flex-1 border-none bg-transparent text-[0.82rem] text-ink-900 outline-none placeholder:text-ink-400"
+          />
+          <button type="submit" disabled={!quickTitle.trim() || busy} className="btn-primary btn-xs flex-none">
+            담기
+          </button>
+        </form>
+      </div>
 
       <ArchiveEditor
         open={editorId !== null || draft !== null}

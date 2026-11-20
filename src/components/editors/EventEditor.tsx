@@ -276,7 +276,7 @@ function EventEditorInner({
             description="주간 화면 상단에 고정됩니다"
           />
           <Toggle checked={form.done} onChange={(value) => patch("done", value)} label="완료" />
-          <Toggle checked={form.hidden} onChange={(value) => patch("hidden", value)} label="NOW 숨김" description="기본 보기에서 감춥니다" />
+          <Toggle checked={form.hidden} onChange={(value) => patch("hidden", value)} label="기본 보기에서 숨김" description="기본 보기에서 감춥니다" />
           <Toggle
             checked={form.canceled}
             onChange={(value) => patch("canceled", value)}

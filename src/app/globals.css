@@ -3,8 +3,8 @@
 @tailwind utilities;
 
 :root {
-  --paper: #f8f5ef;
-  --ink: #2c2823;
+  --canvas: #ffffff;
+  --ink: #111827;
   color-scheme: light;
 }
 
@@ -12,32 +12,17 @@
   html {
     -webkit-text-size-adjust: 100%;
     text-size-adjust: 100%;
-    font-size: 15.3px;
+    font-size: 15px;
   }
 
   body {
-    @apply bg-paper-100 text-ink-900 antialiased;
-    background-image:
-      radial-gradient(1200px 600px at 12% -10%, rgba(221, 164, 124, 0.13), transparent 60%),
-      radial-gradient(900px 500px at 100% 0%, rgba(138, 164, 124, 0.1), transparent 55%),
-      linear-gradient(180deg, #faf7f1 0%, #f6f2ea 100%);
-    background-attachment: fixed;
+    @apply bg-white text-ink-900 antialiased;
     font-feature-settings: "tnum" 0;
   }
 
-  body::after {
-    content: "";
-    position: fixed;
-    inset: 0;
-    z-index: 0;
-    pointer-events: none;
-    opacity: 0.32;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.055'/%3E%3C/svg%3E");
-  }
-
   ::selection {
-    background: #f4e3d3;
-    color: #3b3630;
+    background: #e0f2fe;
+    color: #111827;
   }
 
   input,
@@ -56,7 +41,7 @@
 
   * {
     scrollbar-width: thin;
-    scrollbar-color: rgba(185, 173, 152, 0.55) transparent;
+    scrollbar-color: rgba(156, 163, 175, 0.45) transparent;
   }
 
   *::-webkit-scrollbar {
@@ -65,7 +50,7 @@
   }
 
   *::-webkit-scrollbar-thumb {
-    background: rgba(185, 173, 152, 0.45);
+    background: rgba(156, 163, 175, 0.4);
     border-radius: 999px;
   }
 
@@ -76,93 +61,94 @@
 
 @layer components {
   .card {
-    @apply rounded-2xl border border-paper-300/80 bg-[#fffdfa]/90 shadow-soft;
+    @apply rounded-2xl border border-paper-300 bg-white;
   }
 
   .card-quiet {
-    @apply rounded-2xl border border-paper-300/60 bg-paper-50/70;
+    @apply rounded-2xl border border-paper-300/70 bg-paper-200/60;
   }
 
   .btn {
-    @apply inline-flex select-none items-center justify-center gap-1.5 rounded-full px-3.5 py-2 text-[0.86rem] font-medium leading-none transition duration-150 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-45;
+    @apply inline-flex select-none items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-[0.8rem] font-medium leading-none transition duration-150 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40;
   }
 
   .btn-primary {
-    @apply inline-flex select-none items-center justify-center gap-1.5 rounded-full px-3.5 py-2 text-[0.86rem] font-medium leading-none transition duration-150 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-45;
-    @apply bg-ink-900 text-paper-50 hover:bg-ink-800;
+    @apply inline-flex select-none items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-[0.8rem] font-medium leading-none transition duration-150 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40;
+    @apply bg-ink-900 text-white hover:bg-ink-800;
   }
 
   .btn-accent {
-    @apply inline-flex select-none items-center justify-center gap-1.5 rounded-full px-3.5 py-2 text-[0.86rem] font-medium leading-none transition duration-150 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-45;
+    @apply inline-flex select-none items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-[0.8rem] font-medium leading-none transition duration-150 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40;
     @apply bg-accent-500 text-white hover:bg-accent-600;
   }
 
   .btn-outline {
-    @apply inline-flex select-none items-center justify-center gap-1.5 rounded-full px-3.5 py-2 text-[0.86rem] font-medium leading-none transition duration-150 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-45;
-    @apply border border-paper-400 bg-white/70 text-ink-700 hover:border-ink-400 hover:bg-white;
+    @apply inline-flex select-none items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-[0.8rem] font-medium leading-none transition duration-150 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40;
+    @apply border border-paper-300 bg-white text-ink-700 hover:border-paper-400 hover:bg-paper-200/60;
   }
 
   .btn-ghost {
-    @apply inline-flex select-none items-center justify-center gap-1.5 rounded-full px-3.5 py-2 text-[0.86rem] font-medium leading-none transition duration-150 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-45;
-    @apply text-ink-600 hover:bg-paper-200 hover:text-ink-900;
+    @apply inline-flex select-none items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-[0.8rem] font-medium leading-none transition duration-150 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40;
+    @apply text-ink-500 hover:bg-paper-200 hover:text-ink-900;
   }
 
   .btn-danger {
-    @apply inline-flex select-none items-center justify-center gap-1.5 rounded-full px-3.5 py-2 text-[0.86rem] font-medium leading-none transition duration-150 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-45;
+    @apply inline-flex select-none items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-[0.8rem] font-medium leading-none transition duration-150 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40;
     @apply border border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100;
   }
 
   .btn-xs {
-    @apply px-2.5 py-1.5 text-[0.76rem];
+    @apply px-2.5 py-1 text-[0.74rem];
   }
 
   .icon-btn {
-    @apply inline-flex h-9 w-9 items-center justify-center rounded-full text-ink-600 transition hover:bg-paper-200 hover:text-ink-900 active:scale-95;
+    @apply inline-flex h-8 w-8 items-center justify-center rounded-full text-ink-500 transition hover:bg-paper-200 hover:text-ink-900 active:scale-95;
   }
 
   .input {
-    @apply w-full rounded-xl border border-paper-400/90 bg-white/80 px-3 py-2 text-[0.9rem] text-ink-900 placeholder:text-ink-400 focus:border-accent-300 focus:outline-none focus:ring-2 focus:ring-accent-100;
+    @apply w-full rounded-lg border border-transparent bg-paper-200 px-3 py-2 text-[0.85rem] text-ink-900 placeholder:text-ink-400 focus:border-paper-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-paper-200;
   }
 
   .input-flat {
-    @apply w-full rounded-lg border border-transparent bg-transparent px-2 py-1.5 text-[0.9rem] text-ink-900 placeholder:text-ink-400 hover:border-paper-300 focus:border-accent-300 focus:bg-white focus:outline-none;
+    @apply w-full rounded-lg border border-transparent bg-transparent px-2 py-1.5 text-[0.85rem] text-ink-900 placeholder:text-ink-400 hover:border-paper-300 focus:border-paper-400 focus:bg-white focus:outline-none;
   }
 
   .label {
-    @apply mb-1.5 block text-[0.7rem] font-semibold uppercase tracking-[0.08em] text-ink-500;
+    @apply mb-1.5 block text-[0.72rem] font-medium text-ink-500;
   }
 
   .chip {
-    @apply inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.72rem] font-medium leading-5;
+    @apply inline-flex items-center gap-1 rounded-full bg-paper-200 px-2 py-0.5 text-[0.72rem] font-medium leading-5 text-ink-600;
   }
 
   .chip-button {
-    @apply chip border border-paper-400 bg-white/60 text-ink-600 transition hover:border-ink-400 hover:text-ink-900;
+    @apply chip border border-transparent bg-paper-200 text-ink-600 transition hover:bg-paper-300/70 hover:text-ink-900;
   }
 
   .chip-active {
-    @apply border border-ink-900 bg-ink-900 text-paper-50;
+    @apply border border-ink-900 bg-ink-900 text-white;
   }
 
   .divider {
-    @apply h-px w-full bg-paper-300/80;
+    @apply h-px w-full bg-paper-300;
   }
 
   .section-title {
-    @apply text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-ink-500;
+    @apply text-[0.74rem] font-medium text-ink-500;
   }
 
   .display {
     font-family: "Pretendard Variable", Pretendard, sans-serif;
-    letter-spacing: -0.02em;
+    letter-spacing: -0.03em;
   }
 
   .serif {
-    font-family: "Nanum Myeongjo", "Noto Serif KR", serif;
+    font-family: "Pretendard Variable", Pretendard, sans-serif;
+    letter-spacing: -0.02em;
   }
 
   .sheet-surface {
-    @apply bg-[#fffdfa] shadow-lift;
+    @apply bg-white shadow-lift;
   }
 
   .tap-highlight-none {
@@ -172,15 +158,40 @@
   .pb-safe {
     padding-bottom: env(safe-area-inset-bottom, 0px);
   }
+
+  /* segmented control in the reference chrome */
+  .seg-track {
+    @apply inline-flex items-center gap-0.5 rounded-full bg-paper-200 p-0.5;
+  }
+
+  .seg-item {
+    @apply rounded-full px-2.5 py-1 text-[0.76rem] font-medium text-ink-500 transition hover:text-ink-900;
+  }
+
+  .seg-item-active {
+    @apply bg-white text-ink-900 shadow-[0_1px_2px_rgba(17,24,39,0.08)];
+  }
+
+  .nav-pill {
+    @apply inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[0.84rem] font-medium text-ink-400 transition hover:text-ink-700;
+  }
+
+  .nav-pill-active {
+    @apply border border-paper-300 bg-white text-ink-900 shadow-[0_1px_2px_rgba(17,24,39,0.06)];
+  }
+
+  .side-panel {
+    @apply border-l border-paper-300;
+  }
 }
 
 @layer utilities {
   .scroll-shadow-y {
     background:
-      linear-gradient(#fffdfa 30%, rgba(255, 253, 250, 0)) center top,
-      linear-gradient(rgba(255, 253, 250, 0), #fffdfa 70%) center bottom,
-      radial-gradient(farthest-side at 50% 0, rgba(44, 40, 35, 0.12), transparent) center top,
-      radial-gradient(farthest-side at 50% 100%, rgba(44, 40, 35, 0.12), transparent) center bottom;
+      linear-gradient(#ffffff 30%, rgba(255, 255, 255, 0)) center top,
+      linear-gradient(rgba(255, 255, 255, 0), #ffffff 70%) center bottom,
+      radial-gradient(farthest-side at 50% 0, rgba(17, 24, 39, 0.08), transparent) center top,
+      radial-gradient(farthest-side at 50% 100%, rgba(17, 24, 39, 0.08), transparent) center bottom;
     background-repeat: no-repeat;
     background-size: 100% 28px, 100% 28px, 100% 10px, 100% 10px;
     background-attachment: local, local, scroll, scroll;
@@ -246,10 +257,10 @@
   @apply my-2 list-decimal space-y-1 pl-5;
 }
 .doc-body blockquote {
-  @apply my-3 border-l-2 border-accent-200 pl-3 text-ink-600;
+  @apply my-3 border-l-2 border-paper-400 pl-3 text-ink-600;
 }
 .doc-body a {
-  @apply text-accent-600 underline decoration-accent-200 underline-offset-2;
+  @apply text-sky-600 underline decoration-sky-200 underline-offset-2;
 }
 .doc-body code {
   @apply rounded bg-paper-200 px-1 py-0.5 text-[0.85em];
@@ -265,7 +276,6 @@
 }
 
 @media print {
-  body::after,
   .no-print {
     display: none !important;
   }

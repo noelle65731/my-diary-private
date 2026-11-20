@@ -113,7 +113,7 @@ export function Modal({
           role="dialog"
           aria-modal="true"
           className={cn(
-            "relative z-10 flex max-h-[92vh] w-full animate-slide-up flex-col overflow-hidden rounded-t-3xl border border-paper-300 bg-[#fffdfa] shadow-lift sm:animate-pop-in sm:rounded-3xl",
+            "relative z-10 flex max-h-[92vh] w-full animate-slide-up flex-col overflow-hidden rounded-t-3xl border border-paper-300 bg-white shadow-lift sm:animate-pop-in sm:rounded-3xl",
             sizeClass[size],
           )}
         >
@@ -163,7 +163,7 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
           role="dialog"
           aria-modal="true"
           className={cn(
-            "relative z-10 flex max-h-[90vh] w-full animate-slide-up flex-col overflow-hidden rounded-t-3xl border border-paper-300 bg-[#fffdfa] shadow-lift sm:my-0 sm:max-h-none sm:animate-slide-in-right sm:rounded-none sm:rounded-l-3xl sm:border-y-0 sm:border-r-0",
+            "relative z-10 flex max-h-[90vh] w-full animate-slide-up flex-col overflow-hidden rounded-t-3xl border border-paper-300 bg-white shadow-lift sm:my-0 sm:max-h-none sm:animate-slide-in-right sm:rounded-none sm:rounded-l-3xl sm:border-y-0 sm:border-r-0",
             width === "lg" ? "sm:w-[520px]" : "sm:w-[420px]",
           )}
         >

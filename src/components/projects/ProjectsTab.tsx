@@ -5,50 +5,47 @@ import { useData } from "@/state/store";
 import { useSettings } from "@/state/settings";
 import { useTabReset, useUi } from "@/state/ui";
 import { cn, matchesMode } from "@/lib/utils";
-import { formatShort, todayISO } from "@/lib/date";
-import {
-  type ModeFilter,
-  type ProjectTask,
-  type Routine,
-  type TaskCategory,
-} from "@/lib/types";
-import { taskTone } from "@/components/common/tone";
-import {
-  CheckIcon,
-  FlagIcon,
-  InboxIcon,
-  LayersIcon,
-  PlusIcon,
-  RepeatIcon,
-  StarIcon,
-} from "@/components/icons";
-import { EmptyState, Segmented } from "@/components/common/primitives";
+import { formatShort, startOfWeekISO, todayISO, weekdayKo } from "@/lib/date";
+import { type ModeFilter, type ProjectTask, type Routine, type TaskCategory } from "@/lib/types";
+import { PRIORITY_TONES, priorityOf, projectEmoji, routineTone, taskTone } from "@/components/common/tone";
+import { CheckIcon, ChevronRightIcon, InboxIcon, PlusIcon, RepeatIcon } from "@/components/icons";
 import { ProjectDrawer } from "@/components/projects/ProjectDrawer";
-import { RoutineCard } from "@/components/projects/RoutineCard";
-import { TaskRow } from "@/components/projects/TaskRow";
 import { TaskEditor } from "@/components/editors/TaskEditor";
 import { RoutineEditor } from "@/components/editors/RoutineEditor";
+import { routineCountForDay } from "@/components/calendar/calendar-utils";
 
 type ProjectView = "tracks" | "priority" | "history";
 
-const MODES: { value: ModeFilter; label: string }[] = [
-  { value: "now", label: "NOW" },
-  { value: "all", label: "전체" },
-  { value: "업무", label: "업무" },
-  { value: "개인", label: "개인" },
-  { value: "공부", label: "공부" },
+const MODES: { value: ModeFilter; label: string; dot?: string }[] = [
+  { value: "now", label: "전체" },
+  { value: "업무", label: "업무", dot: "bg-accent-400" },
+  { value: "개인", label: "개인", dot: "bg-sage-400" },
+  { value: "공부", label: "공부", dot: "bg-dusk-500" },
 ];
 
+const WEEKDAY_LETTERS = ["월", "화", "수", "목", "금", "토", "일"];
+
+function dateLabel(date: string | null): string {
+  if (!date) return "";
+  return `${formatShort(date)} ${weekdayKo(date)}`;
+}
+
 export function ProjectsTab() {
-  const { data, create, update, setRoutineCount } = useData();
-  const { settings } = useSettings();
+  const { data, update, setRoutineCount, create } = useData();
+  const { settings, set: setSetting } = useSettings();
   const { focus, clearFocus } = useUi();
 
   const [view, setView] = useState<ProjectView>("tracks");
   const [mode, setMode] = useState<ModeFilter>("now");
   const [projectId, setProjectId] = useState<string | null>(null);
   const [taskId, setTaskId] = useState<string | null>(null);
-  const [taskDraft, setTaskDraft] = useState<{ kind?: "할 일" | "프로젝트"; category?: TaskCategory; projectId?: string } | null>(null);
+  const [taskDraft, setTaskDraft] = useState<{
+    kind?: "할 일" | "프로젝트";
+    category?: TaskCategory;
+    projectId?: string;
+    urgent?: boolean;
+    important?: boolean;
+  } | null>(null);
   const [routineId, setRoutineId] = useState<string | null>(null);
   const [quickTitle, setQuickTitle] = useState("");
   const [quickCategory, setQuickCategory] = useState<TaskCategory>("개인");
@@ -81,7 +78,7 @@ export function ProjectsTab() {
   });
 
   const projects = useMemo(
-    () => data.projects.filter((task) => task.kind === "프로젝트" && matchesMode(mode, task, task.category)),
+    () => data.projects.filter((task) => task.kind === "프로젝트" && !task.trash && matchesMode(mode, task, task.category)),
     [data.projects, mode],
   );
   const tasks = useMemo(
@@ -89,12 +86,13 @@ export function ProjectsTab() {
     [data.projects, mode],
   );
   const routines = useMemo(
-    () => data.routines.filter((routine) => routine.kind === "루틴" && !routine.trash && (mode === "all" || !routine.hidden)),
+    () => data.routines.filter((routine) => routine.kind === "루틴" && !routine.trash && !routine.history && (mode === "all" || !routine.hidden)),
     [data.routines, mode],
   );
-  const everything = useMemo(() => data.projects.filter((task) => !task.trash), [data.projects]);
 
-  const inbox = tasks.filter((task) => task.projectIds.length === 0 && task.status !== "완료" && task.status !== "취소");
+  const openTasks = tasks.filter((task) => !task.trash && task.status !== "완료" && task.status !== "취소" && !task.history);
+  const inbox = openTasks.filter((task) => task.projectIds.length === 0);
+  const projectCount = data.projects.filter((task) => task.kind === "프로젝트" && !task.trash && task.status !== "완료" && task.status !== "취소").length;
 
   const toggleTask = (task: ProjectTask) =>
     void update("projects", task.id, {
@@ -117,249 +115,250 @@ export function ProjectsTab() {
   };
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <Segmented<ProjectView>
-          value={view}
-          onChange={setView}
-          options={[
-            { value: "tracks", label: "Tracks" },
-            { value: "priority", label: "Priority" },
-            { value: "history", label: "History" },
-          ]}
-        />
-        <div className="flex flex-wrap items-center gap-1.5">
-          {MODES.map((item) => (
-            <button
-              key={item.value}
-              type="button"
-              onClick={() => setMode(item.value)}
+    <div>
+      <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
+        <div className="min-w-0">
+          <p className="text-[0.66rem] text-ink-400">
+            트랙 {projectCount} · 남은 할 일 {openTasks.length}
+          </p>
+          <h1 className="mt-1.5 text-[1.95rem] font-semibold leading-none tracking-[-0.035em] text-ink-900 md:text-[2.3rem]">프로젝트</h1>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="seg-track">
+            {(
+              [
+                { value: "tracks", label: "트랙" },
+                { value: "priority", label: "우선순위" },
+                { value: "history", label: "기록" },
+              ] as { value: ProjectView; label: string }[]
+            ).map((item) => (
+              <button
+                key={item.value}
+                type="button"
+                onClick={() => setView(item.value)}
+                className={cn("seg-item", view === item.value && "seg-item-active")}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setSetting("showCompletedTasks", !settings.showCompletedTasks)}
+            className="inline-flex items-center gap-2 text-[0.74rem] text-ink-500"
+          >
+            완료 보기
+            <span
               className={cn(
-                "chip border transition",
-                mode === item.value
-                  ? "border-ink-900 bg-ink-900 text-paper-50"
-                  : "border-paper-400 bg-white/50 text-ink-500 hover:border-ink-400 hover:text-ink-800",
+                "relative h-[18px] w-8 rounded-full transition",
+                settings.showCompletedTasks ? "bg-ink-900" : "bg-paper-300",
               )}
             >
-              {item.label}
-            </button>
-          ))}
+              <span
+                className={cn(
+                  "absolute top-[2px] h-[14px] w-[14px] rounded-full bg-white transition-all",
+                  settings.showCompletedTasks ? "left-[16px]" : "left-[2px]",
+                )}
+              />
+            </span>
+          </button>
         </div>
       </div>
 
+      <div className="mt-3 flex flex-wrap items-center gap-1.5">
+        {MODES.map((item) => (
+          <button
+            key={item.value}
+            type="button"
+            onClick={() => setMode(item.value)}
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[0.76rem] font-medium transition",
+              mode === item.value ? "bg-ink-900 text-white" : "bg-paper-200 text-ink-500 hover:bg-paper-300/70 hover:text-ink-800",
+            )}
+          >
+            {item.dot ? <span className={cn("h-[6px] w-[6px] rounded-full", item.dot, mode === item.value && "bg-white")} /> : null}
+            {item.label}
+          </button>
+        ))}
+        <button
+          type="button"
+          onClick={() => setTaskDraft({ kind: "프로젝트", category: quickCategory })}
+          className="ml-auto rounded-full bg-paper-200 px-3 py-1 text-[0.76rem] font-medium text-ink-700 transition hover:bg-paper-300/70"
+        >
+          + 트랙
+        </button>
+      </div>
+
       {view === "tracks" ? (
-        <div className="space-y-4">
-          <div className="card flex flex-col gap-2 px-3 py-2.5 sm:flex-row sm:items-center">
-            <form
-              onSubmit={(event) => {
-                event.preventDefault();
-                void addQuick();
-              }}
-              className="flex min-w-0 flex-1 items-center gap-2"
-            >
-              <InboxIcon size={16} className="flex-none text-ink-400" />
-              <input
-                value={quickTitle}
-                onChange={(event) => setQuickTitle(event.target.value)}
-                placeholder="빠르게 할 일 담기 (받은함)"
-                className="min-w-0 flex-1 border-none bg-transparent px-1 py-1 text-[0.86rem] outline-none placeholder:text-ink-400"
-              />
-              <button type="submit" disabled={!quickTitle.trim() || busy} className="btn-primary btn-xs flex-none">
-                추가
-              </button>
-            </form>
-            <div className="flex flex-none items-center gap-1">
-              {(["업무", "개인", "공부"] as TaskCategory[]).map((category) => (
-                <button
-                  key={category}
-                  type="button"
-                  onClick={() => setQuickCategory(category)}
-                  className={cn(
-                    "chip border",
-                    quickCategory === category
-                      ? cn("border-transparent", taskTone(category).bg, taskTone(category).text)
-                      : "border-paper-300 bg-white/50 text-ink-400",
-                  )}
-                >
-                  {category}
-                </button>
-              ))}
-              <span className="mx-1 hidden h-4 w-px bg-paper-300 sm:block" />
-              <button
-                type="button"
-                onClick={() => setTaskDraft({ kind: "프로젝트", category: quickCategory })}
-                className="btn-outline btn-xs"
-              >
-                <LayersIcon size={12} /> 프로젝트
-              </button>
-              <button type="button" onClick={() => setRoutineId("new")} className="btn-outline btn-xs">
-                <RepeatIcon size={12} /> 루틴
-              </button>
-            </div>
-          </div>
-
-          {inbox.length > 0 ? (
-            <div className="card px-3.5 py-3">
-              <div className="mb-1 flex items-center justify-between">
-                <h3 className="section-title">받은함</h3>
-                <span className="text-[0.64rem] text-ink-400">{inbox.length}개 · 프로젝트를 골라 주세요</span>
-              </div>
-              <ul className="divide-y divide-paper-300/40">
-                {inbox.slice(0, 6).map((task) => (
-                  <TaskRow key={task.id} task={task} onOpen={() => setTaskId(task.id)} onToggle={() => toggleTask(task)} />
+        <div className="mt-4 space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+            <article className="flex min-h-[11rem] flex-col rounded-2xl border border-paper-300 px-3 py-3">
+              <header className="flex items-start gap-2">
+                <span className="flex h-7 w-7 flex-none items-center justify-center rounded-full bg-paper-200 text-ink-500">
+                  <InboxIcon size={14} />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[0.88rem] font-semibold text-ink-900">받은함</p>
+                  <p className="truncate text-[0.64rem] text-ink-400">트랙에 넣지 않은 할 일 · 프로젝트를 골라 주세요</p>
+                </div>
+              </header>
+              <ul className="mt-2.5 space-y-1.5">
+                {inbox.slice(0, 4).map((task) => (
+                  <TaskLine key={task.id} task={task} onToggle={() => toggleTask(task)} onOpen={() => setTaskId(task.id)} />
                 ))}
+                {inbox.length === 0 ? <li className="text-[0.7rem] text-ink-300">비어 있습니다.</li> : null}
               </ul>
-            </div>
-          ) : null}
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void addQuick();
+                }}
+                className="mt-auto pt-2"
+              >
+                <input
+                  value={quickTitle}
+                  onChange={(event) => setQuickTitle(event.target.value)}
+                  placeholder="+ 할 일"
+                  className="w-full rounded-lg bg-paper-200/70 px-2 py-1 text-[0.72rem] text-ink-900 placeholder:text-ink-400 focus:bg-paper-200 focus:outline-none"
+                />
+              </form>
+            </article>
 
-          <div className="grid gap-3 md:grid-cols-3">
-            {(["업무", "개인", "공부"] as TaskCategory[]).map((category) => {
-              const column = projects.filter((project) => project.category === category);
+            {projects.map((project) => {
+              const children = tasks.filter((task) => !task.trash && task.projectIds.includes(project.id));
+              const open = children.filter((task) => task.status !== "완료" && task.status !== "취소");
+              const recent = settings.showCompletedTasks
+                ? children
+                    .filter((task) => task.status === "완료")
+                    .sort((a, b) => (b.doneAt ?? "").localeCompare(a.doneAt ?? ""))
+                    .slice(0, 2)
+                : [];
+              const last = [...children].sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""))[0];
+              const tone = taskTone(project.category);
               return (
-                <section key={category} className="space-y-2">
-                  <div className="flex items-center justify-between px-1">
-                    <h3 className="flex items-center gap-1.5 text-[0.82rem] font-semibold text-ink-800">
-                      <span className={cn("h-2 w-2 rounded-full", taskTone(category).dot)} />
-                      {category}
-                      <span className="text-[0.66rem] font-normal text-ink-400">{column.length}</span>
-                    </h3>
+                <article key={project.id} className="flex min-h-[11rem] flex-col rounded-2xl border border-paper-300 px-3 py-3 transition hover:border-paper-400">
+                  <header className="flex items-start gap-2">
+                    <span className={cn("flex h-7 w-7 flex-none items-center justify-center rounded-full text-[0.8rem]", tone.soft)}>
+                      {projectEmoji(project.id, project.category)}
+                    </span>
+                    <button type="button" onClick={() => setProjectId(project.id)} className="min-w-0 flex-1 text-left">
+                      <p className="truncate text-[0.88rem] font-semibold text-ink-900">{project.title}</p>
+                      <p className="truncate text-[0.64rem] text-ink-400">
+                        {last?.doneAt || last?.date ? `${dateLabel(last.doneAt?.slice(0, 10) ?? last.date)} 기록` : "아직 기록 없음"}
+                      </p>
+                    </button>
                     <button
                       type="button"
-                      onClick={() => setTaskDraft({ kind: "프로젝트", category })}
-                      className="rounded p-0.5 text-ink-400 transition hover:bg-paper-200 hover:text-ink-700"
-                      aria-label={`${category} 프로젝트 추가`}
+                      onClick={() => setProjectId(project.id)}
+                      className="flex-none text-ink-300 transition hover:text-ink-600"
+                      aria-label="프로젝트 열기"
                     >
-                      <PlusIcon size={14} />
+                      <ChevronRightIcon size={15} />
                     </button>
-                  </div>
+                  </header>
 
-                  {column.length === 0 ? (
-                    <button
-                      type="button"
-                      onClick={() => setTaskDraft({ kind: "프로젝트", category })}
-                      className="flex w-full items-center justify-center gap-1 rounded-xl border border-dashed border-paper-300 py-4 text-[0.74rem] text-ink-400 transition hover:border-ink-400 hover:text-ink-600"
-                    >
-                      <PlusIcon size={13} /> {category} 프로젝트
-                    </button>
-                  ) : (
-                    column.map((project) => {
-                      const children = tasks.filter((task) => task.projectIds.includes(project.id));
-                      const done = children.filter((task) => task.status === "완료").length;
-                      const preview = children
-                        .filter((task) => task.status !== "취소")
-                        .sort((a, b) => (a.status === "완료" ? 1 : 0) - (b.status === "완료" ? 1 : 0))
-                        .slice(0, settings.projectTaskPreview);
-                      const progress = children.length > 0 ? Math.round((done / children.length) * 100) : 0;
-                      return (
-                        <article key={project.id} className="card px-3 py-2.5 transition hover:shadow-lift">
-                          <button type="button" onClick={() => setProjectId(project.id)} className="w-full text-left">
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="min-w-0">
-                                <p className="truncate text-[0.86rem] font-medium text-ink-900">{project.title}</p>
-                                {project.memo ? <p className="mt-0.5 truncate text-[0.66rem] text-ink-400">{project.memo}</p> : null}
-                              </div>
-                              <span className="flex-none text-[0.62rem] tabular-nums text-ink-400">
-                                {done}/{children.length}
-                              </span>
-                            </div>
-                            <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-paper-200">
-                              <div className="h-full rounded-full bg-sage-400 transition-all" style={{ width: `${progress}%` }} />
-                            </div>
-                          </button>
+                  <p className="mt-2 text-[0.64rem] text-ink-400">남은 할 일 {open.length}</p>
+                  <ul className="mt-1 space-y-1.5">
+                    {open.slice(0, 4).map((task) => (
+                      <TaskLine
+                        key={task.id}
+                        task={task}
+                        onToggle={() => toggleTask(task)}
+                        onOpen={() => setTaskId(task.id)}
+                      />
+                    ))}
+                    {open.length === 0 ? <li className="text-[0.7rem] text-ink-300">남은 할 일이 없습니다.</li> : null}
+                  </ul>
 
-                          {preview.length > 0 ? (
-                            <ul className="mt-1 divide-y divide-paper-300/30">
-                              {preview.map((task) => (
-                                <TaskRow
-                                  key={task.id}
-                                  task={task}
-                                  compact
-                                  onOpen={() => setTaskId(task.id)}
-                                  onToggle={() => toggleTask(task)}
-                                />
-                              ))}
-                            </ul>
-                          ) : null}
-
-                          <div className="mt-1 flex items-center justify-between">
-                            {children.length > preview.length ? (
-                              <button
-                                type="button"
-                                onClick={() => setProjectId(project.id)}
-                                className="text-[0.66rem] text-ink-400 hover:text-ink-700"
-                              >
-                                +{children.length - preview.length}개 더
-                              </button>
-                            ) : (
-                              <span />
-                            )}
+                  {recent.length > 0 ? (
+                    <div className="mt-2 border-t border-paper-300/70 pt-1.5">
+                      <p className="text-[0.62rem] text-ink-400">최근 기록</p>
+                      <ul className="mt-0.5 space-y-0.5">
+                        {recent.map((task) => (
+                          <li key={task.id} className="flex items-center gap-1.5">
                             <button
                               type="button"
-                              onClick={() => setTaskDraft({ kind: "할 일", category: project.category, projectId: project.id })}
-                              className="flex items-center gap-0.5 text-[0.66rem] text-ink-400 hover:text-ink-700"
+                              onClick={() => setTaskId(task.id)}
+                              className="min-w-0 flex-1 truncate text-left text-[0.7rem] text-ink-500"
                             >
-                              <PlusIcon size={11} /> 할 일
+                              {task.title}
                             </button>
-                          </div>
+                            <span className="flex-none text-[0.62rem] text-ink-400">{dateLabel(task.doneAt?.slice(0, 10) ?? task.date)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
 
-                          {project.due ? (
-                            <p className="mt-1 text-[0.6rem] text-ink-400">마감 {formatShort(project.due)}</p>
-                          ) : null}
-                        </article>
-                      );
-                    })
-                  )}
-                </section>
+                  <button
+                    type="button"
+                    onClick={() => setTaskDraft({ kind: "할 일", category: project.category, projectId: project.id })}
+                    className="mt-auto pt-1.5 text-left text-[0.7rem] text-ink-400 transition hover:text-ink-700"
+                  >
+                    + 할 일
+                  </button>
+                </article>
               );
             })}
           </div>
 
-          <section>
-            <div className="mb-2 flex items-center justify-between px-1">
-              <h3 className="flex items-center gap-1.5 text-[0.82rem] font-semibold text-ink-800">
-                <RepeatIcon size={14} className="text-ink-400" /> 오늘의 루틴
-                <span className="text-[0.66rem] font-normal text-ink-400">{routines.length}</span>
-              </h3>
-              <button type="button" onClick={() => setRoutineId("new")} className="flex items-center gap-0.5 text-[0.7rem] text-ink-400 hover:text-ink-700">
-                <PlusIcon size={12} /> 루틴 추가
-              </button>
+          {routines.length > 0 ? (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+              {(["개인", "공부"] as const).map((category) => {
+                const items = routines.filter((routine) => routine.category === category);
+                if (items.length === 0) return null;
+                return (
+                  <article key={category} className="rounded-2xl border border-paper-300 px-3 py-3">
+                    <header className="flex items-start gap-2">
+                      <span className="flex h-7 w-7 flex-none items-center justify-center rounded-full bg-paper-200 text-[0.8rem]">
+                        <RepeatIcon size={14} className="text-ink-500" />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[0.88rem] font-semibold text-ink-900">루틴</p>
+                        <p className="text-[0.64rem] text-ink-400">루틴 · {category} · 이번 주</p>
+                      </div>
+                    </header>
+
+                    <div className="mt-2 space-y-2">
+                      {items.map((routine, index) => (
+                        <RoutineWeekRow
+                          key={routine.id}
+                          routine={routine}
+                          toneIndex={index}
+                          routines={data.routines}
+                          onOpen={() => setRoutineId(routine.id)}
+                          onCount={(date, count) => void setRoutineCount(routine, date, count)}
+                        />
+                      ))}
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setRoutineId("new")}
+                      className="mt-2 text-[0.7rem] text-ink-400 transition hover:text-ink-700"
+                    >
+                      + 루틴
+                    </button>
+                  </article>
+                );
+              })}
             </div>
-            {routines.length === 0 ? (
-              <EmptyState
-                icon={<RepeatIcon size={20} />}
-                title="아직 루틴이 없습니다"
-                description="매일 반복하고 싶은 작은 일을 등록해 두면 캘린더의 루틴 보기에서 한 달을 한눈에 볼 수 있습니다."
-                action={
-                  <button type="button" onClick={() => setRoutineId("new")} className="btn-outline btn-xs">
-                    첫 루틴 만들기
-                  </button>
-                }
-              />
-            ) : (
-              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                {routines.map((routine) => (
-                  <RoutineCard
-                    key={routine.id}
-                    routine={routine}
-                    routines={data.routines}
-                    date={todayISO()}
-                    onCount={(count) => void setRoutineCount(routine, todayISO(), count)}
-                    onOpen={() => setRoutineId(routine.id)}
-                  />
-                ))}
-              </div>
-            )}
-          </section>
+          ) : null}
         </div>
       ) : null}
 
       {view === "priority" ? (
         <PriorityView
-          tasks={everything}
-          projects={projects}
+          tasks={data.projects.filter((task) => task.kind === "할 일" && !task.trash && matchesMode(mode, task, task.category))}
+          projects={data.projects}
           onOpenTask={setTaskId}
           onOpenProject={setProjectId}
           onToggle={toggleTask}
+          onCreateTask={(category, urgent, important) => {
+            setTaskDraft({ kind: "할 일", category, urgent, important });
+          }}
         />
       ) : null}
 
@@ -406,90 +405,206 @@ export function ProjectsTab() {
   );
 }
 
+function TaskLine({
+  task,
+  onToggle,
+  onOpen,
+}: {
+  task: ProjectTask;
+  onToggle: () => void;
+  onOpen: () => void;
+}) {
+  const done = task.status === "완료";
+  const priority = priorityOf(task);
+  const tone = taskTone(task.category);
+  return (
+    <li className="flex items-start gap-1.5">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-label={done ? "완료 취소" : "완료"}
+        className={cn(
+          "mt-[2px] flex h-[15px] w-[15px] flex-none items-center justify-center rounded-[4px] border transition",
+          done ? cn(tone.solid, "border-transparent text-white") : "border-paper-400 hover:border-ink-500",
+        )}
+      >
+        {done ? <CheckIcon size={9} /> : null}
+      </button>
+      <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-left">
+        <span className="flex items-center gap-1">
+          <span className={cn("truncate text-[0.76rem] leading-[1.3] text-ink-800", done && "text-ink-400 line-through")}>{task.title}</span>
+          {priority !== "기타" ? (
+            <span className={cn("flex-none rounded px-1 text-[0.58rem] font-medium leading-4", PRIORITY_TONES[priority].badge)}>
+              {PRIORITY_TONES[priority].label}
+            </span>
+          ) : null}
+        </span>
+      </button>
+      <span className="flex-none text-[0.62rem] tabular-nums text-ink-400">{dateLabel(task.due ?? task.date)}</span>
+    </li>
+  );
+}
+
+function RoutineWeekRow({
+  routine,
+  routines,
+  toneIndex,
+  onOpen,
+  onCount,
+}: {
+  routine: Routine;
+  routines: Routine[];
+  toneIndex: number;
+  onOpen: () => void;
+  onCount: (date: string, count: number) => void;
+}) {
+  const weekStart = startOfWeekISO(todayISO());
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(`${weekStart}T12:00:00`);
+    d.setDate(d.getDate() + i);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  });
+  const target = routine.targetCount ?? 1;
+  const doneCount = days.filter((day) => routineCountForDay(routines, routine, day) >= target).length;
+  const tone = routineTone(toneIndex);
+
+  return (
+    <div>
+      <div className="flex items-center gap-1.5">
+        <button type="button" onClick={onOpen} className="min-w-0 flex-1 truncate text-left text-[0.74rem] text-ink-700 hover:text-ink-900">
+          {routine.title}
+        </button>
+        <span className="flex-none text-[0.66rem] font-medium tabular-nums text-ink-700">
+          {doneCount}/{days.length}
+        </span>
+      </div>
+      <div className="mt-1 flex items-center gap-1">
+        {days.map((day, index) => {
+          const label = WEEKDAY_LETTERS[index]!;
+          const scheduled = routine.repeatDays.length === 0 || routine.repeatDays.includes(weekdayKo(day));
+          const count = routineCountForDay(routines, routine, day);
+          const done = count >= target;
+          return (
+            <button
+              key={day}
+              type="button"
+              disabled={!scheduled}
+              onClick={() => onCount(day, done ? 0 : count + 1)}
+              className={cn(
+                "flex h-[18px] w-[18px] items-center justify-center rounded-full text-[0.56rem] leading-none transition",
+                done
+                  ? cn(tone.solid, "font-semibold text-white")
+                  : scheduled
+                    ? "bg-paper-200 text-ink-400 hover:bg-paper-300"
+                    : "bg-transparent text-ink-300/50",
+              )}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function PriorityView({
   tasks,
   projects,
   onOpenTask,
   onOpenProject,
   onToggle,
+  onCreateTask,
 }: {
   tasks: ProjectTask[];
   projects: ProjectTask[];
   onOpenTask: (id: string) => void;
   onOpenProject: (id: string) => void;
   onToggle: (task: ProjectTask) => void;
+  onCreateTask: (category: TaskCategory, urgent: boolean, important: boolean) => void;
 }) {
-  const open = tasks.filter((task) => task.kind === "할 일" && task.status !== "완료" && task.status !== "취소");
+  const open = tasks.filter((task) => task.status !== "완료" && task.status !== "취소");
   const quadrants = [
-    { key: "do", title: "지금 해야 할 일", hint: "긴급 · 중요", urgent: true, important: true, tone: "border-rose-200 bg-rose-50/50" },
-    { key: "plan", title: "계획할 일", hint: "중요 · 긴급하지 않음", urgent: false, important: true, tone: "border-accent-200 bg-accent-50/50" },
-    { key: "delegate", title: "빨리 처리할 일", hint: "긴급 · 중요하지 않음", urgent: true, important: false, tone: "border-amber-200 bg-amber-50/50" },
-    { key: "later", title: "언젠가", hint: "둘 다 아님", urgent: false, important: false, tone: "border-paper-300 bg-paper-50/60" },
+    { key: "do", label: "긴급·중요", urgent: true, important: true },
+    { key: "plan", label: "중요", urgent: false, important: true },
+    { key: "delegate", label: "긴급", urgent: true, important: false },
+    { key: "later", label: "기타", urgent: false, important: false },
   ] as const;
 
+  const projectOf = (task: ProjectTask) => projects.find((project) => project.id === (task.projectIds[0] ?? "")) ?? null;
+
+  const card = (quadrant: (typeof quadrants)[number]) => {
+    const items = open.filter((task) => task.urgent === quadrant.urgent && task.important === quadrant.important);
+    return (
+      <section className="min-h-[10.5rem] rounded-xl border border-paper-300 px-3 py-2.5">
+        <header className="flex items-baseline gap-1.5">
+          <h3 className={cn("rounded px-1 text-[0.78rem] font-semibold leading-5", PRIORITY_TONES[quadrant.label].badge)}>
+            {quadrant.label}
+          </h3>
+          <span className="text-[0.7rem] text-ink-400">{items.length}</span>
+        </header>
+
+        <ul className="mt-1.5 space-y-1.5">
+          {items.map((task) => {
+            const project = projectOf(task);
+            const tone = taskTone(project?.category ?? task.category);
+            return (
+              <li key={task.id} className="flex items-start gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => onToggle(task)}
+                  aria-label="완료"
+                  className="mt-[2px] flex h-[15px] w-[15px] flex-none items-center justify-center rounded-full border border-paper-400 hover:border-ink-500"
+                >
+                  {task.status === "완료" ? <CheckIcon size={9} /> : null}
+                </button>
+                <button type="button" onClick={() => onOpenTask(task.id)} className="min-w-0 flex-1 text-left">
+                  <span className="flex items-baseline gap-1.5">
+                    <span className="truncate text-[0.78rem] text-ink-800">{task.title}</span>
+                    {project ? (
+                      <span className={cn("flex-none text-[0.64rem]", tone.text)}>{project.title}</span>
+                    ) : null}
+                  </span>
+                </button>
+                <span className="flex-none text-[0.64rem] tabular-nums text-ink-400">{dateLabel(task.due ?? task.date)}</span>
+              </li>
+            );
+          })}
+          {items.length === 0 ? <li className="py-2 text-[0.7rem] text-ink-300">비어 있습니다.</li> : null}
+        </ul>
+
+        <button
+          type="button"
+          onClick={() => onCreateTask("개인", quadrant.urgent, quadrant.important)}
+          className="mt-1 w-full rounded-lg bg-paper-200/50 px-2 py-1 text-left text-[0.7rem] text-ink-400 transition hover:bg-paper-200 hover:text-ink-700"
+        >
+          + 할 일
+        </button>
+      </section>
+    );
+  };
+
   return (
-    <div className="grid gap-3 md:grid-cols-2">
-      {quadrants.map((quadrant) => {
-        const items = open.filter((task) => task.urgent === quadrant.urgent && task.important === quadrant.important);
-        const projectItems = projects.filter(
-          (project) => project.urgent === quadrant.urgent && project.important === quadrant.important,
-        );
-        return (
-          <section key={quadrant.key} className={cn("rounded-2xl border p-3", quadrant.tone)}>
-            <header className="mb-2 flex items-baseline justify-between">
-              <div>
-                <h3 className="text-[0.84rem] font-semibold text-ink-800">{quadrant.title}</h3>
-                <p className="text-[0.62rem] text-ink-500">{quadrant.hint}</p>
-              </div>
-              <span className="text-[0.72rem] tabular-nums text-ink-500">{items.length + projectItems.length}</span>
-            </header>
-
-            {projectItems.map((project) => (
-              <button
-                key={project.id}
-                type="button"
-                onClick={() => onOpenProject(project.id)}
-                className="mb-1 flex w-full items-center gap-1.5 rounded-lg bg-white/70 px-2 py-1.5 text-left"
-              >
-                <LayersIcon size={12} className="flex-none text-ink-500" />
-                <span className="min-w-0 flex-1 truncate text-[0.78rem] font-medium text-ink-800">{project.title}</span>
-                <span className="text-[0.6rem] text-ink-400">프로젝트</span>
-              </button>
-            ))}
-
-            {items.length === 0 && projectItems.length === 0 ? (
-              <p className="rounded-lg border border-dashed border-paper-300/80 px-2 py-4 text-center text-[0.7rem] text-ink-400">
-                비어 있음
-              </p>
-            ) : (
-              <ul className="space-y-1">
-                {items.map((task) => (
-                  <li key={task.id} className="flex items-start gap-2 rounded-lg bg-white/70 px-2 py-1.5">
-                    <button
-                      type="button"
-                      onClick={() => onToggle(task)}
-                      className="mt-0.5 flex h-3.5 w-3.5 flex-none items-center justify-center rounded-[3px] border border-paper-400 hover:border-ink-600"
-                    >
-                      {task.status === "완료" ? <CheckIcon size={9} /> : null}
-                    </button>
-                    <button type="button" onClick={() => onOpenTask(task.id)} className="min-w-0 flex-1 text-left">
-                      <span className="block truncate text-[0.78rem] text-ink-800">{task.title}</span>
-                      <span className="mt-0.5 flex items-center gap-1.5 text-[0.6rem] text-ink-400">
-                        <span className={cn("chip py-0", taskTone(task.category).bg, taskTone(task.category).text)}>
-                          {task.category}
-                        </span>
-                        {task.due ? <span>마감 {formatShort(task.due)}</span> : null}
-                        {task.status === "대기 중" ? <span>대기 중</span> : null}
-                        {task.urgent ? <FlagIcon size={10} className="text-rose-400" /> : null}
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-        );
-      })}
+    <div className="mt-4 overflow-x-auto">
+      <div className="min-w-[42rem]">
+        <div className="grid grid-cols-[2.2rem_1fr_1fr] items-center gap-2 pb-1.5 text-center text-[0.7rem] text-ink-400">
+          <span />
+          <span>급함</span>
+          <span>안 급함</span>
+        </div>
+        <div className="grid grid-cols-[2.2rem_1fr_1fr] gap-2">
+          <div className="flex items-center justify-center text-[0.7rem] text-ink-400">
+            <span className="writing-vertical">중요</span>
+          </div>
+          {card(quadrants[0])}
+          {card(quadrants[1])}
+          <div className="flex items-center justify-center text-[0.7rem] text-ink-400">
+            <span className="writing-vertical">안 중요</span>
+          </div>
+          {card(quadrants[2])}
+          {card(quadrants[3])}
+        </div>
+      </div>
     </div>
   );
 }
@@ -517,26 +632,24 @@ function HistoryView({
 }) {
   const finishedProjects = projects.filter((project) => project.status === "완료" || project.status === "취소" || project.history);
   const pastRoutines = routines.filter((routine) => routine.history || routine.trash);
-  const doneTasks = tasks.filter((task) => task.status === "완료").slice(0, 30);
+  const doneTasks = tasks.filter((task) => task.status === "완료").slice(0, 40);
   const canceled = tasks.filter((task) => task.status === "취소").slice(0, 20);
 
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
-      <section className="card px-3.5 py-3">
-        <h3 className="section-title mb-2 flex items-center gap-1">
-          <StarIcon size={12} className="text-amber-400" /> 지난 프로젝트
-        </h3>
+    <div className="mt-4 grid gap-4 lg:grid-cols-2">
+      <section className="rounded-2xl border border-paper-300 px-3.5 py-3">
+        <h3 className="mb-2 text-[0.8rem] font-semibold text-ink-900">지난 프로젝트</h3>
         {finishedProjects.length === 0 ? (
-          <p className="text-[0.76rem] text-ink-400">완료했거나 접은 프로젝트가 아직 없습니다.</p>
+          <p className="text-[0.74rem] text-ink-400">완료했거나 접은 프로젝트가 아직 없습니다.</p>
         ) : (
-          <ul className="divide-y divide-paper-300/40">
+          <ul className="divide-y divide-paper-300/60">
             {finishedProjects.map((project) => {
               const children = tasks.filter((task) => task.projectIds.includes(project.id));
               const done = children.filter((task) => task.status === "완료").length;
               return (
                 <li key={project.id} className="flex items-center gap-2 py-1.5">
                   <button type="button" onClick={() => onOpenProject(project.id)} className="min-w-0 flex-1 text-left">
-                    <span className="block truncate text-[0.8rem] text-ink-700">{project.title}</span>
+                    <span className="block truncate text-[0.78rem] text-ink-700">{project.title}</span>
                     <span className="text-[0.62rem] text-ink-400">
                       {project.category} · {project.status} · {done}/{children.length}
                     </span>
@@ -555,18 +668,16 @@ function HistoryView({
         )}
       </section>
 
-      <section className="card px-3.5 py-3">
-        <h3 className="section-title mb-2 flex items-center gap-1">
-          <RepeatIcon size={12} /> 지난 루틴
-        </h3>
+      <section className="rounded-2xl border border-paper-300 px-3.5 py-3">
+        <h3 className="mb-2 text-[0.8rem] font-semibold text-ink-900">지난 루틴</h3>
         {pastRoutines.length === 0 ? (
-          <p className="text-[0.76rem] text-ink-400">History로 보낸 루틴이 여기에 모입니다.</p>
+          <p className="text-[0.74rem] text-ink-400">기록으로 보낸 루틴이 여기에 모입니다.</p>
         ) : (
-          <ul className="divide-y divide-paper-300/40">
+          <ul className="divide-y divide-paper-300/60">
             {pastRoutines.map((routine) => (
               <li key={routine.id} className="flex items-center gap-2 py-1.5">
                 <button type="button" onClick={() => onOpenRoutine(routine.id)} className="min-w-0 flex-1 text-left">
-                  <span className="block truncate text-[0.8rem] text-ink-700">{routine.title}</span>
+                  <span className="block truncate text-[0.78rem] text-ink-700">{routine.title}</span>
                   <span className="text-[0.62rem] text-ink-400">
                     {routine.category} · {routine.unit || "루틴"}
                   </span>
@@ -584,29 +695,37 @@ function HistoryView({
         )}
       </section>
 
-      <section className="card px-3.5 py-3">
-        <h3 className="section-title mb-2">최근 완료한 할 일</h3>
+      <section className="rounded-2xl border border-paper-300 px-3.5 py-3">
+        <h3 className="mb-2 text-[0.8rem] font-semibold text-ink-900">최근 완료한 할 일</h3>
         {doneTasks.length === 0 ? (
-          <p className="text-[0.76rem] text-ink-400">완료한 할 일이 아직 없습니다.</p>
+          <p className="text-[0.74rem] text-ink-400">완료한 할 일이 아직 없습니다.</p>
         ) : (
-          <ul className="space-y-0.5">
+          <ul className="space-y-1">
             {doneTasks.map((task) => (
-              <TaskRow key={task.id} task={task} compact onOpen={() => onOpenTask(task.id)} onToggle={() => onRestoreTask(task)} />
+              <li key={task.id} className="flex items-center gap-1.5">
+                <CheckIcon size={11} className="flex-none text-sage-500" />
+                <button type="button" onClick={() => onOpenTask(task.id)} className="min-w-0 flex-1 truncate text-left text-[0.76rem] text-ink-600">
+                  {task.title}
+                </button>
+                <button type="button" onClick={() => onRestoreTask(task)} className="text-[0.6rem] text-ink-400 hover:text-ink-700">
+                  되살리기
+                </button>
+              </li>
             ))}
           </ul>
         )}
       </section>
 
-      <section className="card px-3.5 py-3">
-        <h3 className="section-title mb-2">접어 둔 할 일</h3>
+      <section className="rounded-2xl border border-paper-300 px-3.5 py-3">
+        <h3 className="mb-2 text-[0.8rem] font-semibold text-ink-900">접어 둔 할 일</h3>
         {canceled.length === 0 ? (
-          <p className="text-[0.76rem] text-ink-400">취소한 할 일이 없습니다.</p>
+          <p className="text-[0.74rem] text-ink-400">취소한 할 일이 없습니다.</p>
         ) : (
-          <ul className="divide-y divide-paper-300/40">
+          <ul className="divide-y divide-paper-300/60">
             {canceled.map((task) => (
               <li key={task.id} className="flex items-center gap-2 py-1.5">
                 <button type="button" onClick={() => onOpenTask(task.id)} className="min-w-0 flex-1 text-left">
-                  <span className="block truncate text-[0.8rem] text-ink-500 line-through">{task.title}</span>
+                  <span className="block truncate text-[0.78rem] text-ink-500 line-through">{task.title}</span>
                   {task.cancelReason ? <span className="text-[0.62rem] text-ink-400">{task.cancelReason}</span> : null}
                 </button>
                 <button

@@ -162,7 +162,7 @@ export function ProjectDrawer({
             {project.due ? <span>마감 {project.due}</span> : null}
             {project.important ? <span className="chip bg-amber-100 text-amber-700">중요</span> : null}
             {project.urgent ? <span className="chip bg-rose-100 text-rose-600">긴급</span> : null}
-            {project.hidden ? <span className="chip bg-paper-200 text-ink-500">NOW 숨김</span> : null}
+            {project.hidden ? <span className="chip bg-paper-200 text-ink-500">숨김</span> : null}
           </div>
 
           {tasks.length > 0 && tasks.every((task) => task.status === "완료") ? (

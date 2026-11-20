@@ -6,7 +6,6 @@ import { useSettings } from "@/state/settings";
 import { useTabReset, useUi } from "@/state/ui";
 import {
   addDaysISO,
-  addMonthsISO,
   formatFullKo,
   formatMonthKo,
   formatShort,
@@ -17,21 +16,12 @@ import {
   weekDays,
   weekdayKo,
 } from "@/lib/date";
-import { holidayName, isRedDay } from "@/lib/holidays";
+import { holidayName } from "@/lib/holidays";
 import { cn, truncate } from "@/lib/utils";
 import type { BinderEntry, ProjectTask } from "@/lib/types";
 import { previewText, renderMarkdown } from "@/lib/markdown";
-import {
-  BookIcon,
-  CheckIcon,
-  ChevronDownIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  PencilIcon,
-  PlusIcon,
-  StarIcon,
-} from "@/components/icons";
-import { EmptyState, Segmented } from "@/components/common/primitives";
+import { BookIcon, CheckIcon, ChevronLeftIcon, ChevronRightIcon, PlusIcon, SearchIcon, StarIcon } from "@/components/icons";
+import { EmptyState } from "@/components/common/primitives";
 import { TagInput } from "@/components/editors/shared";
 import { BinderEditor } from "@/components/editors/BinderEditor";
 import { tasksForDay } from "@/components/calendar/calendar-utils";
@@ -41,7 +31,7 @@ type BinderView = "weekly" | "daily" | "notes";
 export function BinderTab() {
   const { data, update, create } = useData();
   const { settings } = useSettings();
-  const { focus, clearFocus, pendingBinderDate, consumeBinderDate } = useUi();
+  const { focus, clearFocus, pendingBinderDate, consumeBinderDate, setSearchOpen } = useUi();
 
   const [view, setView] = useState<BinderView>("weekly");
   const [cursor, setCursor] = useState(todayISO());
@@ -79,6 +69,8 @@ export function BinderTab() {
 
   const weekStart = startOfWeekISO(cursor, settings.weekStartsOn);
   const days = weekDays(cursor, settings.weekStartsOn);
+  const lastWeekStart = addDaysISO(weekStart, -7);
+  const lastWeekDays = weekDays(lastWeekStart, settings.weekStartsOn);
   const dayEntry = (day: string) => diaries.find((entry) => entry.date === day) ?? null;
 
   const openNew = (date: string, kind: "일기" | "노트" = "일기") => {
@@ -92,166 +84,135 @@ export function BinderTab() {
   };
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <Segmented<BinderView>
-          value={view}
-          onChange={setView}
-          options={[
-            { value: "weekly", label: "Weekly" },
-            { value: "daily", label: "Daily" },
-            { value: "notes", label: "Notes" },
-          ]}
-        />
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            className="icon-btn h-8 w-8"
-            onClick={() => setCursor((current) => (view === "weekly" ? addDaysISO(current, -7) : addDaysISO(current, -1)))}
-            aria-label="이전"
-          >
-            <ChevronLeftIcon size={16} />
+    <div>
+      <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
+        <div className="min-w-0">
+          <p className="text-[0.66rem] text-ink-400">{view === "notes" ? `노트 ${notes.length}개` : `일기 ${diaries.length}편`}</p>
+          <h1 className="mt-1.5 text-[1.95rem] font-semibold leading-none tracking-[-0.035em] text-ink-900 md:text-[2.3rem]">
+            {view === "notes" ? "노트" : `${Number((view === "weekly" ? weekStart : cursor).slice(5, 7))}월`}
+          </h1>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="seg-track">
+            {(
+              [
+                { value: "weekly", label: "주간" },
+                { value: "daily", label: "일간" },
+                { value: "notes", label: "노트" },
+              ] as { value: BinderView; label: string }[]
+            ).map((item) => (
+              <button
+                key={item.value}
+                type="button"
+                onClick={() => setView(item.value)}
+                className={cn("seg-item", view === item.value && "seg-item-active")}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-0.5 rounded-full bg-paper-200 p-0.5">
+            <button
+              type="button"
+              className="icon-btn h-7 w-7"
+              onClick={() => setCursor((current) => (view === "weekly" ? addDaysISO(current, -7) : addDaysISO(current, -1)))}
+              aria-label="이전"
+            >
+              <ChevronLeftIcon size={14} />
+            </button>
+            <button type="button" onClick={() => setCursor(todayISO())} className="px-2 py-1 text-[0.76rem] font-medium text-ink-700 hover:text-ink-900">
+              오늘
+            </button>
+            <button
+              type="button"
+              className="icon-btn h-7 w-7"
+              onClick={() => setCursor((current) => (view === "weekly" ? addDaysISO(current, 7) : addDaysISO(current, 1)))}
+              aria-label="다음"
+            >
+              <ChevronRightIcon size={14} />
+            </button>
+          </div>
+
+          <button type="button" onClick={() => setSearchOpen(true)} className="icon-btn bg-paper-200 hover:bg-paper-300/70" aria-label="검색">
+            <SearchIcon size={15} />
           </button>
-          <button type="button" className="btn-outline btn-xs" onClick={() => setCursor(todayISO())}>
-            오늘
-          </button>
-          <button
-            type="button"
-            className="icon-btn h-8 w-8"
-            onClick={() => setCursor((current) => (view === "weekly" ? addDaysISO(current, 7) : addDaysISO(current, 1)))}
-            aria-label="다음"
-          >
-            <ChevronRightIcon size={16} />
-          </button>
-          <button type="button" className="btn-primary btn-xs ml-1" onClick={() => openNew(view === "notes" ? cursor : cursor, view === "notes" ? "노트" : "일기")}>
-            <PlusIcon size={13} /> {view === "notes" ? "새 노트" : "일기"}
+          <button type="button" className="btn-primary btn-xs" onClick={() => openNew(cursor, view === "notes" ? "노트" : "일기")}>
+            <PlusIcon size={12} /> {view === "notes" ? "새 노트" : "일기"}
           </button>
         </div>
       </div>
 
-      <div className="flex items-baseline justify-between px-0.5">
-        <p className="serif text-[0.95rem] text-ink-800">
-          {view === "weekly"
-            ? `${formatShort(weekStart)} – ${formatShort(addDaysISO(weekStart, 6))}`
-            : view === "daily"
-              ? formatFullKo(cursor)
-              : formatMonthKo(cursor)}
-        </p>
-        <p className="text-[0.64rem] text-ink-400">
-          {view === "notes" ? `노트 ${notes.length}개` : `일기 ${diaries.length}편`}
-        </p>
-      </div>
+      {view === "daily" ? <div className="mt-2 text-[0.72rem] text-ink-400">{formatFullKo(cursor)}</div> : null}
+      {view === "notes" ? <div className="mt-2 text-[0.72rem] text-ink-400">{formatMonthKo(cursor)}</div> : null}
 
       {view === "weekly" ? (
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-7">
-          {days.map((day) => {
-            const entry = dayEntry(day);
-            const lines = entry ? previewText(entry.body, settings.binderPreviewLines) : [];
-            const holiday = holidayName(day);
-            const isToday = isSameISO(day, todayISO());
-            const weekend = isRedDay(day);
-            return (
-              <div
+        <div className="relative mt-4 grid gap-6 lg:grid-cols-2 lg:gap-0">
+          <div className="pointer-events-none absolute inset-y-0 left-1/2 hidden w-8 -translate-x-1/2 bg-[linear-gradient(90deg,transparent,rgba(17,24,39,0.04),transparent)] lg:block" />
+
+          <section className="hidden lg:block lg:pr-8">
+            <SpreadHeader label="지난주" start={lastWeekStart} />
+            {lastWeekDays.map((day) => (
+              <DiaryRow
                 key={day}
-                className={cn(
-                  "flex min-h-[9.5rem] flex-col rounded-2xl border bg-[#fffdfa]/85 px-2.5 py-2 transition hover:shadow-soft",
-                  isToday ? "border-accent-300 ring-1 ring-accent-100" : "border-paper-300/80",
-                )}
-              >
-                <button type="button" onClick={() => setCursor(day)} className="flex items-baseline justify-between gap-1 text-left">
-                  <span className={cn("text-[0.68rem]", weekend ? "text-accent-500" : "text-ink-400")}>{weekdayKo(day)}</span>
-                  <span
-                    className={cn(
-                      "flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-[0.84rem] font-medium tabular-nums",
-                      isToday ? "bg-ink-900 text-paper-50" : weekend ? "text-accent-600" : "text-ink-800",
-                    )}
-                  >
-                    {Number(day.slice(8, 10))}
-                  </span>
-                </button>
-                {holiday ? <p className="mt-0.5 truncate text-[0.56rem] text-accent-500">{holiday}</p> : null}
+                day={day}
+                entry={dayEntry(day)}
+                lines={settings.binderPreviewLines}
+                onOpen={() => (dayEntry(day) ? openEntry(dayEntry(day)!.id) : openNew(day))}
+              />
+            ))}
+          </section>
 
-                <button
-                  type="button"
-                  onClick={() => (entry ? openEntry(entry.id) : openNew(day))}
-                  className="mt-1 flex flex-1 flex-col items-start gap-0.5 text-left"
-                >
-                  {entry ? (
-                    <>
-                      <p className="w-full truncate text-[0.72rem] font-medium text-ink-800">{entry.title}</p>
-                      {lines.length === 0 ? (
-                        <p className="text-[0.64rem] text-ink-400">내용 없음</p>
-                      ) : (
-                        lines.map((line, index) => (
-                          <p key={index} className="line-clamp-1 w-full text-[0.64rem] leading-[1.5] text-ink-500">
-                            {truncate(line, 46)}
-                          </p>
-                        ))
-                      )}
-                      {entry.favorite ? <StarIcon size={11} filled className="mt-0.5 text-amber-400" /> : null}
-                    </>
-                  ) : (
-                    <span className="mt-1 flex items-center gap-1 text-[0.64rem] text-ink-300">
-                      <PencilIcon size={11} /> 비어 있음
-                    </span>
-                  )}
-                </button>
-
-                <div className="mt-1 flex items-center justify-between border-t border-paper-300/50 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setCursor(day);
-                      setView("daily");
-                    }}
-                    className="text-[0.6rem] text-ink-400 hover:text-ink-700"
-                  >
-                    하루 보기
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => (entry ? openEntry(entry.id) : openNew(day))}
-                    className="text-[0.6rem] text-ink-400 hover:text-ink-700"
-                  >
-                    {entry ? "고치기" : "쓰기"}
-                  </button>
-                </div>
-              </div>
-            );
-          })}
+          <section className="lg:pl-8">
+            <SpreadHeader label="이번 주" start={weekStart} />
+            {days.map((day) => (
+              <DiaryRow
+                key={day}
+                day={day}
+                entry={dayEntry(day)}
+                lines={settings.binderPreviewLines}
+                onOpen={() => (dayEntry(day) ? openEntry(dayEntry(day)!.id) : openNew(day))}
+              />
+            ))}
+          </section>
         </div>
       ) : null}
 
       {view === "daily" ? (
-        <DailyView
-          day={cursor}
-          entry={dayEntry(cursor)}
-          diaries={diaries}
-          tasks={data.projects}
-          showSchedule={settings.binderShowSchedule}
-          onOpenEntry={openEntry}
-          onCreate={openNew}
-          onSave={(id, patch) => update("binder", id, patch)}
-          onUpdateField={(patch) => {
-            const currentEntry = dayEntry(cursor);
-            return currentEntry ? update("binder", currentEntry.id, patch) : undefined;
-          }}
-          onWriteNote={(date) => openNew(date, "노트")}
-        />
+        <div className="mt-4">
+          <DailyView
+            day={cursor}
+            entry={dayEntry(cursor)}
+            diaries={diaries}
+            tasks={data.projects}
+            showSchedule={settings.binderShowSchedule}
+            onOpenEntry={openEntry}
+            onCreate={openNew}
+            onSave={(id, patch) => update("binder", id, patch)}
+            onUpdateField={(patch) => {
+              const currentEntry = dayEntry(cursor);
+              return currentEntry ? update("binder", currentEntry.id, patch) : undefined;
+            }}
+            onWriteNote={(date) => openNew(date, "노트")}
+          />
+        </div>
       ) : null}
 
       {view === "notes" ? (
-        <NotesView
-          notes={notes}
-          month={month}
-          onMonth={setMonth}
-          onOpen={openEntry}
-          onNew={() => openNew(cursor, "노트")}
-          onCreateEntry={async (title, date) => {
-            const created = await create("binder", { title, kind: "노트", date, body: "" });
-            if (created) openEntry(created.id);
-          }}
-        />
+        <div className="mt-4">
+          <NotesView
+            notes={notes}
+            month={month}
+            onMonth={setMonth}
+            onOpen={openEntry}
+            onNew={() => openNew(cursor, "노트")}
+            onCreateEntry={async (title, date) => {
+              const created = await create("binder", { title, kind: "노트", date, body: "" });
+              if (created) openEntry(created.id);
+            }}
+          />
+        </div>
       ) : null}
 
       <BinderEditor
@@ -263,6 +224,72 @@ export function BinderTab() {
           setEditorDraft(null);
         }}
       />
+    </div>
+  );
+}
+
+function SpreadHeader({ label, start }: { label: string; start: string }) {
+  return (
+    <div className="flex items-center gap-2 border-b border-paper-300 pb-2">
+      <span className="h-[7px] w-[7px] rounded-full border border-ink-400" />
+      <span className="text-[0.8rem] font-medium text-ink-800">{label}</span>
+      <span className="ml-auto text-[0.68rem] tabular-nums text-ink-400">
+        {formatShort(start)} – {formatShort(addDaysISO(start, 6))}
+      </span>
+    </div>
+  );
+}
+
+function DiaryRow({
+  day,
+  entry,
+  lines,
+  onOpen,
+}: {
+  day: string;
+  entry: BinderEntry | null;
+  lines: number;
+  onOpen: () => void;
+}) {
+  const isToday = isSameISO(day, todayISO());
+  const holiday = holidayName(day);
+  const dow = new Date(`${day}T12:00:00`).getDay();
+  const preview = entry ? previewText(entry.body, Math.max(1, lines)) : [];
+
+  return (
+    <div className="grid border-b border-paper-300/80" style={{ gridTemplateColumns: "2.9rem minmax(0,1fr)" }}>
+      <div className="py-2 text-center">
+        <button
+          type="button"
+          onClick={onOpen}
+          className={cn(
+            "mx-auto flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-[0.9rem] font-semibold tabular-nums",
+            isToday ? "bg-ink-900 text-white" : holiday || dow === 0 ? "text-red-500" : dow === 6 ? "text-blue-600" : "text-ink-800",
+          )}
+        >
+          {Number(day.slice(8, 10))}
+        </button>
+        <p className={cn("mt-0.5 text-[0.58rem]", dow === 6 ? "text-blue-500" : dow === 0 ? "text-red-400" : "text-ink-400")}>
+          {weekdayKo(day)}
+        </p>
+      </div>
+
+      <button type="button" onClick={onOpen} className="min-h-[4.6rem] min-w-0 overflow-hidden py-2 pl-3 text-left">
+        {entry ? (
+          <>
+            <p className="line-clamp-1 text-[0.84rem] font-medium text-ink-900">{entry.title}</p>
+            {Array.from({ length: Math.max(0, lines - 1) }, (_, index) => (
+              <p key={index} className="mt-1 block h-[1.1rem] max-w-full truncate border-b border-paper-200 text-[0.74rem] leading-[1.1rem] text-ink-500">
+                {truncate(preview[index] ?? "", 60)}
+              </p>
+            ))}
+          </>
+        ) : (
+          Array.from({ length: lines }, (_, index) => (
+            <p key={index} className={cn("h-[1.05rem] border-b border-paper-200", index === 0 && "mt-0.5")} />
+          ))
+        )}
+      </button>
     </div>
   );
 }
@@ -344,12 +371,10 @@ function DailyView({
   if (!entry) {
     return (
       <div className="grid gap-3 lg:grid-cols-[1.6fr_1fr]">
-        <div className="card flex flex-col items-center justify-center px-6 py-14 text-center">
-          <BookIcon size={30} className="text-ink-300" />
-          <p className="serif mt-3 text-[1.05rem] text-ink-800">{formatFullKo(day)}</p>
-          <p className="mt-1 text-[0.76rem] text-ink-500">
-            {holiday ? `${holiday} · ` : ""}아직 기록이 없습니다.
-          </p>
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-paper-300 px-6 py-14 text-center">
+          <BookIcon size={26} className="text-ink-300" />
+          <p className="mt-3 text-[1rem] font-medium text-ink-900">{formatFullKo(day)}</p>
+          <p className="mt-1 text-[0.76rem] text-ink-500">{holiday ? `${holiday} · ` : ""}아직 기록이 없습니다.</p>
           <div className="mt-3 flex gap-2">
             <button type="button" onClick={() => onCreate(day, "일기")} className="btn-primary btn-xs">
               이 날 일기 쓰기
@@ -371,11 +396,14 @@ function DailyView({
 
   return (
     <div className="grid gap-3 lg:grid-cols-[1.6fr_1fr]">
-      <div className="card overflow-hidden">
-        <div className="flex items-center justify-between gap-2 border-b border-paper-300/70 px-4 py-2">
+      <div className="overflow-hidden rounded-2xl border border-paper-300">
+        <div className="flex items-center justify-between gap-2 border-b border-paper-300 px-4 py-2">
           <div className="flex items-center gap-1.5">
-            <span className="chip bg-paper-200 text-ink-600">{entry.kind}</span>
-            <span className="text-[0.66rem] text-ink-400">{formatFullKo(day)}{holiday ? ` · ${holiday}` : ""}</span>
+            <span className="rounded-full bg-paper-200 px-2 py-0.5 text-[0.68rem] text-ink-600">{entry.kind}</span>
+            <span className="text-[0.66rem] text-ink-400">
+              {formatFullKo(day)}
+              {holiday ? ` · ${holiday}` : ""}
+            </span>
           </div>
           <div className="flex items-center gap-1">
             <button
@@ -389,15 +417,11 @@ function DailyView({
             <button
               type="button"
               onClick={() => setPreview((current) => !current)}
-              className={cn("rounded px-1.5 py-0.5 text-[0.66rem]", preview ? "text-accent-600" : "text-ink-400 hover:text-ink-600")}
+              className={cn("rounded px-1.5 py-0.5 text-[0.68rem]", preview ? "text-ink-900" : "text-ink-400 hover:text-ink-600")}
             >
               {preview ? "편집" : "미리보기"}
             </button>
-            <button
-              type="button"
-              onClick={() => setShowMeta((current) => !current)}
-              className="rounded px-1.5 py-0.5 text-[0.66rem] text-ink-400 hover:text-ink-600"
-            >
+            <button type="button" onClick={() => setShowMeta((current) => !current)} className="rounded px-1.5 py-0.5 text-[0.68rem] text-ink-400 hover:text-ink-600">
               태그
             </button>
           </div>
@@ -412,7 +436,7 @@ function DailyView({
             }}
             onBlur={flush}
             placeholder="오늘의 제목"
-            className="serif w-full border-none bg-transparent px-0 text-[1.24rem] font-semibold text-ink-900 outline-none placeholder:text-ink-300"
+            className="w-full border-none bg-transparent px-0 text-[1.24rem] font-semibold tracking-tight text-ink-900 outline-none placeholder:text-ink-300"
           />
 
           {showMeta ? (
@@ -450,7 +474,7 @@ function DailyView({
             )}
           </div>
 
-          <div className="flex items-center justify-between border-t border-paper-300/60 pt-2 text-[0.64rem] text-ink-400">
+          <div className="flex items-center justify-between border-t border-paper-300 pt-2 text-[0.64rem] text-ink-400">
             <span>{body.length.toLocaleString()}자</span>
             <span>
               {savedAt && Date.now() - savedAt < 60_000 ? (
@@ -467,18 +491,13 @@ function DailyView({
 
       <div className="space-y-3">
         {showSchedule ? <DaySchedule tasks={schedules} /> : null}
-        <div className="card px-4 py-3">
-          <h3 className="section-title mb-1.5">이 날의 다른 기록</h3>
+        <div className="rounded-2xl border border-paper-300 px-4 py-3">
+          <h3 className="mb-1.5 text-[0.74rem] text-ink-500">이 날의 다른 기록</h3>
           <div className="space-y-1">
             {diaries
               .filter((item) => item.id !== entry.id && item.date === day)
               .map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => onOpenEntry(item.id)}
-                  className="block w-full truncate text-left text-[0.76rem] text-ink-600 hover:text-ink-900"
-                >
+                <button key={item.id} type="button" onClick={() => onOpenEntry(item.id)} className="block w-full truncate text-left text-[0.76rem] text-ink-600 hover:text-ink-900">
                   {item.title}
                 </button>
               ))}
@@ -496,48 +515,35 @@ function DailyView({
 }
 
 function DaySchedule({ tasks }: { tasks: ProjectTask[] }) {
-  const [open, setOpen] = useState(true);
   const done = tasks.filter((task) => task.status === "완료");
   const rest = tasks.filter((task) => task.status !== "완료" && task.status !== "취소");
   return (
-    <div className="card overflow-hidden">
-      <button
-        type="button"
-        onClick={() => setOpen((current) => !current)}
-        className="flex w-full items-center justify-between px-4 py-2 text-left"
-      >
-        <h3 className="section-title">이 날의 일정 · 할 일</h3>
-        <ChevronDownIcon size={14} className={cn("text-ink-400 transition", !open && "-rotate-90")} />
-      </button>
-      {open ? (
-        <div className="border-t border-paper-300/60 px-4 py-2">
-          {tasks.length === 0 ? (
-            <p className="text-[0.74rem] text-ink-400">예정된 일이 없습니다.</p>
-          ) : (
-            <ul className="space-y-1">
-              {rest.map((task) => (
-                <li key={task.id} className="flex items-start gap-1.5 text-[0.74rem] text-ink-700">
-                  <span className="mt-1 h-1.5 w-1.5 flex-none rounded-full bg-accent-300" />
-                  <span className="min-w-0 flex-1 truncate">{task.title}</span>
-                  {task.due ? <span className="text-[0.6rem] text-ink-400">마감</span> : null}
-                </li>
-              ))}
-            </ul>
-          )}
-          {done.length > 0 ? (
-            <div className="mt-2 border-t border-paper-300/50 pt-1.5">
-              <p className="mb-1 flex items-center gap-1 text-[0.62rem] text-sage-500">
-                <CheckIcon size={11} /> 완료 {done.length}
-              </p>
-              <ul className="space-y-0.5">
-                {done.map((task) => (
-                  <li key={task.id} className="truncate text-[0.72rem] text-ink-400 line-through">
-                    {task.title}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
+    <div className="rounded-2xl border border-paper-300 px-4 py-3">
+      <h3 className="text-[0.76rem] font-medium text-ink-800">이 날의 일정 · 할 일</h3>
+      {tasks.length === 0 ? (
+        <p className="mt-1 text-[0.72rem] text-ink-400">예정된 일이 없습니다.</p>
+      ) : (
+        <ul className="mt-1.5 space-y-1">
+          {rest.map((task) => (
+            <li key={task.id} className="flex items-start gap-1.5 text-[0.74rem] text-ink-700">
+              <span className="mt-1.5 h-1.5 w-1.5 flex-none rounded-full bg-accent-300" />
+              <span className="min-w-0 flex-1 truncate">{task.title}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {done.length > 0 ? (
+        <div className="mt-2 border-t border-paper-300/60 pt-1.5">
+          <p className="mb-1 flex items-center gap-1 text-[0.62rem] text-sage-500">
+            <CheckIcon size={11} /> 완료 {done.length}
+          </p>
+          <ul className="space-y-0.5">
+            {done.map((task) => (
+              <li key={task.id} className="truncate text-[0.72rem] text-ink-400 line-through">
+                {task.title}
+              </li>
+            ))}
+          </ul>
         </div>
       ) : null}
     </div>
@@ -596,7 +602,7 @@ function NotesView({
           }
         />
       ) : (
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {filtered.map((note) => {
             const lines = previewText(note.body, 3);
             return (
@@ -604,10 +610,10 @@ function NotesView({
                 key={note.id}
                 type="button"
                 onClick={() => onOpen(note.id)}
-                className="card flex flex-col px-3.5 py-3 text-left transition hover:shadow-lift"
+                className="flex flex-col rounded-2xl border border-paper-300 px-3.5 py-3 text-left transition hover:border-paper-400"
               >
                 <div className="flex items-start justify-between gap-2">
-                  <p className="line-clamp-1 text-[0.88rem] font-medium text-ink-900">{note.title}</p>
+                  <p className="line-clamp-1 text-[0.86rem] font-medium text-ink-900">{note.title}</p>
                   {note.favorite ? <StarIcon size={13} filled className="flex-none text-amber-400" /> : null}
                 </div>
                 <p className="mt-0.5 text-[0.64rem] text-ink-400">

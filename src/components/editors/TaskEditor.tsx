@@ -20,6 +20,8 @@ export interface TaskDraft {
   category?: TaskCategory;
   date?: string | null;
   projectId?: string;
+  urgent?: boolean;
+  important?: boolean;
 }
 
 interface FormState {
@@ -68,8 +70,8 @@ function formFromDraft(draft?: TaskDraft): FormState {
     status: "미완료",
     date: draft?.date ?? "",
     due: "",
-    urgent: false,
-    important: false,
+    urgent: draft?.urgent ?? false,
+    important: draft?.important ?? false,
     hidden: false,
     history: false,
     memo: "",
@@ -94,7 +96,7 @@ export function TaskEditor({
   if (!open) return null;
   return (
     <TaskEditorInner
-      key={taskId ?? `new-${draft?.kind ?? ""}-${draft?.date ?? ""}-${draft?.projectId ?? ""}`}
+      key={taskId ?? `new-${draft?.kind ?? ""}-${draft?.date ?? ""}-${draft?.projectId ?? ""}-${draft?.urgent ? 1 : 0}${draft?.important ? 1 : 0}`}
       taskId={taskId ?? null}
       draft={draft}
       onClose={onClose}
@@ -270,8 +272,8 @@ function TaskEditorInner({
         <div className="grid grid-cols-2 gap-2 rounded-xl border border-paper-300/80 bg-paper-50/60 px-3 py-2">
           <Toggle checked={form.urgent} onChange={(value) => patch("urgent", value)} label="긴급" />
           <Toggle checked={form.important} onChange={(value) => patch("important", value)} label="중요" />
-          <Toggle checked={form.hidden} onChange={(value) => patch("hidden", value)} label="NOW 숨김" />
-          <Toggle checked={form.history} onChange={(value) => patch("history", value)} label="History" />
+          <Toggle checked={form.hidden} onChange={(value) => patch("hidden", value)} label="기본 보기에서 숨김" />
+          <Toggle checked={form.history} onChange={(value) => patch("history", value)} label="지난 기록으로 보내기" />
         </div>
 
         {form.kind === "할 일" ? (
