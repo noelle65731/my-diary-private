@@ -37,7 +37,8 @@ function useOverlay(open: boolean, onClose: () => void) {
     scrollLocks += 1;
     document.body.style.overflow = "hidden";
 
-    window.history.pushState({ diaryLayer: true }, "");
+    const layerToken = `diaryLayer-${Math.random().toString(36).slice(2)}`;
+    window.history.pushState({ diaryLayer: layerToken }, "");
     let active = true;
     const onPop = () => {
       if (!active) return;
@@ -54,7 +55,13 @@ function useOverlay(open: boolean, onClose: () => void) {
       if (scrollLocks === 0) document.body.style.overflow = "";
       if (active) {
         active = false;
-        window.history.back();
+        // Defer the unwind so a StrictMode remount can push its own layer first; only the
+        // layer that is still on top is unwound.
+        window.setTimeout(() => {
+          if ((window.history.state as { diaryLayer?: string } | null)?.diaryLayer === layerToken) {
+            window.history.back();
+          }
+        }, 0);
       }
     };
   }, [open]);
