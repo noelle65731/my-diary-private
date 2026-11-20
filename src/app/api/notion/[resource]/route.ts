@@ -5,7 +5,7 @@ import { createPage, hasNotionToken, NotionError, queryDatabase } from "@/lib/no
 import type { NotionPage } from "@/lib/notion";
 import { buildProperties, defaultPatch, mappers } from "@/lib/notion-map";
 import { DB_ENV_KEYS, DB_IDS, DB_LABELS, dbSetupMessage, isResourceKey, type ResourceKey } from "@/lib/db-config";
-import { TASK_CATEGORIES, TASK_STATUSES } from "@/lib/types";
+import { TASK_STATUSES } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -84,8 +84,9 @@ export async function POST(request: NextRequest, context: { params: Promise<{ re
     return NextResponse.json({ ok: false, error: { message: "제목을 입력해 주세요.", code: "missing_title" } }, { status: 400 });
   }
   if (resource === "projects") {
+    // A7: 분류 is an open select — a category the user added in the app is stored as-is.
     const category = patch["category"];
-    if (typeof category === "string" && !TASK_CATEGORIES.includes(category as (typeof TASK_CATEGORIES)[number])) {
+    if (category !== undefined && (typeof category !== "string" || !category.trim())) {
       delete patch["category"];
     }
     const status = patch["status"];

@@ -52,15 +52,22 @@ export function SearchDialog() {
     const push = (resource: Resource, badge: string, items: AnyItem[]) => {
       for (const item of items) {
         if (!usable(item)) continue;
-        if (q && !`${item.title} ${item.memo}`.toLowerCase().includes(q)) continue;
         const body = (item as { body?: string }).body ?? "";
+        // B8: 제목·기타뿐 아니라 본문(body)까지 검색합니다.
+        const haystack = `${item.title} ${item.memo} ${body} ${(item as { tags?: string[] }).tags?.join(" ") ?? ""}`.toLowerCase();
+        if (q && !haystack.includes(q)) continue;
         const text = item.memo || body;
         out.push({
           resource,
           badge,
           item,
           date: dateOf(resource, item),
-          snippet: text ? truncate(text, 70) : "",
+          snippet: (() => {
+            if (!q) return text ? truncate(text, 70) : "";
+            const index = body.toLowerCase().indexOf(q);
+            if (index >= 0) return truncate(body.slice(Math.max(0, index - 18), index + 52), 74);
+            return text ? truncate(text, 70) : "";
+          })(),
         });
       }
     };
@@ -112,7 +119,7 @@ export function SearchDialog() {
       open={searchOpen}
       onClose={() => setSearchOpen(false)}
       title="검색"
-      subtitle="제목과 메모를 함께 찾습니다"
+      subtitle="제목 · 기타 · 본문을 함께 찾습니다"
       size="lg"
       bodyClassName="!px-0 !py-0"
     >

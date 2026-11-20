@@ -16,15 +16,18 @@ import {
 import { InlineMemo } from "@/components/editors/MemoField";
 import { ProjectPicker } from "@/components/editors/shared";
 import { editableMemo, plainOfSpans, spansFromMarkdown } from "@/lib/richtext";
-import { formatShort, todayISO, weekdayKo } from "@/lib/date";
+import { addDaysISO, formatFullKo, formatShort, todayISO, weekdayKo } from "@/lib/date";
 import {
   TASK_CATEGORIES,
   TASK_STATUSES,
+  type ExtraProperty,
   type ProjectTask,
   type TaskCategory,
   type TaskKind,
   type TaskStatus,
 } from "@/lib/types";
+import { DynamicProperties, type SchemaMap } from "@/components/detail/DynamicProperties";
+import { cn } from "@/lib/utils";
 
 interface TaskForm {
   title: string;
@@ -40,8 +43,11 @@ interface TaskForm {
   memo: string;
   waitFor: string;
   waitNote: string;
+  checkedAt: string;
   cancelReason: string;
   projectIds: string[];
+  /** B2: properties added to the Notion DB later. */
+  extra: ExtraProperty[];
 }
 
 function formFromTask(task: ProjectTask): TaskForm {
@@ -59,8 +65,10 @@ function formFromTask(task: ProjectTask): TaskForm {
     memo: editableMemo(task),
     waitFor: task.waitFor,
     waitNote: task.waitNote,
+    checkedAt: task.checkedAt ?? "",
     cancelReason: task.cancelReason,
     projectIds: task.projectIds,
+    extra: task.extra ?? [],
   };
 }
 
@@ -90,6 +98,13 @@ function buildPatch(task: ProjectTask, draft: TaskForm, changed: string[]): Reco
   if (has("waitFor")) patch.waitFor = draft.waitFor;
   if (has("waitNote")) patch.waitNote = draft.waitNote;
   if (has("cancelReason")) patch.cancelReason = draft.cancelReason;
+  if (has("checkedAt")) patch.checkedAt = draft.checkedAt || null;
+  if (has("extra")) {
+    // B2: only writable properties are sent; formulas are read-only in Notion.
+    patch.extraEntries = draft.extra
+      .filter((prop) => !prop.readOnly && !prop.type.startsWith("formula"))
+      .map((prop) => ({ name: prop.name, type: prop.type, value: prop.value }));
+  }
   if (has("memo")) {
     const spans = spansFromMarkdown(draft.memo);
     patch.memoRich = spans;
@@ -150,7 +165,8 @@ function TaskDetailInner({
   onCloseAll: () => void;
   registerFlush?: (flush: (() => Promise<boolean>) | null) => void;
 }) {
-  const { data, update, remove, fetchBody, saveBody, demo } = useData();
+  const { data, update, remove, fetchBody, saveBody, fetchSchema, demo } = useData();
+  const [schema, setSchema] = useState<SchemaMap>({});
   const { draft, set, markSaved, reset, changedKeys, isDirty } = useDetailDraft(formFromTask(task));
   const [field, setField] = useState<string | null>(null);
 
@@ -168,6 +184,16 @@ function TaskDetailInner({
     setField(null);
     setBodyText(null);
   }, [task, reset]);
+
+  useEffect(() => {
+    let alive = true;
+    void fetchSchema("projects").then((map) => {
+      if (alive) setSchema(map);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [fetchSchema]);
 
   useEffect(() => {
     let alive = true;
@@ -308,6 +334,33 @@ function TaskDetailInner({
               onDone={() => setField(null)}
               placeholder="다음에 할 일"
             />
+            <div className="sm:col-span-2">
+              <p className="text-[0.64rem] text-ink-400">재확인 일정 (원할 때만)</p>
+              <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                <InlineText
+                  label="확인일"
+                  type="date"
+                  value={draft.checkedAt}
+                  onChange={(value) => set("checkedAt", value)}
+                  active={field === "checkedAt"}
+                  onActivate={() => setField("checkedAt")}
+                  onDone={() => setField(null)}
+                  display={draft.checkedAt ? formatFullKo(draft.checkedAt) : undefined}
+                  placeholder="확인일 없음"
+                />
+                <button type="button" onClick={() => set("checkedAt", addDaysISO(todayISO(), 3))} className="btn-outline btn-xs">
+                  3일 뒤
+                </button>
+                <button type="button" onClick={() => set("checkedAt", addDaysISO(todayISO(), 7))} className="btn-outline btn-xs">
+                  1주 뒤
+                </button>
+                {draft.checkedAt ? (
+                  <button type="button" onClick={() => set("checkedAt", "")} className="btn-ghost btn-xs">
+                    지우기
+                  </button>
+                ) : null}
+              </div>
+            </div>
           </div>
         ) : null}
 
@@ -322,6 +375,21 @@ function TaskDetailInner({
               onDone={() => setField(null)}
               placeholder="왜 접었나요?"
             />
+            <div className="mt-1 flex flex-wrap gap-1">
+              {["일정 변경", "필요 없어짐", "다른 일 우선", "외부 사정"].map((reason) => (
+                <button
+                  key={reason}
+                  type="button"
+                  onClick={() => set("cancelReason", reason)}
+                  className={cn(
+                    "chip border",
+                    draft.cancelReason === reason ? "border-ink-900 bg-ink-900 text-paper-50" : "border-paper-400 bg-white/70 text-ink-500",
+                  )}
+                >
+                  {reason}
+                </button>
+              ))}
+            </div>
           </div>
         ) : null}
 
@@ -424,6 +492,12 @@ function TaskDetailInner({
             onChange={(ids) => set("projectIds", ids)}
           />
         </DetailSection>
+
+        {draft.extra.length > 0 ? (
+          <DetailSection title="추가 속성 (Notion)">
+            <DynamicProperties extra={draft.extra} schema={schema} onChange={(next) => set("extra", next)} />
+          </DetailSection>
+        ) : null}
 
         <DetailSection title="표시">
           <InlineFlags

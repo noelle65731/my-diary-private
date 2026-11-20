@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { isAuthorized } from "@/lib/auth";
-import { archivePage, hasNotionToken, NotionError, updatePage, isNotionPageId } from "@/lib/notion";
+import { archivePage, hasNotionToken, NotionError, retrievePage, updatePage, isNotionPageId } from "@/lib/notion";
 import type { NotionPage } from "@/lib/notion";
 import { buildProperties, mappers } from "@/lib/notion-map";
 import { DB_ENV_KEYS, DB_IDS, DB_LABELS, dbSetupMessage, isResourceKey, type ResourceKey } from "@/lib/db-config";
@@ -60,6 +60,26 @@ export async function PATCH(
   }
 
   try {
+    // B3: when the client sends the version it edited, a newer server version is a
+    // conflict — the two values are shown side by side instead of silently overwritten.
+    const expected = typeof patch["expectedUpdatedAt"] === "string" ? (patch["expectedUpdatedAt"] as string) : "";
+    delete patch["expectedUpdatedAt"];
+    if (expected) {
+      const current = await retrievePage(id);
+      const stamp = current.last_edited_time ?? "";
+      if (stamp && stamp !== expected) {
+        const mapConflict = mappers[resource] as (page: NotionPage) => unknown;
+        return NextResponse.json(
+          {
+            ok: false,
+            error: { message: "다른 곳에서 먼저 수정되었습니다.", code: "conflict" },
+            current: mapConflict(current),
+            serverUpdatedAt: stamp,
+          },
+          { status: 409 },
+        );
+      }
+    }
     const page = await updatePage(id, buildProperties(resource, patch));
     const map = mappers[resource] as (page: NotionPage) => unknown;
     return NextResponse.json({ ok: true, data: map(page) });

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { CalendarEvent, ProjectTask, Routine } from "@/lib/types";
+import type { CalendarEvent, ModeFilter, ProjectTask, Routine } from "@/lib/types";
 import { isSameISO, todayISO, weekdayKo } from "@/lib/date";
 import { holidayName } from "@/lib/holidays";
 import { cn } from "@/lib/utils";
@@ -24,10 +24,20 @@ interface WeekBoardProps {
   onOpenRoutine: (id: string) => void;
   onCreate: (date: string, time?: string | null) => void;
   onMoveEvent: (id: string, date: string, time: string | null) => void;
+  /** B5: edge drag resizes an event. */
+  onResizeEvent?: (id: string, startTime: string, endTime: string) => void;
   onToggleTask: (task: ProjectTask) => void;
   onRoutineCount: (routine: Routine, date: string, count: number) => void;
   onCreateTaskForProject: (projectId: string) => void;
   onCreateRoutine: () => void;
+  /** A6: 맞춤 — projects/routines hidden one by one in the week view. */
+  mode?: ModeFilter;
+  hiddenProjectIds?: string[];
+  hiddenRoutineIds?: string[];
+  onToggleProjectHidden?: (id: string) => void;
+  onToggleRoutineHidden?: (id: string) => void;
+  /** B5: all-day bars reorder by dragging one onto another. */
+  onReorderAllDay?: (orderedIds: string[]) => void;
 }
 
 export function WeekBoard({
@@ -44,12 +54,24 @@ export function WeekBoard({
   onOpenRoutine,
   onCreate,
   onMoveEvent,
+  onResizeEvent,
   onToggleTask,
   onRoutineCount,
   onCreateTaskForProject,
   onCreateRoutine,
+  mode = "all",
+  hiddenProjectIds = [],
+  hiddenRoutineIds = [],
+  onToggleProjectHidden,
+  onToggleRoutineHidden,
+  onReorderAllDay,
 }: WeekBoardProps) {
   const today = todayISO();
+  /** A6: the first project row carries the collapse-all control for the whole project area. */
+  const [projectsCollapsed, setProjectsCollapsed] = useState(false);
+  /** B5: all-day 4건 → 3건 + 펼치기, and the 시간표 lifts when the rows fold. */
+  const [allDayExpanded, setAllDayExpanded] = useState(false);
+  const [customOpen, setCustomOpen] = useState(false);
   const [narrow, setNarrow] = useState(false);
   /** Lets the timetable take the full height when the user wants every event at once. */
   const [timeExpanded, setTimeExpanded] = useState(false);
@@ -86,10 +108,8 @@ export function WeekBoard({
   );
 
   const visibleEvents = events.filter((event) => !event.trash);
-  const visibleTasks = useMemo(
-    () => tasks.filter((task) => !task.trash && task.status !== "취소"),
-    [tasks],
-  );
+  // B4: a canceled task stays faintly in its own place (with its reason), never vanishes.
+  const visibleTasks = useMemo(() => tasks.filter((task) => !task.trash), [tasks]);
 
   const weekTasks = useMemo(
     () => visibleTasks.filter((task) => (task.date && days.includes(task.date)) || (task.due && days.includes(task.due))),
@@ -106,6 +126,7 @@ export function WeekBoard({
       map.get(key)!.tasks.push(task);
     }
     return [...map.entries()]
+      .filter(([key]) => mode !== "custom" || !hiddenProjectIds.includes(key))
       .sort((a, b) => {
         if (a[0] === "inbox") return -1;
         if (b[0] === "inbox") return 1;
@@ -114,14 +135,20 @@ export function WeekBoard({
         const pb = b[1].project;
         return (order[(pa?.category ?? "개인") as keyof typeof order] ?? 1) - (order[(pb?.category ?? "개인") as keyof typeof order] ?? 1);
       });
-  }, [weekTasks, projects]);
+  }, [weekTasks, projects, mode, hiddenProjectIds]);
 
   const routineGroups = useMemo(() => {
-    const active = routines.filter((routine) => routine.kind === "루틴" && !routine.trash && !routine.history);
+    const active = routines.filter(
+      (routine) =>
+        routine.kind === "루틴" &&
+        !routine.trash &&
+        !routine.history &&
+        (mode !== "custom" || !hiddenRoutineIds.includes(routine.id)),
+    );
     return (["개인", "공부"] as const)
       .map((category) => ({ category, items: active.filter((routine) => routine.category === category) }))
       .filter((group) => group.items.length > 0);
-  }, [routines]);
+  }, [routines, mode, hiddenRoutineIds]);
 
   const allDayBars = useMemo(() => {
     const bars: { event: CalendarEvent; startIdx: number; span: number; lane: number }[] = [];
@@ -141,10 +168,13 @@ export function WeekBoard({
       }
       bars.push({ event, startIdx, span, lane });
     }
-    return bars.slice(0, 8);
+    return bars;
   }, [visibleEvents, days]);
 
-  const allDayHeight = Math.max(allDayBars.length > 0 ? Math.min(2, Math.max(...allDayBars.map((bar) => bar.lane)) + 1) : 1, 1) * 26 + 8;
+  const laneCount = allDayBars.length > 0 ? Math.max(...allDayBars.map((bar) => bar.lane)) + 1 : 0;
+  const visibleLanes = allDayExpanded ? laneCount : Math.min(3, laneCount);
+  const hiddenBars = allDayExpanded ? 0 : allDayBars.filter((bar) => bar.lane >= 3).length;
+  const allDayHeight = Math.max(visibleLanes, 1) * 26 + (hiddenBars > 0 ? 18 : 0) + 8;
 
   return (
     <div className="min-w-0">
@@ -155,6 +185,69 @@ export function WeekBoard({
         className={cn("min-w-0", narrow && "-mx-1 overflow-x-auto overscroll-x-contain pb-1")}
       >
         <div className={cn(narrow && "min-w-[42rem]")}>
+      {mode === "custom" ? (
+        <div className="mb-2 rounded-xl border border-paper-300 bg-paper-50/70 px-2.5 py-2">
+          <button
+            type="button"
+            onClick={() => setCustomOpen((open) => !open)}
+            aria-expanded={customOpen}
+            className="flex w-full items-center justify-between text-left text-[0.7rem] font-medium text-ink-700"
+          >
+            <span>맞춤 · 프로젝트 {projects.length}개 · 루틴 {routines.filter((item) => item.kind === "루틴" && !item.history && !item.trash).length}개</span>
+            <span className="text-[0.64rem] font-normal text-ink-400">{customOpen ? "접기" : "숨길 항목 고르기"}</span>
+          </button>
+          {customOpen ? (
+            <div className="mt-2 grid gap-2 sm:grid-cols-2">
+              <div>
+                <p className="mb-1 text-[0.62rem] text-ink-400">프로젝트</p>
+                <div className="flex flex-wrap gap-1">
+                  {projects.map((project) => {
+                    const shown = !hiddenProjectIds.includes(project.id);
+                    return (
+                      <button
+                        key={project.id}
+                        type="button"
+                        aria-pressed={shown}
+                        onClick={() => onToggleProjectHidden?.(project.id)}
+                        className={cn(
+                          "rounded-full border px-2 py-0.5 text-[0.66rem]",
+                          shown ? "border-ink-900 bg-ink-900 text-white" : "border-paper-400 bg-white text-ink-400",
+                        )}
+                      >
+                        {shown ? "표시" : "숨김"} · {project.title}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div>
+                <p className="mb-1 text-[0.62rem] text-ink-400">루틴</p>
+                <div className="flex flex-wrap gap-1">
+                  {routines
+                    .filter((item) => item.kind === "루틴" && !item.history && !item.trash)
+                    .map((routine) => {
+                      const shown = !hiddenRoutineIds.includes(routine.id);
+                      return (
+                        <button
+                          key={routine.id}
+                          type="button"
+                          aria-pressed={shown}
+                          onClick={() => onToggleRoutineHidden?.(routine.id)}
+                          className={cn(
+                            "rounded-full border px-2 py-0.5 text-[0.66rem]",
+                            shown ? "border-ink-900 bg-ink-900 text-white" : "border-paper-400 bg-white text-ink-400",
+                          )}
+                        >
+                          {shown ? "표시" : "숨김"} · {routine.title}
+                        </button>
+                      );
+                    })}
+                </div>
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       {/* week day header */}
       <div className="grid items-end border-b border-paper-300 pb-1" style={grid}>
         <div className="sticky left-0 z-20 bg-white pb-1 text-right text-[0.62rem] text-ink-400">
@@ -210,7 +303,25 @@ export function WeekBoard({
               <button
                 key={event.id}
                 type="button"
+                draggable={!!onReorderAllDay}
+                onDragStart={(dragEvent) => {
+                  dragEvent.dataTransfer.setData("text/diary-allday", event.id);
+                  dragEvent.dataTransfer.effectAllowed = "move";
+                }}
+                onDragOver={(dragEvent) => {
+                  if (dragEvent.dataTransfer.types.includes("text/diary-allday")) dragEvent.preventDefault();
+                }}
+                onDrop={(dropEvent) => {
+                  const dragged = dropEvent.dataTransfer.getData("text/diary-allday");
+                  if (!dragged || dragged === event.id) return;
+                  dropEvent.preventDefault();
+                  const ids = allDayBars.map((bar) => bar.event.id).filter((id) => id !== dragged);
+                  const at = ids.indexOf(event.id);
+                  ids.splice(at < 0 ? ids.length : at, 0, dragged);
+                  onReorderAllDay?.(ids);
+                }}
                 onClick={() => onOpenEvent(event.id)}
+                title={allDayExpanded ? undefined : "끌어서 종일 일정 순서 바꾸기"}
                 className={cn(
                   "absolute h-[22px] overflow-hidden rounded-md border px-1.5 text-left text-[0.62rem] font-medium leading-[20px] md:px-2 md:text-[0.68rem]",
                   tone.bg,
@@ -222,13 +333,22 @@ export function WeekBoard({
                   left: `calc(${(startIdx * 100) / days.length}% + 2px)`,
                   width: `calc(${(span * 100) / days.length}% - 4px)`,
                   top: lane * 26 + 4,
-                  display: lane > 1 ? "none" : "block",
+                  display: lane >= visibleLanes ? "none" : "block",
                 }}
               >
                 <span className="line-clamp-1">{event.title}</span>
               </button>
             );
           })}
+          {laneCount > 3 ? (
+            <button
+              type="button"
+              onClick={() => setAllDayExpanded((open) => !open)}
+              className="absolute bottom-0 right-1 rounded px-1 text-[0.58rem] font-medium text-ink-400 hover:text-ink-700"
+            >
+              {allDayExpanded ? "접기" : `+${hiddenBars} 더 · 펼치기`}
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -261,16 +381,29 @@ export function WeekBoard({
             onOpenEvent={onOpenEvent}
             onCreate={onCreate}
             onMoveEvent={onMoveEvent}
+            onResizeEvent={onResizeEvent}
           />
         </div>
       </div>
 
       {/* attached project rows */}
       <div className="border-t border-paper-300">
-        {rows.length === 0 ? (
+        <div className="flex items-center justify-between border-b border-paper-300/70 bg-paper-50/50 px-2 py-1">
+          <span className="text-[0.64rem] text-ink-400">프로젝트 · 루틴</span>
+          <button
+            type="button"
+            onClick={() => setProjectsCollapsed((open) => !open)}
+            aria-expanded={!projectsCollapsed}
+            className="inline-flex items-center gap-1 rounded-full bg-paper-200 px-2 py-[2px] text-[0.62rem] font-medium text-ink-600 transition hover:bg-paper-300/70 hover:text-ink-900"
+          >
+            {projectsCollapsed ? "프로젝트 영역 펴기" : "프로젝트 영역 접기"}
+            <ChevronDownIcon size={10} className={cn("transition", projectsCollapsed && "rotate-180")} />
+          </button>
+        </div>
+        {projectsCollapsed ? null : rows.length === 0 ? (
           <div className="flex items-center justify-center py-4 text-[0.72rem] text-ink-400">이번 주에 예정된 할 일이 없습니다.</div>
         ) : null}
-        {rows.map(([key, row]) => {
+        {projectsCollapsed ? null : rows.map(([key, row]) => {
           const project = row.project;
           const tone = project ? taskTone(project.category) : null;
           return (
@@ -321,11 +454,16 @@ export function WeekBoard({
                       {cell.map((task) => {
                         const done = task.status === "완료";
                         const waiting = task.status === "대기 중";
+                        const canceled = task.status === "취소";
                         const priority = priorityOf(task);
                         const taskColor = taskTone(task.category);
                         const memoLine = task.memo ? task.memo.split(/\r?\n/)[0]!.trim() : "";
                         return (
-                          <div key={task.id} className={cn("flex items-start", narrow ? "gap-0.5" : "gap-1.5")}>
+                          <div
+                            key={task.id}
+                            title={canceled ? `취소${task.cancelReason ? ` · ${task.cancelReason}` : ""}` : undefined}
+                            className={cn("flex items-start", narrow ? "gap-0.5" : "gap-1.5", canceled && "opacity-45")}
+                          >
                             {narrow ? null : (
                               <button
                                 type="button"
@@ -374,11 +512,14 @@ export function WeekBoard({
                                     narrow
                                       ? "line-clamp-2 break-words text-[0.7rem] leading-[1.2]"
                                       : "truncate text-[0.72rem] leading-[1.25]",
-                                    done && "text-ink-400 line-through",
+                                    (done || canceled) && "text-ink-400 line-through",
                                   )}
                                 >
                                   {task.title}
                                 </span>
+                                {canceled ? (
+                                  <span className="flex-none rounded bg-paper-200 px-1 text-[0.54rem] font-medium leading-[1.4] text-ink-500">취소</span>
+                                ) : null}
                                 {!narrow && priority !== "기타" ? (
                                   <span
                                     className={cn(

@@ -26,6 +26,16 @@ export interface RichTextSpan {
   href?: string | null;
 }
 
+/** B2: a Notion property the app did not know when it was written. */
+export interface ExtraProperty {
+  name: string;
+  type: string;
+  /** formula · rollup · created_time … are shown read-only. */
+  readOnly: boolean;
+  value: string | number | boolean | string[] | null;
+  options?: string[];
+}
+
 export interface BaseItem {
   id: string;
   url: string;
@@ -44,6 +54,8 @@ export interface BaseItem {
   projectIds: string[];
   createdAt: string;
   updatedAt: string;
+  /** B2: dynamically added Notion properties (text · checkbox · select · date · number · url · formula). */
+  extra?: ExtraProperty[];
 }
 
 export interface CalendarEvent extends BaseItem {
@@ -98,6 +110,9 @@ export interface Routine extends BaseItem {
 export interface BinderEntry extends BaseItem {
   kind: BinderKind;
   date: string | null;
+  /** A9: optional end of a record (date range). */
+  endDate?: string | null;
+  endTime?: string | null;
   link: string;
   tags: string[];
   archiveFlag: boolean;
@@ -109,6 +124,9 @@ export interface BinderEntry extends BaseItem {
 export interface ArchiveEntry extends BaseItem {
   kind: ArchiveKind;
   date: string | null;
+  /** A9: optional end of a record (date range · time). */
+  endDate?: string | null;
+  endTime?: string | null;
   baseDate: string | null;
   rating: number | null;
   link: string;
@@ -163,7 +181,8 @@ export const ROUTINE_DAYS = ["월", "화", "수", "목", "금", "토", "일"];
 export const BINDER_KINDS: BinderKind[] = ["일기", "노트"];
 export const ARCHIVE_KINDS: ArchiveKind[] = ["메모", "책", "영화", "레퍼런스", "읽을거리"];
 
-export type ModeFilter = "now" | "all" | "업무" | "개인" | "공부";
+/** A6: `all` (기본) · `now` · a built-in or user-made category · `custom` (주간 맞춤). */
+export type ModeFilter = "now" | "all" | "custom" | "업무" | "개인" | "공부" | (string & {});
 
 export function emptyData(): AllData {
   return { calendar: [], projects: [], routines: [], binder: [], archive: [] };

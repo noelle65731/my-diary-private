@@ -28,6 +28,9 @@ interface DayViewProps {
   onCreate: (date: string, time?: string | null) => void;
   onToggleTask: (task: ProjectTask) => void;
   onRoutineCount: (routine: Routine, date: string, count: number) => void;
+  /** B5: the day view takes part in dragging events to another time. */
+  onMoveEvent?: (id: string, date: string, time: string | null) => void;
+  onResizeEvent?: (id: string, startTime: string, endTime: string) => void;
   onWriteDiary: (date: string) => void;
   onCreateTaskForProject: (projectId: string) => void;
   /** A8: how many diary/note records the day holds (`기록 N`). */
@@ -46,6 +49,8 @@ export function DayView({
   onCreate,
   onToggleTask,
   onRoutineCount,
+  onMoveEvent,
+  onResizeEvent,
   onWriteDiary,
   onCreateTaskForProject,
   recordCount,
@@ -56,7 +61,7 @@ export function DayView({
   const dayTasks = tasksForDay(
     tasks.filter((task) => !task.trash && (hiddenIncluded || !task.hidden)),
     day,
-  ).filter((task) => task.status !== "취소");
+  );
   const dueRoutines = routinesForDay(routines, day).filter((routine) => !routine.trash && (hiddenIncluded || !routine.hidden));
   const holiday = holidayName(day);
   const scheduleCount = allDay.filter((event) => !event.canceled).length + timed.length;
@@ -118,6 +123,8 @@ export function DayView({
           gutterWidth="3.4rem"
           onOpenEvent={onOpenEvent}
           onCreate={onCreate}
+          onMoveEvent={onMoveEvent}
+          onResizeEvent={onResizeEvent}
         />
 
         <div className="mt-3 flex items-center justify-end border-t border-paper-300 pt-2 text-[0.68rem] text-ink-400">
@@ -154,7 +161,7 @@ export function DayView({
                 {items.map((task) => {
                   const done = task.status === "완료";
                   return (
-                    <li key={task.id} className="flex items-start gap-1.5">
+                    <li key={task.id} className={cn("flex items-start gap-1.5", task.status === "취소" && "opacity-45")}>
                       <button
                         type="button"
                         onClick={() => onToggleTask(task)}
@@ -167,8 +174,11 @@ export function DayView({
                         {done ? <CheckIcon size={10} /> : null}
                       </button>
                       <button type="button" onClick={() => onOpenTask(task.id)} className="min-w-0 flex-1 text-left">
-                        <span className={cn("block text-[0.8rem] leading-snug text-ink-800", done && "text-ink-400 line-through")}>
+                        <span className={cn("block text-[0.8rem] leading-snug text-ink-800", (done || task.status === "취소") && "text-ink-400 line-through")}>
                           {task.title}
+                          {task.status === "취소" ? (
+                            <span className="ml-1 rounded bg-paper-200 px-1 text-[0.56rem] not-italic text-ink-500">취소</span>
+                          ) : null}
                         </span>
                         {task.memo ? <span className="mt-0.5 block text-[0.68rem] leading-snug text-ink-400">{task.memo}</span> : null}
                       </button>

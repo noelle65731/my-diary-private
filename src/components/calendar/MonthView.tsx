@@ -27,6 +27,8 @@ interface MonthViewProps {
   onUpdateEvent: (id: string, patch: Record<string, unknown>) => void;
   onCreate: (date: string) => void;
   onRoutineCount: (routine: Routine, date: string, count: number) => void;
+  /** B5: dragging a chip onto another date moves the 일정/할 일 there. */
+  onMoveItem?: (type: "event" | "task", id: string, date: string) => void;
 }
 
 type CellItem = { type: "event"; event: CalendarEvent } | { type: "task"; task: ProjectTask };
@@ -63,6 +65,7 @@ export function MonthView({
   onOpenTask,
   onUpdateEvent,
   onRoutineCount,
+  onMoveItem,
 }: MonthViewProps) {
   const today = todayISO();
   const year = Number(cursor.slice(0, 4));
@@ -165,6 +168,16 @@ export function MonthView({
               return (
                 <div
                   key={day}
+                  onDragOver={(event) => {
+                    if (onMoveItem) event.preventDefault();
+                  }}
+                  onDrop={(event) => {
+                    const payload = event.dataTransfer.getData("text/diary-item");
+                    if (!payload || !onMoveItem) return;
+                    event.preventDefault();
+                    const [type, id] = payload.split(":");
+                    if ((type === "event" || type === "task") && id) onMoveItem(type, id, day);
+                  }}
                   className={cn(
                     "group relative min-h-[5rem] border-r border-paper-300 px-1 pb-1 pt-1 last:border-r-0 md:min-h-[7.2rem] md:px-2 md:pb-1.5 md:pt-1.5",
                     !inMonth && "bg-paper-200/25",
@@ -202,6 +215,11 @@ export function MonthView({
                           <button
                             key={item.event.id}
                             type="button"
+                            draggable={!!onMoveItem}
+                            onDragStart={(event) => {
+                              event.dataTransfer.setData("text/diary-item", `event:${item.event.id}`);
+                              event.dataTransfer.effectAllowed = "move";
+                            }}
                             onClick={() => onOpenEvent(item.event.id)}
                             className={cn(
                               "flex w-full items-start gap-1 rounded px-0.5 py-[1px] text-left text-[0.6rem] leading-[1.25] md:px-1 md:text-[0.68rem] md:leading-[1.35]",
@@ -219,6 +237,11 @@ export function MonthView({
                         <button
                           key={item.task.id}
                           type="button"
+                          draggable={!!onMoveItem}
+                          onDragStart={(event) => {
+                            event.dataTransfer.setData("text/diary-item", `task:${item.task.id}`);
+                            event.dataTransfer.effectAllowed = "move";
+                          }}
                           onClick={() => onOpenTask(item.task.id)}
                           className={cn(
                             "flex w-full items-center gap-1 px-0.5 py-[1px] text-left text-[0.6rem] leading-[1.25] text-ink-500 md:px-1 md:text-[0.68rem] md:leading-[1.35]",
@@ -259,7 +282,7 @@ export function MonthView({
       {routineTemplates.length > 0 ? (
         <div className="mt-4 space-y-3 xl:hidden">
           <h3 className="text-[0.86rem] font-semibold text-ink-900">이번 달 루틴</h3>
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-2">
             {routineTemplates.map((routine, index) => (
               <RoutineHeat key={routine.id} routine={routine} routines={routines} days={days} index={index} onCount={(date, count) => onRoutineCount(routine, date, count)} />
             ))}
@@ -508,7 +531,7 @@ export function RoutineHeat({
               onClick={() => onCount(day, done ? 0 : count + 1)}
               title={`${formatShort(day)} · ${count}/${target}`}
               className={cn(
-                "flex h-[1.55rem] items-center justify-center rounded-md text-[0.62rem] tabular-nums transition",
+                "relative flex h-[1.55rem] items-center justify-center rounded-md text-[0.62rem] tabular-nums transition",
                 done
                   ? cn(tone.solid, "font-semibold text-white")
                   : future || !scheduled
@@ -520,6 +543,11 @@ export function RoutineHeat({
               )}
             >
               {Number(day.slice(8, 10))}
+              {count > 0 && !done ? (
+                <span className="absolute -right-0.5 -top-0.5 rounded-full bg-ink-900 px-[3px] text-[0.44rem] font-semibold leading-[0.7rem] text-white">
+                  {count}
+                </span>
+              ) : null}
             </button>
           );
         })}

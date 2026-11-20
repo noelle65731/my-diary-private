@@ -1,19 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { useData } from "@/state/store";
-import { cn } from "@/lib/utils";
 
+/**
+ * B3: stays out of the way — it appears only while a save is running, while saved
+ * edits wait for the network, or when a save failed. No “저장됨” flash.
+ */
 export function SaveIndicator({ compact = false }: { compact?: boolean }) {
-  const { savingCount, saveError, lastSavedAt, demo } = useData();
-  const [flash, setFlash] = useState(false);
-
-  useEffect(() => {
-    if (!lastSavedAt) return;
-    setFlash(true);
-    const timer = setTimeout(() => setFlash(false), 1600);
-    return () => clearTimeout(timer);
-  }, [lastSavedAt]);
+  const { savingCount, saveError, offlinePending } = useData();
 
   if (saveError) {
     return (
@@ -36,20 +30,14 @@ export function SaveIndicator({ compact = false }: { compact?: boolean }) {
     );
   }
 
-  if (demo) {
+  if (offlinePending > 0) {
     return (
-      <span className="hidden items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-[0.68rem] font-medium text-amber-700 sm:inline-flex">
+      <span
+        title="연결되면 자동으로 한 번만 저장됩니다"
+        className="inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-[0.68rem] font-medium text-amber-700"
+      >
         <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
-        데모
-      </span>
-    );
-  }
-
-  if (flash) {
-    return (
-      <span className={cn("inline-flex items-center gap-1.5 px-1 text-[0.68rem] font-medium text-ink-500 transition-opacity")}>
-        <span className="h-1.5 w-1.5 rounded-full bg-sage-400" />
-        저장됨
+        {compact ? `대기 ${offlinePending}` : `오프라인 · ${offlinePending}개 대기`}
       </span>
     );
   }

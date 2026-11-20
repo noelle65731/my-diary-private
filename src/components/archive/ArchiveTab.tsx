@@ -11,6 +11,8 @@ import { archiveTone } from "@/components/common/tone";
 import { ArchiveIcon, ArrowUpRightIcon, PlusIcon, SearchIcon, StarIcon, TrashIcon } from "@/components/icons";
 import { EmptyState, StarRating } from "@/components/common/primitives";
 import { ArchiveEditor } from "@/components/editors/ArchiveEditor";
+import { FolderChips } from "@/components/common/PhotoField";
+import { useArchiveFolders } from "@/lib/folders";
 import { ArchiveDetail } from "@/components/detail/ArchiveDetail";
 import { RichText } from "@/components/common/rich";
 
@@ -22,6 +24,8 @@ export function ArchiveTab() {
   const { focus, clearFocus } = useUi();
 
   const [category, setCategory] = useState<"전체" | ArchiveKind>(settings.archiveDefaultCategory);
+  const [folder, setFolder] = useState<string | null>(null);
+  const { folders, add: addFolder } = useArchiveFolders();
   const [tag, setTag] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -60,6 +64,8 @@ export function ArchiveTab() {
   const items = useMemo(() => {
     const filtered = base
       .filter((item) => (category === "전체" ? true : item.kind === category))
+      // A9: a folder collects the records tagged with its name.
+      .filter((item) => (folder ? item.tags.includes(folder) : true))
       .filter((item) => (tag ? item.tags.includes(tag) : true))
       .filter((item) => (favoritesOnly ? item.favorite : true))
       .filter((item) =>
@@ -70,7 +76,7 @@ export function ArchiveTab() {
       if (sort === "title") return a.title.localeCompare(b.title, "ko");
       return (b.date ?? "").localeCompare(a.date ?? "");
     });
-  }, [base, category, tag, favoritesOnly, query, sort]);
+  }, [base, category, folder, tag, favoritesOnly, query, sort]);
 
   const counts = useMemo(() => {
     const map: Record<string, number> = { 전체: base.length };
@@ -97,6 +103,9 @@ export function ArchiveTab() {
       kind,
       date: todayISO(),
       baseDate: todayISO(),
+      // B8: the quick-add title is never repeated as body text.
+      body: "",
+      ...(folder ? { tags: [folder] } : {}),
     });
     setQuickTitle("");
     setBusy(false);
@@ -178,6 +187,8 @@ export function ArchiveTab() {
             #{itemTag}
           </button>
         ))}
+        <span className="mx-1 h-4 w-px bg-paper-300" aria-hidden />
+        <FolderChips folders={folders} selected={folder} onSelect={setFolder} onCreate={(name, emoji) => addFolder(name, emoji)} compact />
         <button
           type="button"
           onClick={() => {
@@ -240,7 +251,7 @@ export function ArchiveTab() {
           />
         </div>
       ) : (
-        <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-5">
+        <div className="mt-3 grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
           {items.map((item) => {
             const tone = archiveTone(item.kind);
             return (
@@ -265,7 +276,7 @@ export function ArchiveTab() {
                   </button>
                 </div>
 
-                {item.body ? (
+                {item.body && item.body.trim() !== item.title.trim() ? (
                   <button type="button" onClick={() => setEditorId(item.id)} className="mt-1.5 line-clamp-2 text-left text-[0.76rem] leading-relaxed text-ink-500">
                     {truncate(item.body.replace(/\n/g, " "), 120)}
                   </button>
@@ -287,7 +298,7 @@ export function ArchiveTab() {
                 ) : null}
 
                 <div className="mt-2 flex items-center gap-1.5 pt-1">
-                  <StarRating value={item.rating} size={12} />
+                  <StarRating value={item.rating} size={12} onChange={(value) => void update("archive", item.id, { rating: value })} />
                   <span className="text-[0.66rem] text-ink-400">
                     {item.date ? `${formatShort(item.date)} ${weekdayKo(item.date)}` : ""}
                   </span>

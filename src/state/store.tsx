@@ -40,7 +40,13 @@ interface DataContextValue {
   savingCount: number;
   saveError: string | null;
   lastSavedAt: number | null;
+  /** B3: a newer server version was found while saving. */
+  conflict: ConflictState | null;
+  resolveConflict: (keepMine: boolean) => Promise<boolean>;
+  /** B3: queued offline edits waiting for the network. */
+  offlinePending: number;
   refresh: () => Promise<void>;
+  refreshQuiet: () => Promise<void>;
   login: (password: string) => Promise<{ ok: boolean; message?: string }>;
   logout: () => Promise<void>;
   create: (resource: Resource, patch: Patch) => Promise<AnyItem | null>;
@@ -49,9 +55,44 @@ interface DataContextValue {
   destroy: (resource: Resource, id: string) => Promise<void>;
   setRoutineCount: (routine: Routine, date: string, count: number) => Promise<void>;
   findItem: (resource: Resource, id: string) => AnyItem | undefined;
+  /** B2: property schema (names, types, select options) of one database. */
+  fetchSchema: (resource: Resource) => Promise<Record<string, { type: string; options?: string[] }>>;
   /** A5: the Notion page body of one record ('내용'). */
   fetchBody: (resource: Resource, id: string) => Promise<PageBodyPayload | null>;
   saveBody: (resource: Resource, id: string, text: string) => Promise<boolean>;
+}
+
+export interface ConflictState {
+  resource: Resource;
+  id: string;
+  patch: Patch;
+  local: AnyItem;
+  current: AnyItem;
+  serverUpdatedAt: string;
+}
+
+interface QueuedWrite {
+  kind: "create" | "update";
+  resource: Resource;
+  id?: string;
+  tempId?: string;
+  patch: Patch;
+  at: number;
+}
+
+const QUEUE_KEY = "my-diary:offline-queue:v1";
+
+class RequestError extends Error {
+  code: string;
+  status: number;
+  payload: Record<string, unknown>;
+  constructor(message: string, code: string, status: number, payload: Record<string, unknown> = {}) {
+    super(message);
+    this.name = "RequestError";
+    this.code = code;
+    this.status = status;
+    this.payload = payload;
+  }
 }
 
 export interface PageBodyPayload {
@@ -73,9 +114,14 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   } catch {
     /* empty body */
   }
-  const payload = (body ?? {}) as { ok?: boolean; error?: { message?: string } };
+  const payload = (body ?? {}) as { ok?: boolean; error?: { message?: string; code?: string }; [key: string]: unknown };
   if (!response.ok || payload.ok === false) {
-    throw new Error(payload.error?.message ?? "요청을 처리하지 못했습니다.");
+    throw new RequestError(
+      payload.error?.message ?? "요청을 처리하지 못했습니다.",
+      payload.error?.code ?? "server_error",
+      response.status,
+      payload as Record<string, unknown>,
+    );
   }
   return body as T;
 }
@@ -207,7 +253,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [savingCount, setSavingCount] = useState(0);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
+  const [conflict, setConflict] = useState<ConflictState | null>(null);
+  const [offlinePending, setOfflinePending] = useState(0);
   const errorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flushing = useRef(false);
   /** Demo mode keeps page bodies in memory; a connected Notion is read and written for real. */
   const bodyCache = useRef<Record<string, string>>({});
 
@@ -236,8 +285,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [demo, status],
   );
 
-  const load = useCallback(async (fresh = false) => {
-    setLoading(true);
+  const load = useCallback(async (fresh = false, quiet = false) => {
+    if (!quiet) setLoading(true);
     setFatalError(null);
     setResourceErrors({});
     try {
@@ -275,15 +324,116 @@ export function DataProvider({ children }: { children: ReactNode }) {
       });
       setResourceErrors(result.errors ?? {});
     } catch (error) {
-      setFatalError(error instanceof Error ? error.message : "데이터를 불러오지 못했습니다.");
+      if (!quiet) setFatalError(error instanceof Error ? error.message : "데이터를 불러오지 못했습니다.");
     } finally {
-      setLoading(false);
+      if (!quiet) setLoading(false);
     }
   }, []);
+
+  const refreshQuiet = useCallback(async () => {
+    await load(false, true);
+  }, [load]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  /* ── B1/B3: keep the screen in step with Notion without a reload ── */
+  useEffect(() => {
+    if (demo || !status?.authenticated) return;
+    let alive = true;
+    const tick = () => {
+      if (!alive || typeof document === "undefined" || document.visibilityState !== "visible") return;
+      void refreshQuiet();
+    };
+    const onVisible = () => {
+      if (document.visibilityState === "visible") tick();
+    };
+    window.addEventListener("focus", tick);
+    document.addEventListener("visibilitychange", onVisible);
+    const timer = setInterval(tick, 120_000);
+    return () => {
+      alive = false;
+      window.removeEventListener("focus", tick);
+      document.removeEventListener("visibilitychange", onVisible);
+      clearInterval(timer);
+    };
+  }, [demo, refreshQuiet, status?.authenticated]);
+
+  /* ── B3: offline edits wait in localStorage and are sent once on reconnect ── */
+  const readQueue = (): QueuedWrite[] => {
+    try {
+      const raw = window.localStorage.getItem(QUEUE_KEY);
+      const parsed = raw ? (JSON.parse(raw) as QueuedWrite[]) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const writeQueue = (entries: QueuedWrite[]) => {
+    try {
+      window.localStorage.setItem(QUEUE_KEY, JSON.stringify(entries));
+    } catch {
+      /* ignore quota */
+    }
+    setOfflinePending(entries.length);
+  };
+
+  const enqueue = (entry: QueuedWrite) => {
+    const entries = readQueue();
+    // Repeating the same edit of the same item replaces the queued one — one save on reconnect.
+    const next = entries.filter((item) => !(item.kind === entry.kind && item.resource === entry.resource && item.id === entry.id));
+    next.push(entry);
+    writeQueue(next);
+  };
+
+  const flushQueue = useCallback(async () => {
+    if (flushing.current || demo) return;
+    const entries = readQueue();
+    if (entries.length === 0) return;
+    flushing.current = true;
+    const rest: QueuedWrite[] = [];
+    for (const entry of entries) {
+      try {
+        if (entry.kind === "create") {
+          const result = await requestJson<{ data: AnyItem }>(`/api/notion/${entry.resource}`, {
+            method: "POST",
+            body: JSON.stringify(entry.patch),
+          });
+          setData((current) => ({
+            ...current,
+            [entry.resource]: (current[entry.resource] as AnyItem[]).map((item) =>
+              item.id === entry.tempId ? result.data : item,
+            ),
+          }) as AllData);
+        } else if (entry.id) {
+          await requestJson(`/api/notion/${entry.resource}/${entry.id}`, {
+            method: "PATCH",
+            body: JSON.stringify(entry.patch),
+          });
+        }
+      } catch {
+        rest.push(entry);
+      }
+    }
+    writeQueue(rest);
+    flushing.current = false;
+    if (rest.length === 0) {
+      setLastSavedAt(Date.now());
+      await load(false, true);
+    } else {
+      reportError(`${rest.length}개 항목이 아직 네트워크에 저장되지 않았습니다.`);
+    }
+  }, [demo, load, reportError]);
+
+  useEffect(() => {
+    setOfflinePending(readQueue().length);
+    const onOnline = () => void flushQueue();
+    window.addEventListener("online", onOnline);
+    if (navigator.onLine) void flushQueue();
+    return () => window.removeEventListener("online", onOnline);
+  }, [flushQueue]);
 
   const login = useCallback(async (password: string) => {
     try {
@@ -322,6 +472,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
         return optimistic;
       }
 
+      if (!navigator.onLine) {
+        enqueue({ kind: "create", resource, tempId: optimistic.id, patch, at: Date.now() });
+        setLastSavedAt(Date.now());
+        return optimistic;
+      }
+
       setSavingCount((n) => n + 1);
       try {
         const result = await requestJson<{ data: AnyItem }>(`/api/notion/${resource}`, {
@@ -337,6 +493,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setLastSavedAt(Date.now());
         return result.data;
       } catch (error) {
+        const offline = error instanceof TypeError || (!navigator.onLine);
+        if (offline) {
+          enqueue({ kind: "create", resource, tempId: optimistic.id, patch, at: Date.now() });
+          setLastSavedAt(Date.now());
+          return optimistic;
+        }
         setData((current) => ({
           ...current,
           [resource]: (current[resource] as AnyItem[]).filter((item) => item.id !== optimistic.id),
@@ -372,11 +534,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
         return true;
       }
 
+      if (!navigator.onLine) {
+        enqueue({ kind: "update", resource, id, patch, at: Date.now() });
+        setLastSavedAt(Date.now());
+        return true;
+      }
+
       setSavingCount((n) => n + 1);
       try {
         const result = await requestJson<{ data: AnyItem }>(`/api/notion/${resource}/${id}`, {
           method: "PATCH",
-          body: JSON.stringify(patch),
+          body: JSON.stringify({ ...patch, expectedUpdatedAt: previous.updatedAt }),
         });
         setData((current) => ({
           ...current,
@@ -385,6 +553,27 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setLastSavedAt(Date.now());
         return true;
       } catch (error) {
+        if (error instanceof RequestError && error.code === "conflict") {
+          // Two versions exist: keep both visible and let the user choose.
+          const current = error.payload["current"] as AnyItem | undefined;
+          if (current) {
+            setConflict({
+              resource,
+              id,
+              patch,
+              local: optimistic,
+              current,
+              serverUpdatedAt: String(error.payload["serverUpdatedAt"] ?? ""),
+            });
+            return false;
+          }
+        }
+        const offline = error instanceof TypeError || !navigator.onLine;
+        if (offline) {
+          enqueue({ kind: "update", resource, id, patch, at: Date.now() });
+          setLastSavedAt(Date.now());
+          return true;
+        }
         setData((current) => ({
           ...current,
           [resource]: replaceIn(current[resource] as AnyItem[], previous),
@@ -396,6 +585,41 @@ export function DataProvider({ children }: { children: ReactNode }) {
       }
     },
     [blockReason, data, demo, notify, reportError],
+  );
+
+  /** B3: keeps the chosen value; the other one is dropped from the screen. */
+  const resolveConflict = useCallback<DataContextValue["resolveConflict"]>(
+    async (keepMine) => {
+      const open = conflict;
+      if (!open) return true;
+      setConflict(null);
+      if (!keepMine) {
+        setData((current) => ({
+          ...current,
+          [open.resource]: replaceIn(current[open.resource] as AnyItem[], open.current),
+        }) as AllData);
+        return true;
+      }
+      setSavingCount((n) => n + 1);
+      try {
+        const result = await requestJson<{ data: AnyItem }>(`/api/notion/${open.resource}/${open.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ ...open.patch, expectedUpdatedAt: open.serverUpdatedAt }),
+        });
+        setData((current) => ({
+          ...current,
+          [open.resource]: replaceIn(current[open.resource] as AnyItem[], result.data),
+        }) as AllData);
+        setLastSavedAt(Date.now());
+        return true;
+      } catch (error) {
+        reportError(error instanceof Error ? error.message : "저장하지 못했습니다.");
+        return false;
+      } finally {
+        setSavingCount((n) => Math.max(0, n - 1));
+      }
+    },
+    [conflict, reportError],
   );
 
   const remove = useCallback<DataContextValue["remove"]>(
@@ -468,6 +692,27 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [data],
   );
 
+  const schemaCache = useRef<Partial<Record<Resource, Record<string, { type: string; options?: string[] }>>>>({});
+  const fetchSchema = useCallback<DataContextValue["fetchSchema"]>(
+    async (resource) => {
+      if (demo) return {};
+      const cached = schemaCache.current[resource];
+      if (cached) return cached;
+      try {
+        const result = await requestJson<{ data: { name: string; type: string; options?: string[] }[] }>(
+          `/api/notion/${resource}/schema`,
+        );
+        const map: Record<string, { type: string; options?: string[] }> = {};
+        for (const item of result.data ?? []) map[item.name] = { type: item.type, options: item.options };
+        schemaCache.current[resource] = map;
+        return map;
+      } catch {
+        return {};
+      }
+    },
+    [demo],
+  );
+
   const fetchBody = useCallback<DataContextValue["fetchBody"]>(
     async (resource, id) => {
       const key = `${resource}:${id}`;
@@ -521,7 +766,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
       savingCount,
       saveError,
       lastSavedAt,
+      conflict,
+      resolveConflict,
+      offlinePending,
       refresh: () => load(true),
+      refreshQuiet,
       login,
       logout,
       create,
@@ -530,6 +779,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       destroy,
       setRoutineCount,
       findItem,
+      fetchSchema,
       fetchBody,
       saveBody,
     }),
@@ -543,7 +793,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
       savingCount,
       saveError,
       lastSavedAt,
+      conflict,
+      resolveConflict,
+      offlinePending,
       load,
+      refreshQuiet,
       login,
       logout,
       create,
@@ -552,6 +806,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       destroy,
       setRoutineCount,
       findItem,
+      fetchSchema,
       fetchBody,
       saveBody,
     ],

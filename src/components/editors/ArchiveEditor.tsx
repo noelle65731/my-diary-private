@@ -8,6 +8,8 @@ import { renderMarkdown } from "@/lib/markdown";
 import { todayISO } from "@/lib/date";
 import { cn } from "@/lib/utils";
 import { ARCHIVE_KINDS, type ArchiveEntry, type ArchiveKind } from "@/lib/types";
+import { FolderChips, PhotoEditor } from "@/components/common/PhotoField";
+import { useArchiveFolders } from "@/lib/folders";
 
 export interface ArchiveDraft {
   kind?: ArchiveKind;
@@ -23,6 +25,9 @@ interface FormState {
   tags: string[];
   body: string;
   favorite: boolean;
+  photos: string[];
+  endDate: string;
+  endTime: string;
 }
 
 export function ArchiveEditor({
@@ -69,6 +74,9 @@ function ArchiveEditorInner({
           tags: existing.tags,
           body: existing.body,
           favorite: existing.favorite,
+          photos: existing.photos ?? [],
+          endDate: existing.endDate ?? "",
+          endTime: existing.endTime ?? "",
         }
       : {
           title: "",
@@ -79,10 +87,16 @@ function ArchiveEditorInner({
           tags: [],
           body: "",
           favorite: false,
+          photos: [],
+          endDate: "",
+          endTime: "",
         },
   );
   const [preview, setPreview] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showEnd, setShowEnd] = useState(Boolean(existing?.endDate || existing?.endTime));
+  const [folder, setFolder] = useState<string | null>(null);
+  const { folders, add: addFolder } = useArchiveFolders();
 
   const patch = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((current) => ({ ...current, [key]: value }));
@@ -99,9 +113,12 @@ function ArchiveEditorInner({
       baseDate: form.date,
       rating: form.rating,
       link: form.link,
-      tags: form.tags,
-      body: form.body,
+      body: form.body.replace(/\r\n/g, "\n"),
       favorite: form.favorite,
+      photos: form.photos,
+      endDate: showEnd ? form.endDate || null : null,
+      endTime: showEnd ? form.endTime || null : null,
+      tags: folder && !form.tags.includes(folder) ? [...form.tags, folder] : form.tags,
     };
     if (existing) {
       const ok = await update("archive", existing.id, payload);
@@ -163,6 +180,11 @@ function ArchiveEditorInner({
           ))}
         </div>
 
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-[0.68rem] text-ink-400">폴더</span>
+          <FolderChips folders={folders} selected={folder} onSelect={setFolder} onCreate={(name, emoji) => addFolder(name, emoji)} compact />
+        </div>
+
         <div className="grid grid-cols-2 gap-3">
           <label className="block">
             <span className="label">날짜</span>
@@ -174,6 +196,27 @@ function ArchiveEditorInner({
               <StarRating value={form.rating} onChange={(value) => patch("rating", value)} size={20} />
             </div>
           </div>
+        </div>
+
+        <div className="rounded-xl border border-paper-300/70 bg-paper-50/50 px-3 py-2">
+          <Toggle
+            checked={showEnd}
+            onChange={setShowEnd}
+            label="종료일·시간 선택"
+            description="여러 날에 걸친 기록이면 종료일을 켜 주세요"
+          />
+          {showEnd ? (
+            <div className="mt-2 grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="label">종료일</span>
+                <input type="date" value={form.endDate} min={form.date} onChange={(event) => patch("endDate", event.target.value)} className="input" />
+              </label>
+              <label className="block">
+                <span className="label">종료 시간</span>
+                <input type="time" value={form.endTime} onChange={(event) => patch("endTime", event.target.value)} className="input" />
+              </label>
+            </div>
+          ) : null}
         </div>
 
         <label className="block">
@@ -209,6 +252,11 @@ function ArchiveEditorInner({
               className="min-h-[120px]"
             />
           )}
+        </div>
+
+        <div>
+          <p className="label">사진</p>
+          <PhotoEditor photos={form.photos} onChange={(next) => patch("photos", next)} />
         </div>
 
         <div>

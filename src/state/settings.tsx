@@ -25,6 +25,10 @@ export interface Settings {
   calendarDefaultView: CalendarViewKey;
   calendarShowHidden: boolean;
   projectTaskPreview: number;
+  /** A7: how many recent completions a project card shows (2 or 3). */
+  projectCompletedPreview: 2 | 3;
+  /** A6/A7: user-made categories shown next to 업무·개인·공부 in the filters. */
+  customCategories: string[];
   showCompletedTasks: boolean;
   binderPreviewLines: number;
   binderShowSchedule: boolean;
@@ -41,6 +45,8 @@ export const DEFAULT_SETTINGS: Settings = {
   calendarDefaultView: "week",
   calendarShowHidden: false,
   projectTaskPreview: 4,
+  projectCompletedPreview: 2,
+  customCategories: [],
   showCompletedTasks: true,
   binderPreviewLines: 3,
   binderShowSchedule: true,
@@ -52,6 +58,9 @@ const STORAGE_KEY = "my-diary:settings:v1";
 interface SettingsContextValue {
   settings: Settings;
   set: <K extends keyof Settings>(key: K, value: Settings[K]) => void;
+  /** A7: adds a user-made 분류 (stored in this browser). */
+  addCategory: (name: string) => void;
+  removeCategory: (name: string) => void;
   reset: () => void;
 }
 
@@ -98,6 +107,33 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  const addCategory = useCallback((name: string) => {
+    const clean = name.trim().slice(0, 12);
+    if (!clean) return;
+    setSettings((current) => {
+      if (current.customCategories.includes(clean)) return current;
+      const next = { ...current, customCategories: [...current.customCategories, clean] };
+      try {
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }, []);
+
+  const removeCategory = useCallback((name: string) => {
+    setSettings((current) => {
+      const next = { ...current, customCategories: current.customCategories.filter((item) => item !== name) };
+      try {
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }, []);
+
   const reset = useCallback(() => {
     setSettings(DEFAULT_SETTINGS);
     try {
@@ -107,7 +143,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const value = useMemo(() => ({ settings, set, reset }), [settings, set, reset]);
+  const value = useMemo(() => ({ settings, set, addCategory, removeCategory, reset }), [settings, set, addCategory, removeCategory, reset]);
 
   return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;
 }

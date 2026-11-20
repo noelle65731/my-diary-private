@@ -146,6 +146,15 @@ export function buildDemoData(): AllData {
       memo: "주말마다 한 구역씩",
       projectIds: [],
     }),
+    task("demo-pj-4", "도자기 만들기", {
+      kind: "프로젝트",
+      category: "개인",
+      status: "완료",
+      history: true,
+      date: addDaysISO(today, -60),
+      memo: "4회차까지 마침 · History에 보관",
+      projectIds: [],
+    }),
     task("demo-pj-3", "Next.js 다시 익히기", {
       kind: "프로젝트",
       category: "공부",
@@ -156,7 +165,23 @@ export function buildDemoData(): AllData {
     }),
 
     task("demo-tk-1", "사례 1·2 스토리라인 정리", { category: "업무", date: addDaysISO(today, -1), due: addDaysISO(today, 2), urgent: true, important: true, projectIds: [projectIds.work] }),
-    task("demo-tk-2", "포트폴리오 상세 페이지 와이어프레임", { category: "업무", date: today, due: addDaysISO(today, 4), important: true, projectIds: [projectIds.work] }),
+    task("demo-tk-2", "포트폴리오 상세 페이지 와이어프레임", {
+      category: "업무",
+      date: today,
+      due: addDaysISO(today, 4),
+      important: true,
+      projectIds: [projectIds.work],
+      // B2: properties added to the Notion DB after setup show up here.
+      extra: [
+        { name: "담당", type: "rich_text", readOnly: false, value: "선옥" },
+        { name: "검토 완료", type: "checkbox", readOnly: false, value: false },
+        { name: "우선순위", type: "select", readOnly: false, value: "보통", options: ["낮음", "보통", "높음"] },
+        { name: "배포일", type: "date", readOnly: false, value: addDaysISO(today, 6) },
+        { name: "예상 시간(분)", type: "number", readOnly: false, value: 90 },
+        { name: "참고 링크", type: "url", readOnly: false, value: "https://example.com/wireframe" },
+        { name: "남은 일수", type: "formula:number", readOnly: true, value: 4 },
+      ],
+    }),
     task("demo-tk-3", "지원 회사 3곳 리스트업", { category: "업무", date: addDaysISO(today, 1), status: "대기 중", waitFor: "지인 추천", waitNote: "링크 받기로 함", projectIds: [projectIds.work] }),
     task("demo-tk-4", "자기소개 문장 다듬기", { category: "업무", status: "완료", date: addDaysISO(today, -2), doneAt: addDaysISO(today, -2), projectIds: [projectIds.work] }),
     task("demo-tk-5", "케이스 스터디 초안", { category: "업무", status: "완료", date: addDaysISO(today, -4), doneAt: addDaysISO(today, -3), projectIds: [projectIds.work] }),
@@ -172,6 +197,10 @@ export function buildDemoData(): AllData {
     task("demo-tk-12", "중고 거래 글 올리기", { category: "개인", date: addDaysISO(today, 1), urgent: true }),
     task("demo-tk-13", "생일 선물 고르기", { category: "개인", due: addDaysISO(today, 6), important: true }),
     task("demo-tk-14", "지난달 지출 정리", { category: "개인", status: "취소", cancelReason: "다음 달로 미룸" }),
+    task("demo-tk-15", "도자기 1회차 · 흙 반죽", { category: "개인", status: "완료", doneAt: addDaysISO(today, -58), projectIds: ["demo-pj-4"] }),
+    task("demo-tk-16", "도자기 2회차 · 물레", { category: "개인", status: "완료", doneAt: addDaysISO(today, -51), projectIds: ["demo-pj-4"] }),
+    task("demo-tk-17", "도자기 3회차 · 유약", { category: "개인", status: "완료", doneAt: addDaysISO(today, -44), projectIds: ["demo-pj-4"] }),
+    task("demo-tk-18", "도자기 4회차 · 소성", { category: "개인", status: "완료", doneAt: addDaysISO(today, -37), projectIds: ["demo-pj-4"] }),
   ];
 
   const routine = (id: string, title: string, opts: Partial<Routine>): Routine => ({

@@ -16,8 +16,9 @@ import { TagInput } from "@/components/editors/shared";
 import { StarRating } from "@/components/common/primitives";
 import { renderMarkdown } from "@/lib/markdown";
 import { editableMemo, plainOfSpans, spansFromMarkdown } from "@/lib/richtext";
-import { formatShort, todayISO, weekdayKo } from "@/lib/date";
+import { formatFullKo, formatShort, todayISO, weekdayKo } from "@/lib/date";
 import { ARCHIVE_KINDS, type ArchiveEntry, type ArchiveKind } from "@/lib/types";
+import { PhotoEditor, PhotoGallery } from "@/components/common/PhotoField";
 
 interface ArchiveForm {
   title: string;
@@ -29,6 +30,9 @@ interface ArchiveForm {
   body: string;
   favorite: boolean;
   memo: string;
+  photos: string[];
+  endDate: string;
+  endTime: string;
 }
 
 function formFromEntry(entry: ArchiveEntry): ArchiveForm {
@@ -42,6 +46,9 @@ function formFromEntry(entry: ArchiveEntry): ArchiveForm {
     body: entry.body,
     favorite: entry.favorite,
     memo: editableMemo(entry),
+    photos: entry.photos ?? [],
+    endDate: entry.endDate ?? "",
+    endTime: entry.endTime ?? "",
   };
 }
 
@@ -56,6 +63,9 @@ function buildPatch(draft: ArchiveForm, changed: string[]): Record<string, unkno
   if (has("tags")) patch.tags = draft.tags;
   if (has("body")) patch.body = draft.body;
   if (has("favorite")) patch.favorite = draft.favorite;
+  if (has("photos")) patch.photos = draft.photos;
+  if (has("endDate")) patch.endDate = draft.endDate || null;
+  if (has("endTime")) patch.endTime = draft.endTime || null;
   if (has("memo")) {
     const spans = spansFromMarkdown(draft.memo);
     patch.memoRich = spans;
@@ -124,7 +134,7 @@ function ArchiveDetailInner({
       onBack={() => leave(onBack)}
       onClose={() => leave(onCloseAll)}
       label={`${draft.kind} · ${draft.date ? formatShort(draft.date) : "날짜 없음"}`}
-      subtitle={draft.date ? `${formatShort(draft.date)} ${weekdayKo(draft.date)}` : undefined}
+      subtitle={draft.date ? formatFullKo(draft.date) : undefined}
       footer={
         <>
           <div className="flex items-center gap-1">
@@ -184,8 +194,33 @@ function ArchiveDetailInner({
               active={field === "date"}
               onActivate={() => setField("date")}
               onDone={() => setField(null)}
-              display={draft.date ? `${formatShort(draft.date)} ${weekdayKo(draft.date)}` : undefined}
+              display={draft.date ? formatFullKo(draft.date) : undefined}
             />
+            {draft.endDate || draft.endTime ? (
+              <div className="grid grid-cols-2 gap-2">
+                <InlineText
+                  label="종료일"
+                  type="date"
+                  value={draft.endDate}
+                  onChange={(value) => set("endDate", value)}
+                  active={field === "endDate"}
+                  onActivate={() => setField("endDate")}
+                  onDone={() => setField(null)}
+                  display={draft.endDate ? formatFullKo(draft.endDate) : undefined}
+                  placeholder="종료일 없음"
+                />
+                <InlineText
+                  label="종료 시간"
+                  type="time"
+                  value={draft.endTime}
+                  onChange={(value) => set("endTime", value)}
+                  active={field === "endTime"}
+                  onActivate={() => setField("endTime")}
+                  onDone={() => setField(null)}
+                  placeholder="종료 시간 없음"
+                />
+              </div>
+            ) : null}
             <div>
               <p className="text-[0.64rem] text-ink-400">별점</p>
               <div className="pt-0.5">
@@ -251,6 +286,11 @@ function ArchiveDetailInner({
               )}
             </button>
           )}
+        </DetailSection>
+
+        <DetailSection title="사진">
+          <PhotoGallery photos={draft.photos} className="mb-2" />
+          <PhotoEditor photos={draft.photos} onChange={(next) => set("photos", next)} />
         </DetailSection>
 
         <DetailSection title="태그">

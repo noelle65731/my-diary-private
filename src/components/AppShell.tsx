@@ -19,6 +19,7 @@ import {
   XIcon,
 } from "@/components/icons";
 import { SaveIndicator } from "@/components/SaveIndicator";
+import { ConflictDialog } from "@/components/ConflictDialog";
 import { LoginScreen } from "@/components/LoginScreen";
 import { SearchDialog } from "@/components/SearchDialog";
 import { SettingsDialog } from "@/components/SettingsDialog";
@@ -139,6 +140,7 @@ export function AppShell() {
           </div>
           <div className="flex flex-none items-center gap-0.5">
             <SaveIndicator compact />
+            <ConflictDialog />
             <button type="button" className="icon-btn" onClick={() => setSearchOpen(true)} aria-label="검색">
               <SearchIcon size={16} />
             </button>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { CalendarEvent } from "@/lib/types";
 import { todayISO } from "@/lib/date";
 import { cn } from "@/lib/utils";
@@ -21,8 +21,11 @@ export interface TimelineProps {
   hourHeight?: number;
   gutterWidth?: string;
   onOpenEvent: (id: string) => void;
-  onCreate?: (date: string, time?: string | null) => void;
+  /** B5: an empty-slot drag fills start and end; a plain tap still creates a 1-hour slot. */
+  onCreate?: (date: string, time?: string | null, endTime?: string | null) => void;
   onMoveEvent?: (id: string, date: string, time: string | null) => void;
+  /** B5: dragging the top/bottom edge of an event resizes it (13–15 → 13–17). */
+  onResizeEvent?: (id: string, startTime: string, endTime: string) => void;
   compact?: boolean;
 }
 
@@ -32,6 +35,15 @@ function hourLabel(minutes: number): string {
   const h12 = h % 12 === 0 ? 12 : h % 12;
   return `${suffix} ${h12}`;
 }
+
+function toTime(minutes: number): string {
+  const clamped = Math.max(0, Math.min(24 * 60 - 1, minutes));
+  const h = Math.floor(clamped / 60);
+  const m = clamped % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+const snap = (minutes: number) => Math.round(minutes / 15) * 15;
 
 export function Timeline({
   days,
@@ -43,10 +55,17 @@ export function Timeline({
   onOpenEvent,
   onCreate,
   onMoveEvent,
+  onResizeEvent,
   compact = false,
 }: TimelineProps) {
   const today = todayISO();
   const active = useMemo(() => events.filter((event) => !event.trash), [events]);
+  /** B5: the current-time line keeps moving without a reload. */
+  const [nowTick, setNowTick] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNowTick(Date.now()), 60_000);
+    return () => clearInterval(timer);
+  }, []);
 
   const bounds = useMemo(() => {
     let start = startHour * 60;
@@ -69,7 +88,7 @@ export function Timeline({
     return list;
   }, [bounds]);
 
-  const now = new Date();
+  const now = new Date(nowTick);
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
   const showNow = days.includes(today) && nowMinutes >= bounds.start && nowMinutes <= bounds.end;
 
@@ -82,13 +101,95 @@ export function Timeline({
 
   const nowTop = ((nowMinutes - bounds.start) / 60) * hourHeight;
 
+  /** B5: pointer drag (mouse and touch) on an empty column paints a new time range. */
+  const [drag, setDrag] = useState<{ day: string; anchor: number; current: number } | null>(null);
+  const dragRef = useRef(drag);
+  dragRef.current = drag;
+  const moved = useRef(false);
+  /** B5: pointer drag on an event's top/bottom edge resizes it. */
+  const [resize, setResize] = useState<{ id: string; edge: "top" | "bottom"; start: number; end: number; dayIndex: number } | null>(null);
+  const resizeRef = useRef(resize);
+  resizeRef.current = resize;
+  const columns = useRef<Record<number, HTMLDivElement | null>>({});
+
+  useEffect(() => {
+    if (!drag && !resize) return;
+    const minutesAt = (node: HTMLElement, clientY: number) => {
+      const rect = node.getBoundingClientRect();
+      return bounds.start + ((clientY - rect.top) / hourHeight) * 60;
+    };
+    let column: HTMLElement | null = null;
+    const onMove = (event: PointerEvent) => {
+      if (dragRef.current && column) {
+        const minutes = Math.max(0, Math.min(24 * 60, minutesAt(column, event.clientY)));
+        if (Math.abs(minutes - dragRef.current.anchor) > 4) moved.current = true;
+        setDrag((current) => (current ? { ...current, current: snap(minutes) } : current));
+      }
+      if (resizeRef.current) {
+        const node = columns.current[resizeRef.current.dayIndex];
+        if (!node) return;
+        const minutes = Math.max(0, Math.min(24 * 60, snap(minutesAt(node, event.clientY))));
+        moved.current = true;
+        setResize((current) => {
+          if (!current) return current;
+          if (current.edge === "top") {
+            return { ...current, start: Math.min(minutes, current.end - 15) };
+          }
+          return { ...current, end: Math.max(minutes, current.start + 15) };
+        });
+      }
+    };
+    const onUp = () => {
+      const state = dragRef.current;
+      if (state && onCreate) {
+        const from = Math.min(state.anchor, state.current);
+        const to = Math.max(state.anchor, state.current);
+        if (moved.current && to - from >= 15) {
+          onCreate(state.day, toTime(from), toTime(to));
+        }
+      }
+      const sized = resizeRef.current;
+      if (sized && onResizeEvent && moved.current) {
+        onResizeEvent(sized.id, toTime(sized.start), toTime(sized.end));
+      }
+      setDrag(null);
+      setResize(null);
+      column = null;
+      setTimeout(() => {
+        moved.current = false;
+      }, 0);
+    };
+    const columnOf = (event: PointerEvent) => {
+      const node = (event.target as HTMLElement | null)?.closest?.("[data-timeline-column]");
+      return node instanceof HTMLElement ? node : null;
+    };
+    const onMoveWithColumn = (event: PointerEvent) => {
+      column = column ?? columnOf(event);
+      onMove(event);
+    };
+    window.addEventListener("pointermove", onMoveWithColumn);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMoveWithColumn);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onUp);
+    };
+  }, [bounds.start, days, hourHeight, onCreate, onResizeEvent, drag, resize]);
+
+  const beginDrag = (day: string, event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0 || !onCreate) return;
+    if (event.target !== event.currentTarget) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    const minutes = snap(bounds.start + ((event.clientY - rect.top) / hourHeight) * 60);
+    moved.current = false;
+    setDrag({ day, anchor: minutes, current: minutes });
+  };
+
   return (
     <div className="relative">
       {showNow ? (
-        <div
-          className="pointer-events-none absolute right-0 z-10 h-px bg-red-400"
-          style={{ top: nowTop, left: gutterWidth }}
-        >
+        <div className="pointer-events-none absolute right-0 z-10 h-px bg-red-400" style={{ top: nowTop, left: gutterWidth }}>
           <span className="absolute -left-[3px] top-1/2 h-[7px] w-[7px] -translate-y-1/2 rounded-full bg-red-500" />
         </div>
       ) : null}
@@ -114,16 +215,23 @@ export function Timeline({
           ) : null}
         </div>
 
-        {days.map((day) => {
+        {days.map((day, dayIndex) => {
           const timed = timedEventsForDay(active, day);
           const laidOut = layoutDayEvents(timed);
           const isToday = day === today;
           return (
             <div
               key={day}
+              data-timeline-column={dayIndex}
+              data-day={day}
+              ref={(node) => {
+                columns.current[dayIndex] = node;
+              }}
+              onPointerDown={(event) => beginDrag(day, event)}
               onClick={(event) => {
                 if (event.target !== event.currentTarget) return;
-                onCreate?.(day, toTime(dropTime(event, bounds.start)));
+                if (moved.current) return;
+                onCreate?.(day, toTime(dropTime(event as unknown as { clientY: number; currentTarget: HTMLDivElement }, bounds.start)));
               }}
               onDragOver={(event) => {
                 if (!onMoveEvent) return;
@@ -134,39 +242,61 @@ export function Timeline({
                 event.preventDefault();
                 const id = event.dataTransfer.getData("text/diary-event");
                 if (!id) return;
-                onMoveEvent(id, day, toTime(dropTime(event, bounds.start)));
+                onMoveEvent(id, day, toTime(dropTime(event as unknown as { clientY: number; currentTarget: HTMLDivElement }, bounds.start)));
               }}
-              className={cn("relative border-l border-paper-300", isToday && "bg-paper-200/25")}
+              className={cn("relative touch-pan-y border-l border-paper-300", isToday && "bg-paper-200/25")}
               style={{
                 height: totalHeight,
                 backgroundImage:
                   "repeating-linear-gradient(to bottom, #eef0f3 0, #eef0f3 1px, transparent 1px, transparent " + `${hourHeight}px)`,
               }}
             >
+              {drag && drag.day === day ? (
+                <div
+                  className="pointer-events-none absolute inset-x-1 z-10 rounded-md border border-accent-400 bg-accent-100/70 px-1 text-[0.58rem] font-medium text-accent-600"
+                  style={{
+                    top: ((Math.min(drag.anchor, drag.current) - bounds.start) / 60) * hourHeight,
+                    height: Math.max(14, (Math.abs(drag.current - drag.anchor) / 60) * hourHeight),
+                  }}
+                >
+                  {toTime(Math.min(drag.anchor, drag.current))}–{toTime(Math.max(drag.anchor, drag.current))}
+                </div>
+              ) : null}
 
               {laidOut.map(({ event, start, end, lane, lanes }) => {
-                const top = ((Math.max(start, bounds.start) - bounds.start) / 60) * hourHeight;
-                const height = Math.max(18, ((Math.min(end, bounds.end) - Math.max(start, bounds.start)) / 60) * hourHeight - 2);
+                const live = resize && resize.id === event.id ? resize : null;
+                const shownStart = live ? live.start : start;
+                const shownEnd = live ? live.end : end;
+                const top = ((Math.max(shownStart, bounds.start) - bounds.start) / 60) * hourHeight;
+                const height = Math.max(18, ((Math.min(shownEnd, bounds.end) - Math.max(shownStart, bounds.start)) / 60) * hourHeight - 2);
                 const tone = categoryTone(event.category);
                 const width = `calc(${100 / lanes}% - 4px)`;
                 const left = `calc(${(lane * 100) / lanes}% + 2px)`;
-                const timeLabel = event.startTime
-                  ? `${event.startTime}${event.endTime ? `–${event.endTime}` : ""}`
-                  : "";
-                // A8: a 30-minute card is only 18px tall, so the start time and the title
-                // share one compact line instead of the time being cut below the fold.
+                const timeLabel = event.startTime ? `${toTime(shownStart)}${event.endTime || live ? `–${toTime(shownEnd)}` : ""}` : "";
                 const compactCard = height < 34;
                 return (
                   <button
                     key={`${event.id}-${day}`}
                     type="button"
-                    draggable={!!onMoveEvent}
+                    draggable={!!onMoveEvent && !live}
                     onDragStart={(dragEvent) => {
                       dragEvent.dataTransfer.setData("text/diary-event", event.id);
                       dragEvent.dataTransfer.effectAllowed = "move";
                     }}
+                    onPointerDown={(pointerEvent) => {
+                      // Edge handles resize; the middle of the card opens the detail.
+                      const box = pointerEvent.currentTarget.getBoundingClientRect();
+                      const offset = pointerEvent.clientY - box.top;
+                      const edge = onResizeEvent && offset < 7 ? "top" : onResizeEvent && offset > box.height - 7 ? "bottom" : null;
+                      if (!edge) return;
+                      pointerEvent.stopPropagation();
+                      pointerEvent.preventDefault();
+                      moved.current = false;
+                      setResize({ id: event.id, edge, start, end, dayIndex });
+                    }}
                     onClick={(clickEvent) => {
                       clickEvent.stopPropagation();
+                      if (moved.current) return;
                       onOpenEvent(event.id);
                     }}
                     className={cn(
@@ -177,6 +307,7 @@ export function Timeline({
                       event.canceled && "opacity-50",
                     )}
                     style={{ top, height, width, left }}
+                    title={onResizeEvent ? "가운데를 누르면 상세, 위/아래 가장자리를 끌면 시간이 늘어납니다" : undefined}
                   >
                     {timeLabel ? (
                       <span
@@ -188,12 +319,7 @@ export function Timeline({
                       >
                         <span className={cn("flex-none", compactCard && "font-semibold")}>{timeLabel}</span>
                         {compactCard ? (
-                          <span
-                            className={cn(
-                              "min-w-0 truncate text-[0.56rem] font-medium leading-[1.1]",
-                              event.canceled && "line-through",
-                            )}
-                          >
+                          <span className={cn("min-w-0 truncate text-[0.56rem] font-medium leading-[1.1]", event.canceled && "line-through")}>
                             {event.title}
                           </span>
                         ) : null}
@@ -238,10 +364,4 @@ export function Timeline({
       </div>
     </div>
   );
-}
-
-function toTime(minutes: number): string {
-  const h = Math.floor(minutes / 60);
-  const m = minutes % 60;
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }

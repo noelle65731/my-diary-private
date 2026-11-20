@@ -33,12 +33,14 @@ export function taskMode(task: ProjectTask): "업무" | "개인" | "공부" {
 export function matchesMode(
   mode: ModeFilter,
   item: { hidden: boolean; trash: boolean },
-  categoryMode: "업무" | "개인" | "공부",
+  categoryMode: string,
 ): boolean {
   if (item.trash) return false;
+  // A6: `전체` is the default on every device and shows everything, hidden included.
   if (mode === "all") return true;
+  // A6: NOW hides only the items marked with the eye icon (개인 is never auto-hidden).
   if (item.hidden) return false;
-  if (mode === "now") return true;
+  if (mode === "now" || mode === "custom") return true;
   return categoryMode === mode;
 }
 

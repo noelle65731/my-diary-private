@@ -7,7 +7,7 @@ import { EditorFooter, ErrorNote, ProjectPicker } from "@/components/editors/sha
 import { MemoEditor } from "@/components/editors/MemoField";
 import { plainOfSpans, spansFromMarkdown } from "@/lib/richtext";
 import { CalendarIcon, StarIcon } from "@/components/icons";
-import { memoTitle, startOfWeekISO, todayISO, weekKeyOf } from "@/lib/date";
+import { addDaysISO, memoTitle, startOfWeekISO, todayISO, weekKeyOf } from "@/lib/date";
 import { cn } from "@/lib/utils";
 import {
   CALENDAR_CATEGORIES,
@@ -19,6 +19,8 @@ import {
 export interface EventDraft {
   date?: string;
   startTime?: string | null;
+  /** B5: a dragged empty slot hands over the end of the range as well. */
+  endTime?: string | null;
   kind?: CalendarKind;
 }
 
@@ -72,7 +74,7 @@ function formFromDraft(draft?: EventDraft): FormState {
     date,
     allDay: !draft?.startTime,
     startTime: draft?.startTime ?? "09:00",
-    endTime: "",
+    endTime: draft?.endTime ?? "",
     endDate: "",
     memo: "",
     done: false,
@@ -112,10 +114,13 @@ function EventEditorInner({
   const existing = eventId ? data.calendar.find((item) => item.id === eventId) ?? null : null;
   const [form, setForm] = useState<FormState>(existing ? formFromEvent(existing) : formFromDraft(draft));
   const [error, setError] = useState<string | null>(null);
+  /** B6: 여러 날을 고르면 '날짜마다'가 기본이고, 저장할 때 '기간'으로 바꿀 수 있습니다. */
+  const [multiMode, setMultiMode] = useState<"days" | "range">("days");
   const projects = data.projects.filter((item) => item.kind === "프로젝트" && !item.trash);
 
   const patch = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((current) => ({ ...current, [key]: value }));
+  const multiDayDraft = form.kind === "일정" && !!form.endDate && form.endDate > form.date;
 
   const save = async () => {
     if (!form.title.trim()) {
@@ -132,7 +137,7 @@ function EventEditorInner({
       startTime: form.allDay ? null : form.startTime,
       endTime: form.allDay || form.kind !== "일정" ? null : form.endTime || null,
       // Bug fix: an all-day multi-day event used to lose its end date here.
-      endDate: form.kind === "일정" ? (multiDay ? form.endDate : form.date) : form.date,
+      endDate: form.kind === "일정" ? (multiDay && multiMode === "range" ? form.endDate : form.date) : form.date,
       ...(() => {
         const spans = spansFromMarkdown(form.memo);
         return { memo: plainOfSpans(spans), memoRich: spans };
@@ -151,6 +156,22 @@ function EventEditorInner({
       const ok = await update("calendar", existing.id, payload);
       if (!ok) {
         setError("저장하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+        return;
+      }
+    } else if (multiDay && multiMode === "days") {
+      // B6: '날짜마다' makes one record per day, each with the same time range.
+      let cursor = form.date;
+      let ok = true;
+      while (cursor <= form.endDate) {
+        const created = await create("calendar", { ...payload, date: cursor, endDate: cursor });
+        if (!created) {
+          ok = false;
+          break;
+        }
+        cursor = addDaysISO(cursor, 1);
+      }
+      if (!ok) {
+        setError("일부 날짜를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.");
         return;
       }
     } else {
@@ -248,6 +269,35 @@ function EventEditorInner({
                 className="input"
               />
               <span className="mt-1 block text-[0.66rem] text-ink-400">여러 날이면 종료 날짜를 넣어 주세요.</span>
+              {multiDayDraft ? (
+                <div className="mt-2">
+                  <span className="text-[0.64rem] text-ink-400">저장 방식</span>
+                  <div className="mt-1 flex gap-1.5">
+                    {([
+                      { value: "days", label: "날짜마다" },
+                      { value: "range", label: "기간" },
+                    ] as const).map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setMultiMode(option.value)}
+                        aria-pressed={multiMode === option.value}
+                        className={cn(
+                          "chip border transition",
+                          multiMode === option.value
+                            ? "border-ink-900 bg-ink-900 text-paper-50"
+                            : "border-paper-400 bg-white/60 text-ink-600 hover:border-ink-400",
+                        )}
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                  <span className="mt-1 block text-[0.64rem] text-ink-400">
+                    {multiMode === "days" ? "하루씩 따로 저장됩니다." : "하나의 일정으로 이어집니다."}
+                  </span>
+                </div>
+              ) : null}
             </label>
           ) : (
             <div className="flex items-end pb-2 text-[0.72rem] text-ink-400">주간 키에 자동으로 묶입니다</div>
@@ -263,7 +313,7 @@ function EventEditorInner({
         {form.kind === "일정" && !form.allDay ? (
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
-              <span className="label">시작</span>
+              <span className="label">시작 시각</span>
               <input
                 type="time"
                 value={form.startTime}
@@ -272,7 +322,7 @@ function EventEditorInner({
               />
             </label>
             <label className="block">
-              <span className="label">종료</span>
+              <span className="label">종료 시각</span>
               <input
                 type="time"
                 value={form.endTime}

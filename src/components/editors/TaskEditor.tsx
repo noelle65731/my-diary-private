@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useData } from "@/state/store";
+import { useSettings } from "@/state/settings";
 import { Modal, Segmented, TextInput, Toggle } from "@/components/common/primitives";
 import { EditorFooter, ErrorNote, ProjectPicker } from "@/components/editors/shared";
 import { MemoEditor } from "@/components/editors/MemoField";
@@ -116,10 +117,14 @@ function TaskEditorInner({
   onClose: () => void;
 }) {
   const { data, create, update, remove } = useData();
+  const { settings } = useSettings();
   const existing = taskId ? data.projects.find((item) => item.id === taskId) ?? null : null;
   const [form, setForm] = useState<FormState>(existing ? formFromTask(existing) : formFromDraft(draft));
   const [error, setError] = useState<string | null>(null);
-  const projects = data.projects.filter((item) => item.kind === "프로젝트" && !item.trash && item.id !== existing?.id);
+  // A6: History projects are not offered for a new task.
+  const projects = data.projects.filter((item) => item.kind === "프로젝트" && !item.trash && !item.history && item.id !== existing?.id);
+  // A7: 업무·개인·공부 plus the categories the user added.
+  const categories = [...TASK_CATEGORIES, ...settings.customCategories.filter((item) => !TASK_CATEGORIES.includes(item as never))];
 
   const patch = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((current) => ({ ...current, [key]: value }));
@@ -208,7 +213,7 @@ function TaskEditorInner({
             value={form.category}
             onChange={(value) => patch("category", value)}
             size="sm"
-            options={TASK_CATEGORIES.map((category) => ({ value: category, label: category }))}
+            options={categories.map((category) => ({ value: category as TaskCategory, label: category }))}
           />
         </div>
 

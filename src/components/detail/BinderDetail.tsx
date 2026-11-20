@@ -15,6 +15,7 @@ import { TagInput } from "@/components/editors/shared";
 import { renderMarkdown } from "@/lib/markdown";
 import { formatFullKo, formatShort, todayISO, weekdayKo } from "@/lib/date";
 import { BINDER_KINDS, type BinderEntry, type BinderKind } from "@/lib/types";
+import { PhotoEditor, PhotoGallery } from "@/components/common/PhotoField";
 
 interface BinderForm {
   title: string;
@@ -24,6 +25,7 @@ interface BinderForm {
   tags: string[];
   favorite: boolean;
   archiveFlag: boolean;
+  photos: string[];
 }
 
 function formFromEntry(entry: BinderEntry): BinderForm {
@@ -35,6 +37,7 @@ function formFromEntry(entry: BinderEntry): BinderForm {
     tags: entry.tags,
     favorite: entry.favorite,
     archiveFlag: entry.archiveFlag,
+    photos: entry.photos ?? [],
   };
 }
 
@@ -48,6 +51,7 @@ function buildPatch(draft: BinderForm, changed: string[]): Record<string, unknow
   if (has("tags")) patch.tags = draft.tags;
   if (has("favorite")) patch.favorite = draft.favorite;
   if (has("archiveFlag")) patch.archiveFlag = draft.archiveFlag;
+  if (has("photos")) patch.photos = draft.photos;
   return patch;
 }
 
@@ -217,6 +221,11 @@ function BinderDetailInner({
               )}
             </button>
           )}
+        </DetailSection>
+
+        <DetailSection title="사진">
+          <PhotoGallery photos={draft.photos} className="mb-2" />
+          <PhotoEditor photos={draft.photos} onChange={(next) => set("photos", next)} />
         </DetailSection>
 
         <DetailSection title="태그">

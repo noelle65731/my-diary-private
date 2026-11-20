@@ -6,6 +6,7 @@ import { useSettings, type CalendarViewKey } from "@/state/settings";
 import { useTabReset, useUi } from "@/state/ui";
 import {
   addDaysISO,
+  diffDays,
   addMonthsISO,
   formatMonthDay,
   isoWeekNumber,
@@ -20,6 +21,7 @@ import { holidayName } from "@/lib/holidays";
 import { cn, matchesMode } from "@/lib/utils";
 import type { CalendarEvent, CalendarKind, ModeFilter, ProjectTask, Routine } from "@/lib/types";
 import { ChevronLeftIcon, ChevronRightIcon, PlusIcon, SearchIcon } from "@/components/icons";
+import { ModeChips } from "@/components/common/ModeChips";
 import { WeekBoard } from "@/components/calendar/WeekBoard";
 import { WeekPanel } from "@/components/calendar/WeekPanel";
 import { MonthView, RoutineHeat } from "@/components/calendar/MonthView";
@@ -41,12 +43,7 @@ const VIEWS: { value: CalendarViewKey; label: string }[] = [
   { value: "habit", label: "루틴" },
 ];
 
-const MODES: { value: ModeFilter; label: string; dot?: string }[] = [
-  { value: "now", label: "전체" },
-  { value: "업무", label: "업무", dot: "bg-accent-400" },
-  { value: "개인", label: "개인", dot: "bg-sage-400" },
-  { value: "공부", label: "공부", dot: "bg-dusk-500" },
-];
+const BASE_CATEGORIES = ["업무", "개인", "공부"];
 
 function eventMode(event: CalendarEvent): "업무" | "개인" | "공부" {
   if (event.category === "외부일정" || event.category === "성과") return "업무";
@@ -55,13 +52,39 @@ function eventMode(event: CalendarEvent): "업무" | "개인" | "공부" {
 
 export function CalendarTab() {
   const { data, update, setRoutineCount, findItem, create } = useData();
-  const { settings } = useSettings();
+  const { settings, addCategory } = useSettings();
   const { focus, clearFocus, openBinderForDate, setSearchOpen } = useUi();
 
   const today = todayISO();
   const [view, setView] = useState<CalendarViewKey>(settings.calendarDefaultView);
   const [cursor, setCursor] = useState(today);
-  const [mode, setMode] = useState<ModeFilter>("now");
+  // A6: every device opens on 전체(all).
+  const [mode, setMode] = useState<ModeFilter>("all");
+  /** A6: 주간 맞춤 — projects and routines hidden one by one, kept on this device. */
+  const [customHidden, setCustomHidden] = useState<{ projects: string[]; routines: string[] }>({ projects: [], routines: [] });
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem("my-diary:custom-hide:v1");
+      if (raw) {
+        const parsed = JSON.parse(raw) as { projects?: string[]; routines?: string[] };
+        setCustomHidden({ projects: parsed.projects ?? [], routines: parsed.routines ?? [] });
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  const saveCustom = (next: { projects: string[]; routines: string[] }) => {
+    setCustomHidden(next);
+    try {
+      window.localStorage.setItem("my-diary:custom-hide:v1", JSON.stringify(next));
+    } catch {
+      /* ignore */
+    }
+  };
+  const toggleCustom = (kind: "projects" | "routines", id: string) => {
+    const list = customHidden[kind];
+    saveCustom({ ...customHidden, [kind]: list.includes(id) ? list.filter((item) => item !== id) : [...list, id] });
+  };
   const [year, setYear] = useState(Number(today.slice(0, 4)));
   const [eventEditor, setEventEditor] = useState<{ open: boolean; id?: string | null; draft?: EventDraft }>({ open: false });
   const [taskId, setTaskId] = useState<string | null>(null);
@@ -85,7 +108,7 @@ export function CalendarTab() {
   useTabReset("calendar", () => {
     setView(settings.calendarDefaultView);
     setCursor(todayISO());
-    setMode("now");
+    setMode("all");
     setEventEditor({ open: false });
     setTaskId(null);
     setRoutineId(null);
@@ -114,9 +137,14 @@ export function CalendarTab() {
     () => data.projects.filter((task) => task.kind === "할 일" && matchesMode(mode, task, task.category)),
     [data.projects, mode],
   );
-  const projects = useMemo(() => data.projects.filter((task) => task.kind === "프로젝트" && !task.trash), [data.projects]);
+  // A6: a project sent to History never appears in the week's project rows.
+  const projects = useMemo(
+    () => data.projects.filter((task) => task.kind === "프로젝트" && !task.trash && !task.history),
+    [data.projects],
+  );
+  // A6: routine rows follow the same mode filter as projects.
   const routines = useMemo(
-    () => data.routines.filter((routine) => !routine.trash && (mode === "all" || !routine.hidden)),
+    () => data.routines.filter((routine) => !routine.trash && matchesMode(mode, routine, routine.category)),
     [data.routines, mode],
   );
 
@@ -173,8 +201,8 @@ export function CalendarTab() {
 
   const openEvent = (id: string) => setEventEditor({ open: true, id });
   const openTask = (id: string) => setTaskId(id);
-  const createEvent = (date: string, time?: string | null) =>
-    setEventEditor({ open: true, draft: { date, startTime: time ?? null } });
+  const createEvent = (date: string, time?: string | null, endTime?: string | null) =>
+    setEventEditor({ open: true, draft: { date, startTime: time ?? null, endTime: endTime ?? null } });
   const createWeekly = (kind: CalendarKind) => setEventEditor({ open: true, draft: { date: weekStart, kind } });
 
   const toggleTask = (task: ProjectTask) => {
@@ -203,6 +231,19 @@ export function CalendarTab() {
       startTime: nextStart,
       endTime: nextEnd,
       endDate: date,
+    });
+  };
+
+  /** B5: dragging an event's edge changes its end (or start) time. */
+  const resizeEvent = (id: string, startTime: string, endTime: string) => {
+    void update("calendar", id, { startTime, endTime });
+  };
+
+  /** B5: all-day bars reorder by drag; the order is kept in `정렬`. */
+  const reorderAllDay = (ids: string[]) => {
+    ids.forEach((id, index) => {
+      const item = findItem("calendar", id) as CalendarEvent | undefined;
+      if (item && item.sort !== (index + 1) * 10) void update("calendar", id, { sort: (index + 1) * 10 });
     });
   };
 
@@ -304,22 +345,13 @@ export function CalendarTab() {
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5">
-          {MODES.map((item) => (
-            <button
-              key={item.value}
-              type="button"
-              onClick={() => setMode(item.value)}
-              className={cn(
-                "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[0.76rem] font-medium transition",
-                mode === item.value
-                  ? "bg-ink-900 text-white"
-                  : "bg-paper-200 text-ink-500 hover:bg-paper-300/70 hover:text-ink-800",
-              )}
-            >
-              {item.dot ? <span className={cn("h-[6px] w-[6px] rounded-full", item.dot, mode === item.value && "bg-white")} /> : null}
-              {item.label}
-            </button>
-          ))}
+          <ModeChips
+            mode={mode}
+            onChange={setMode}
+            categories={[...BASE_CATEGORIES, ...settings.customCategories.filter((item) => !BASE_CATEGORIES.includes(item))]}
+            showCustom={view === "week" || view === "three"}
+            onAddCategory={addCategory}
+          />
           {mode !== "all" && data.calendar.some((event) => event.hidden && !event.trash) ? (
             <button
               type="button"
@@ -408,6 +440,17 @@ export function CalendarTab() {
               onUpdateEvent={(id, patch) => void update("calendar", id, patch)}
               onCreate={(date) => createEvent(date, null)}
               onRoutineCount={(routine, date, count) => void setRoutineCount(routine, date, count)}
+              onMoveItem={(type, id, date) => {
+                if (type === "task") {
+                  void update("projects", id, { date });
+                  return;
+                }
+                const item = findItem("calendar", id) as CalendarEvent | undefined;
+                if (!item) return;
+                // B5: moving an event on the month grid keeps its time and length.
+                const span = item.endDate && item.date ? diffDays(item.endDate, item.date) : 0;
+                void update("calendar", id, { date, endDate: span > 0 ? addDaysISO(date, span) : date });
+              }}
             />
           ) : null}
 
@@ -429,10 +472,17 @@ export function CalendarTab() {
               onOpenRoutine={(id) => setRoutineId(id)}
               onCreate={createEvent}
               onMoveEvent={moveEvent}
+              onResizeEvent={resizeEvent}
+              onReorderAllDay={reorderAllDay}
               onToggleTask={toggleTask}
               onRoutineCount={(routine, date, count) => void setRoutineCount(routine, date, count)}
               onCreateTaskForProject={(projectId) => setTaskId(projectId ? `new:${projectId}` : "new:")}
               onCreateRoutine={() => setRoutineId("new")}
+              mode={mode}
+              hiddenProjectIds={customHidden.projects}
+              hiddenRoutineIds={customHidden.routines}
+              onToggleProjectHidden={(id) => toggleCustom("projects", id)}
+              onToggleRoutineHidden={(id) => toggleCustom("routines", id)}
             />
           ) : null}
 
@@ -454,10 +504,17 @@ export function CalendarTab() {
               onOpenRoutine={(id) => setRoutineId(id)}
               onCreate={createEvent}
               onMoveEvent={moveEvent}
+              onResizeEvent={resizeEvent}
+              onReorderAllDay={reorderAllDay}
               onToggleTask={toggleTask}
               onRoutineCount={(routine, date, count) => void setRoutineCount(routine, date, count)}
               onCreateTaskForProject={(projectId) => setTaskId(projectId ? `new:${projectId}` : "new:")}
               onCreateRoutine={() => setRoutineId("new")}
+              mode={mode}
+              hiddenProjectIds={customHidden.projects}
+              hiddenRoutineIds={customHidden.routines}
+              onToggleProjectHidden={(id) => toggleCustom("projects", id)}
+              onToggleRoutineHidden={(id) => toggleCustom("routines", id)}
             />
           ) : null}
 
@@ -475,6 +532,8 @@ export function CalendarTab() {
               onCreate={createEvent}
               onToggleTask={toggleTask}
               onRoutineCount={(routine, date, count) => void setRoutineCount(routine, date, count)}
+              onMoveEvent={moveEvent}
+              onResizeEvent={resizeEvent}
               onWriteDiary={openBinderForDate}
               onCreateTaskForProject={(projectId) => setTaskId(projectId ? `new:${projectId}` : "new:")}
             />

@@ -8,6 +8,7 @@ import { renderMarkdown } from "@/lib/markdown";
 import { todayISO } from "@/lib/date";
 import { cn } from "@/lib/utils";
 import { BINDER_KINDS, type BinderEntry, type BinderKind } from "@/lib/types";
+import { PhotoEditor } from "@/components/common/PhotoField";
 
 export interface BinderDraft {
   date?: string;
@@ -22,6 +23,7 @@ interface FormState {
   tags: string[];
   favorite: boolean;
   archiveFlag: boolean;
+  photos: string[];
 }
 
 export function BinderEditor({
@@ -60,6 +62,7 @@ function BinderEditorInner({
           tags: existing.tags,
           favorite: existing.favorite,
           archiveFlag: existing.archiveFlag,
+          photos: existing.photos ?? [],
         }
       : {
           title: "",
@@ -69,6 +72,7 @@ function BinderEditorInner({
           tags: [],
           favorite: false,
           archiveFlag: false,
+          photos: [],
         },
   );
   const [preview, setPreview] = useState(false);
@@ -87,6 +91,7 @@ function BinderEditorInner({
       tags: form.tags,
       favorite: form.favorite,
       archiveFlag: form.archiveFlag,
+      photos: form.photos,
     };
     if (existing) {
       const ok = await update("binder", existing.id, payload);
@@ -172,6 +177,11 @@ function BinderEditorInner({
           <p className="mt-1 text-[0.66rem] text-ink-400">
             Markdown 지원: # 제목 · - 목록 · - [ ] 체크 · **굵게** · &gt; 인용
           </p>
+        </div>
+
+        <div>
+          <p className="label">사진</p>
+          <PhotoEditor photos={form.photos} onChange={(next) => patch("photos", next)} />
         </div>
 
         <div>

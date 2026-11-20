@@ -32,7 +32,7 @@ const ENV_LIST = [
 
 export function SettingsDialog() {
   const { settingsOpen, setSettingsOpen } = useUi();
-  const { settings, set, reset } = useSettings();
+  const { settings, set, reset, removeCategory } = useSettings();
   const { status, demo, refresh, logout } = useData();
   const [section, setSection] = useState<SectionKey>("look");
 
@@ -209,6 +209,43 @@ export function SettingsDialog() {
                 label="완료한 일도 기본으로 보기"
                 description="프로젝트 서랍에서 완료 항목을 접지 않습니다"
               />
+              <div>
+                <p className="label">카드에 보이는 최근 완료 기록</p>
+                <Segmented<"2" | "3">
+                  value={String(settings.projectCompletedPreview) as "2" | "3"}
+                  onChange={(value) => set("projectCompletedPreview", value === "3" ? 3 : 2)}
+                  size="sm"
+                  options={[
+                    { value: "2", label: "2개" },
+                    { value: "3", label: "3개" },
+                  ]}
+                />
+              </div>
+              <div>
+                <p className="label">내 분류</p>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {settings.customCategories.length === 0 ? (
+                    <span className="text-[0.72rem] text-ink-400">필터의 ‘+’로 분류를 더할 수 있습니다.</span>
+                  ) : (
+                    settings.customCategories.map((category) => (
+                      <span key={category} className="chip border border-paper-400 bg-white/60 text-ink-600">
+                        {category}
+                        <button
+                          type="button"
+                          onClick={() => removeCategory(category)}
+                          className="ml-1 text-ink-300 hover:text-rose-500"
+                          aria-label={`${category} 분류 지우기`}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    ))
+                  )}
+                </div>
+                <p className="mt-1 text-[0.68rem] leading-relaxed text-ink-400">
+                  추가한 분류는 프로젝트·주간 필터에 나타나고, Notion의 분류(select)에 그대로 저장됩니다.
+                </p>
+              </div>
             </>
           ) : null}
 

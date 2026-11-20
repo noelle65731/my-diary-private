@@ -63,12 +63,14 @@ export function ProjectPicker({
   value: string[];
   onChange: (ids: string[]) => void;
 }) {
-  if (projects.length === 0) {
+  // A6: a project in History is not offered for new tasks.
+  const available = projects.filter((project) => !project.history);
+  if (available.length === 0) {
     return <p className="text-[0.76rem] text-ink-400">연결할 프로젝트가 아직 없습니다.</p>;
   }
   return (
     <div className="flex flex-wrap gap-1.5">
-      {projects.map((project) => {
+      {available.map((project) => {
         const active = value.includes(project.id);
         return (
           <button

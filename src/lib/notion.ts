@@ -202,6 +202,45 @@ export async function updatePage(
   });
 }
 
+/** B3: reads one page (last_edited_time + property values) before a write. */
+export async function retrievePage(pageId: string): Promise<NotionPage> {
+  return request<NotionPage>(`/pages/${pageId}`);
+}
+
+/** B2: the live property schema of one database, for properties added after setup. */
+export interface DatabaseSchemaProperty {
+  name: string;
+  type: string;
+  options?: string[];
+}
+
+export async function retrieveDatabaseSchema(databaseId: string): Promise<DatabaseSchemaProperty[]> {
+  const read = async (version: string, path: string) =>
+    request<{ properties?: Record<string, { type?: string; select?: { options?: { name?: string }[] }; status?: { options?: { name?: string }[] }; multi_select?: { options?: { name?: string }[] } }> }>(
+      path,
+      {},
+      version,
+    );
+  let body: Awaited<ReturnType<typeof read>>;
+  try {
+    body = await read(V_LEGACY, `/databases/${databaseId}`);
+  } catch (error) {
+    if (!(error instanceof NotionError)) throw error;
+    const dsId = await resolveDataSourceId(databaseId);
+    body = await read(V_DATA_SOURCE, `/data_sources/${dsId}`);
+  }
+  const properties = body.properties ?? {};
+  return Object.entries(properties).map(([name, value]) => {
+    const options =
+      value.select?.options ?? value.status?.options ?? value.multi_select?.options ?? undefined;
+    return {
+      name,
+      type: value.type ?? "other",
+      ...(options ? { options: options.map((option) => option.name ?? "").filter(Boolean) } : {}),
+    };
+  });
+}
+
 export async function archivePage(pageId: string): Promise<void> {
   try {
     await request(`/pages/${pageId}`, {

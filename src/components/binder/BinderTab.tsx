@@ -7,6 +7,7 @@ import { useTabReset, useUi } from "@/state/ui";
 import {
   addDaysISO,
   formatFullKo,
+  isoWeekNumber,
   formatMonthKo,
   formatShort,
   isSameISO,
@@ -88,19 +89,30 @@ export function BinderTab() {
     <div>
       <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
         <div className="min-w-0">
-          <p className="text-[0.66rem] text-ink-400">{view === "notes" ? `노트 ${notes.length}개` : `일기 ${diaries.length}편`}</p>
+          <p className="text-[0.66rem] text-ink-400">
+            {view === "notes"
+              ? `노트 ${notes.length}개 · ${formatMonthKo(cursor)}`
+              : view === "weekly"
+                ? `${weekStart.slice(0, 4)}년 ${isoWeekNumber(weekStart)}주차`
+                : `${formatFullKo(cursor)}`}
+          </p>
           <h1 className="mt-1.5 text-[1.95rem] font-semibold leading-none tracking-[-0.035em] text-ink-900 md:text-[2.3rem]">
-            {view === "notes" ? "노트" : `${Number((view === "weekly" ? weekStart : cursor).slice(5, 7))}월`}
+            {view === "notes"
+              ? "Notes"
+              : view === "weekly"
+                ? `${weekStart.slice(0, 4)}년 ${isoWeekNumber(weekStart)}주차`
+                : `Daily`}
           </h1>
+          {view === "weekly" ? <p className="mt-1 text-[0.72rem] text-ink-400">일기 {diaries.length}편</p> : null}
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
           <div className="seg-track">
             {(
               [
-                { value: "weekly", label: "주간" },
-                { value: "daily", label: "일간" },
-                { value: "notes", label: "노트" },
+                { value: "weekly", label: "Weekly" },
+                { value: "daily", label: "Daily" },
+                { value: "notes", label: "Notes" },
               ] as { value: BinderView; label: string }[]
             ).map((item) => (
               <button
@@ -279,9 +291,14 @@ function DiaryRow({
         >
           {Number(day.slice(8, 10))}
         </button>
-        <p className={cn("mt-0.5 text-[0.58rem]", dow === 6 ? "text-blue-500" : dow === 0 ? "text-red-400" : "text-ink-400")}>
+        <p className={cn("mt-0.5 text-[0.58rem]", holiday ? "text-red-500" : dow === 6 ? "text-blue-500" : dow === 0 ? "text-red-400" : "text-ink-400")}>
           {weekdayKo(day)}
         </p>
+        {holiday ? (
+          <p className="mx-auto mt-0.5 max-w-[2.7rem] break-keep text-[0.5rem] leading-[1.15] text-red-500" title={holiday}>
+            {holiday}
+          </p>
+        ) : null}
       </div>
 
       <button type="button" onClick={onOpen} className="min-h-[4.6rem] min-w-0 overflow-hidden py-2 pl-3 text-left">

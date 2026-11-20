@@ -9,6 +9,7 @@ import { formatShort, startOfWeekISO, todayISO, weekdayKo } from "@/lib/date";
 import { type ModeFilter, type ProjectTask, type Routine, type TaskCategory } from "@/lib/types";
 import { PRIORITY_TONES, priorityOf, projectEmoji, routineTone, taskTone } from "@/components/common/tone";
 import { CheckIcon, ChevronRightIcon, InboxIcon, PlusIcon, RepeatIcon } from "@/components/icons";
+import { ModeChips } from "@/components/common/ModeChips";
 import { ProjectDrawer } from "@/components/projects/ProjectDrawer";
 import { TaskEditor } from "@/components/editors/TaskEditor";
 import { TaskDetail } from "@/components/detail/TaskDetail";
@@ -17,12 +18,7 @@ import { routineCountForDay } from "@/components/calendar/calendar-utils";
 
 type ProjectView = "tracks" | "priority" | "history";
 
-const MODES: { value: ModeFilter; label: string; dot?: string }[] = [
-  { value: "now", label: "전체" },
-  { value: "업무", label: "업무", dot: "bg-accent-400" },
-  { value: "개인", label: "개인", dot: "bg-sage-400" },
-  { value: "공부", label: "공부", dot: "bg-dusk-500" },
-];
+const BASE_CATEGORIES = ["업무", "개인", "공부"];
 
 const WEEKDAY_LETTERS = ["월", "화", "수", "목", "금", "토", "일"];
 
@@ -33,11 +29,12 @@ function dateLabel(date: string | null): string {
 
 export function ProjectsTab() {
   const { data, update, setRoutineCount, create } = useData();
-  const { settings, set: setSetting } = useSettings();
+  const { settings, set: setSetting, addCategory } = useSettings();
   const { focus, clearFocus } = useUi();
 
   const [view, setView] = useState<ProjectView>("tracks");
-  const [mode, setMode] = useState<ModeFilter>("now");
+  // A6: 전체(all) is the default filter on every device.
+  const [mode, setMode] = useState<ModeFilter>("all");
   const [projectId, setProjectId] = useState<string | null>(null);
   const [taskId, setTaskId] = useState<string | null>(null);
   const [taskDraft, setTaskDraft] = useState<{
@@ -84,22 +81,35 @@ export function ProjectsTab() {
   }, [focus, data.projects, clearFocus]);
 
   useEffect(() => {
-    if (mode !== "now" && mode !== "all") setQuickCategory(mode);
+    if (mode !== "now" && mode !== "all" && mode !== "custom") setQuickCategory(mode as TaskCategory);
   }, [mode]);
 
   useTabReset("projects", () => {
     setView("tracks");
-    setMode("now");
+    setMode("all");
     setProjectId(null);
     setTaskId(null);
     setRoutineId(null);
     setQuickTitle("");
   });
 
-  const projects = useMemo(
-    () => data.projects.filter((task) => task.kind === "프로젝트" && !task.trash && matchesMode(mode, task, task.category)),
-    [data.projects, mode],
-  );
+  /**
+   * A6/A7: projects in History leave the working list, NOW and the new-task choices.
+   * A7: 미완료 묶음 → 완료 묶음, oldest first inside each group; `sort` wins when set.
+   */
+  const projects = useMemo(() => {
+    const list = data.projects.filter(
+      (task) => task.kind === "프로젝트" && !task.trash && !task.history && matchesMode(mode, task, task.category),
+    );
+    const done = (task: ProjectTask) => task.status === "완료" || task.status === "취소";
+    return [...list].sort((a, b) => {
+      if (done(a) !== done(b)) return done(a) ? 1 : -1;
+      if (a.sort !== null && b.sort !== null && a.sort !== b.sort) return a.sort - b.sort;
+      if (a.sort !== null && b.sort === null) return -1;
+      if (a.sort === null && b.sort !== null) return 1;
+      return (a.createdAt || "").localeCompare(b.createdAt || "");
+    });
+  }, [data.projects, mode]);
   const tasks = useMemo(
     () => data.projects.filter((task) => task.kind === "할 일" && matchesMode(mode, task, task.category)),
     [data.projects, mode],
@@ -118,6 +128,24 @@ export function ProjectsTab() {
       status: task.status === "완료" ? "미완료" : "완료",
       doneAt: task.status === "완료" ? null : todayISO(),
     });
+
+  /** A7/B7: dragging a card or a routine row rewrites `sort`, so the order survives a reload. */
+  const reorder = (list: ProjectTask[], dragId: string, targetId: string) => {
+    if (!dragId || !targetId || dragId === targetId) return;
+    const ids = list.map((item) => item.id);
+    const from = ids.indexOf(dragId);
+    const to = ids.indexOf(targetId);
+    if (from < 0 || to < 0) return;
+    const next = [...ids];
+    next.splice(from, 1);
+    next.splice(to, 0, dragId);
+    next.forEach((id, index) => {
+      const item = list.find((entry) => entry.id === id);
+      if (item && item.sort !== (index + 1) * 10) {
+        void update("projects", id, { sort: (index + 1) * 10 });
+      }
+    });
+  };
 
   const addQuick = async () => {
     if (!quickTitle.trim() || busy) return;
@@ -187,20 +215,12 @@ export function ProjectsTab() {
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-1.5">
-        {MODES.map((item) => (
-          <button
-            key={item.value}
-            type="button"
-            onClick={() => setMode(item.value)}
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[0.76rem] font-medium transition",
-              mode === item.value ? "bg-ink-900 text-white" : "bg-paper-200 text-ink-500 hover:bg-paper-300/70 hover:text-ink-800",
-            )}
-          >
-            {item.dot ? <span className={cn("h-[6px] w-[6px] rounded-full", item.dot, mode === item.value && "bg-white")} /> : null}
-            {item.label}
-          </button>
-        ))}
+        <ModeChips
+          mode={mode}
+          onChange={setMode}
+          categories={[...BASE_CATEGORIES, ...settings.customCategories.filter((item) => !BASE_CATEGORIES.includes(item))]}
+          onAddCategory={addCategory}
+        />
         <button
           type="button"
           onClick={() => setTaskDraft({ kind: "프로젝트", category: quickCategory })}
@@ -252,12 +272,38 @@ export function ProjectsTab() {
                 ? children
                     .filter((task) => task.status === "완료")
                     .sort((a, b) => (b.doneAt ?? "").localeCompare(a.doneAt ?? ""))
-                    .slice(0, 2)
+                    .slice(0, settings.projectCompletedPreview)
                 : [];
               const last = [...children].sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""))[0];
               const tone = taskTone(project.category);
               return (
-                <article key={project.id} className="flex min-h-[11rem] flex-col rounded-2xl border border-paper-300 px-3 py-3 transition hover:border-paper-400">
+                <article
+                  key={project.id}
+                  onDragOver={(event) => {
+                    if (event.dataTransfer.types.includes("text/diary-task") || event.dataTransfer.types.includes("text/diary-project")) event.preventDefault();
+                  }}
+                  onDrop={(event) => {
+                    const taskDrag = event.dataTransfer.getData("text/diary-task");
+                    if (taskDrag) {
+                      event.preventDefault();
+                      // B6: only the relation changes; the task's own content is preserved.
+                      void update("projects", taskDrag, { projectIds: [project.id], category: project.category });
+                      return;
+                    }
+                    const projectDrag = event.dataTransfer.getData("text/diary-project");
+                    if (projectDrag) {
+                      event.preventDefault();
+                      reorder(projects, projectDrag, project.id);
+                    }
+                  }}
+                  draggable
+                  onDragStart={(event) => {
+                    if (event.dataTransfer.types.includes("text/diary-task")) return;
+                    event.dataTransfer.setData("text/diary-project", project.id);
+                    event.dataTransfer.effectAllowed = "move";
+                  }}
+                  className="flex min-h-[11rem] flex-col rounded-2xl border border-paper-300 px-3 py-3 transition hover:border-paper-400"
+                >
                   <header className="flex items-start gap-2">
                     <span className={cn("flex h-7 w-7 flex-none items-center justify-center rounded-full text-[0.8rem]", tone.soft)}>
                       {projectEmoji(project.id, project.category)}
@@ -341,15 +387,44 @@ export function ProjectsTab() {
                     </header>
 
                     <div className="mt-2 space-y-2">
-                      {items.map((routine, index) => (
-                        <RoutineWeekRow
+                      {[...items]
+                        .sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0) || a.createdAt.localeCompare(b.createdAt))
+                        .slice(0, 3)
+                        .map((routine, index) => (
+                        <div
                           key={routine.id}
-                          routine={routine}
-                          toneIndex={index}
-                          routines={data.routines}
-                          onOpen={() => setRoutineId(routine.id)}
-                          onCount={(date, count) => void setRoutineCount(routine, date, count)}
-                        />
+                          draggable
+                          onDragStart={(event) => {
+                            event.dataTransfer.setData("text/diary-routine", routine.id);
+                            event.dataTransfer.effectAllowed = "move";
+                          }}
+                          onDragOver={(event) => {
+                            if (event.dataTransfer.types.includes("text/diary-routine")) event.preventDefault();
+                          }}
+                          onDrop={(event) => {
+                            const id = event.dataTransfer.getData("text/diary-routine");
+                            if (!id || id === routine.id) return;
+                            event.preventDefault();
+                            const ordered = [...items].sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0) || a.createdAt.localeCompare(b.createdAt));
+                            const ids = ordered.map((item) => item.id);
+                            const from = ids.indexOf(id);
+                            const to = ids.indexOf(routine.id);
+                            if (from < 0 || to < 0) return;
+                            ids.splice(from, 1);
+                            ids.splice(to, 0, id);
+                            ids.forEach((routineId, position) => {
+                              void update("routines", routineId, { sort: (position + 1) * 10 });
+                            });
+                          }}
+                        >
+                          <RoutineWeekRow
+                            routine={routine}
+                            toneIndex={index}
+                            routines={data.routines}
+                            onOpen={() => setRoutineId(routine.id)}
+                            onCount={(date, count) => void setRoutineCount(routine, date, count)}
+                          />
+                        </div>
                       ))}
                     </div>
 
@@ -391,7 +466,7 @@ export function ProjectsTab() {
           onOpenRoutine={setRoutineId}
           onRestoreTask={(task) => void update("projects", task.id, { status: "미완료", doneAt: null })}
           onRestoreRoutine={(routine) => void update("routines", routine.id, { history: false })}
-          onRestoreProject={(project) => void update("projects", project.id, { status: "미완료" })}
+          onRestoreProject={(project) => void update("projects", project.id, { status: "미완료", history: false })}
         />
       ) : null}
 
@@ -438,11 +513,21 @@ function TaskLine({
   onToggle: () => void;
   onOpen: () => void;
 }) {
+  const { update } = useData();
   const done = task.status === "완료";
   const priority = priorityOf(task);
   const tone = taskTone(task.category);
   return (
-    <li className="flex items-start gap-1.5">
+    <li
+      className="flex items-start gap-1.5"
+      draggable
+      onDragStart={(event) => {
+        // B6: dragging an inbox task only carries its id — the text, 기타 and body stay intact.
+        event.dataTransfer.setData("text/diary-task", task.id);
+        event.dataTransfer.effectAllowed = "move";
+      }}
+      title="끌어서 프로젝트나 사분면으로 옮기기"
+    >
       <button
         type="button"
         onClick={onToggle}
@@ -515,7 +600,7 @@ function RoutineWeekRow({
               disabled={!scheduled}
               onClick={() => onCount(day, done ? 0 : count + 1)}
               className={cn(
-                "flex h-[18px] w-[18px] items-center justify-center rounded-full text-[0.56rem] leading-none transition",
+                "relative flex h-[18px] w-[18px] items-center justify-center rounded-full text-[0.56rem] leading-none transition",
                 done
                   ? cn(tone.solid, "font-semibold text-white")
                   : scheduled
@@ -523,7 +608,12 @@ function RoutineWeekRow({
                     : "bg-transparent text-ink-300/50",
               )}
             >
-              {label}
+              <span>{label}</span>
+              {count > 0 && !done ? (
+                <span className="absolute -right-0.5 -top-0.5 rounded-full bg-ink-900 px-[3px] text-[0.44rem] font-semibold leading-[0.7rem] text-white">
+                  {count}
+                </span>
+              ) : null}
             </button>
           );
         })}
@@ -547,6 +637,7 @@ function PriorityView({
   onToggle: (task: ProjectTask) => void;
   onCreateTask: (category: TaskCategory, urgent: boolean, important: boolean) => void;
 }) {
+  const { update } = useData();
   const open = tasks.filter((task) => task.status !== "완료" && task.status !== "취소");
   const quadrants = [
     { key: "do", label: "긴급·중요", urgent: true, important: true },
@@ -560,7 +651,19 @@ function PriorityView({
   const card = (quadrant: (typeof quadrants)[number]) => {
     const items = open.filter((task) => task.urgent === quadrant.urgent && task.important === quadrant.important);
     return (
-      <section className="min-h-[10.5rem] rounded-xl border border-paper-300 px-3 py-2.5">
+      <section
+        onDragOver={(event) => {
+          if (event.dataTransfer.types.includes("text/diary-task")) event.preventDefault();
+        }}
+        onDrop={(event) => {
+          const id = event.dataTransfer.getData("text/diary-task");
+          if (!id) return;
+          event.preventDefault();
+          // B6: a quadrant drop changes 긴급·중요 only.
+          void update("projects", id, { urgent: quadrant.urgent, important: quadrant.important });
+        }}
+        className="min-h-[10.5rem] rounded-xl border border-paper-300 px-3 py-2.5"
+      >
         <header className="flex items-baseline gap-1.5">
           <h3 className={cn("rounded px-1 text-[0.78rem] font-semibold leading-5", PRIORITY_TONES[quadrant.label].badge)}>
             {quadrant.label}
@@ -572,6 +675,8 @@ function PriorityView({
           {items.map((task) => {
             const project = projectOf(task);
             const tone = taskTone(project?.category ?? task.category);
+            // A7: no 긴급/중요 and not in the inbox — it has not been classified yet.
+            const unclassified = !task.urgent && !task.important && task.projectIds.length === 0;
             return (
               <li key={task.id} className="flex items-start gap-1.5">
                 <button
@@ -585,6 +690,9 @@ function PriorityView({
                 <button type="button" onClick={() => onOpenTask(task.id)} className="min-w-0 flex-1 text-left">
                   <span className="flex items-baseline gap-1.5">
                     <span className="truncate text-[0.78rem] text-ink-800">{task.title}</span>
+                    {unclassified ? (
+                      <span className="flex-none rounded bg-paper-200 px-1 text-[0.58rem] font-medium leading-4 text-ink-500">분류 전</span>
+                    ) : null}
                     {project ? (
                       <span className={cn("flex-none text-[0.64rem]", tone.text)}>{project.title}</span>
                     ) : null}

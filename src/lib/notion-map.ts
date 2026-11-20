@@ -11,6 +11,7 @@ import type {
   CalendarEvent,
   CalendarCategory,
   CalendarKind,
+  ExtraProperty,
   ProjectTask,
   RichTextSpan,
   Routine,
@@ -96,8 +97,10 @@ function readRelation(props: Props, name: string): string[] {
 function readFiles(props: Props, name: string): string[] {
   const value = (prop(props, name) as { files?: { name?: string; type?: string; external?: { url?: string }; file?: { url?: string } }[] } | undefined)?.files;
   if (!Array.isArray(value)) return [];
+  // A9 bug fix: the old order returned the file name instead of its URL, so a saved
+  // photo opened as an empty link. URL first, name only as a last resort.
   return value
-    .map((f) => f.name ?? f.external?.url ?? f.file?.url ?? "")
+    .map((f) => f.external?.url ?? f.file?.url ?? f.name ?? "")
     .filter(Boolean);
 }
 
@@ -130,6 +133,91 @@ function readDate(props: Props, name: string): DateValue {
   const start = splitNotionDate(value.start);
   const end = splitNotionDate(value.end ?? null);
   return { date: start.date, time: start.time, endDate: end.date, endTime: end.time };
+}
+
+/* ── B2: properties the app was not written against ── */
+
+const KNOWN: Record<string, string[]> = {
+  calendar: ["제목", "유형", "분류", "날짜", "완료", "취소", "취소 사유", "취소 시각", "기타", "NOW 숨김", "즐겨찾기", "휴지통", "주간 키", "작성 기준일", "연결 프로젝트", "정렬"],
+  projects: ["제목", "유형", "분류", "상태", "날짜", "마감일", "완료일", "확인일", "긴급", "중요", "NOW 숨김", "History", "휴지통", "기타", "대기 대상", "대기 내용", "취소 사유", "취소 시각", "반복 묶음 ID", "연결 프로젝트", "정렬"],
+  routines: ["제목", "유형", "분류", "날짜", "반복 요일", "목표 횟수", "실행 횟수", "한 번의 양", "단위", "NOW 숨김", "History", "휴지통", "연결 루틴", "정렬"],
+  binder: ["제목", "유형", "날짜", "링크", "태그", "즐겨찾기", "아카이브 표시", "휴지통", "기록 데이터", "사진", "연결 프로젝트", "정렬"],
+  archive: ["제목", "유형", "날짜", "작성 기준일", "별점", "링크", "태그", "즐겨찾기", "휴지통", "기록 데이터", "사진", "연결 프로젝트", "정렬"],
+};
+
+const EXTRA_TYPES = new Set(["rich_text", "title", "checkbox", "select", "multi_select", "date", "number", "url", "formula", "status"]);
+
+/** Import bookkeeping and Notion's own timestamps are not user-facing fields (see Phase 4 report). */
+const INTERNAL = new Set([
+  "원본 ID",
+  "가져온 시각",
+  "가져온 원본",
+  "원본 분류",
+  "원본 수정시각",
+  "재확인 원본",
+  "수정일",
+  "작성일",
+  "기록 데이터",
+]);
+
+export function readExtraProperties(resource: keyof typeof KNOWN, props: Props): ExtraProperty[] {
+  const known = new Set(KNOWN[resource] ?? []);
+  const out: ExtraProperty[] = [];
+  for (const [name, raw] of Object.entries(props)) {
+    if (known.has(name) || INTERNAL.has(name)) continue;
+    const type = typeof raw?.type === "string" ? (raw.type as string) : "other";
+    if (!EXTRA_TYPES.has(type)) continue;
+    const value = readExtraValue(type, raw);
+    if (type === "formula") {
+      const formula = (raw as { formula?: { type?: string } }).formula;
+      out.push({ name, type: `${type}:${formula?.type ?? "string"}`, readOnly: true, value });
+    } else {
+      out.push({ name, type, readOnly: false, value });
+    }
+  }
+  return out;
+}
+
+function readExtraValue(type: string, raw: NotionProperty): string | number | boolean | string[] | null {
+  switch (type) {
+    case "title":
+      return plainText((raw as { title?: unknown }).title);
+    case "rich_text":
+      return plainText((raw as { rich_text?: unknown }).rich_text);
+    case "checkbox":
+      return Boolean((raw as { checkbox?: boolean }).checkbox);
+    case "select":
+    case "status":
+      return ((raw as { select?: { name?: string } | null; status?: { name?: string } | null }).select ??
+        (raw as { status?: { name?: string } | null }).status)?.name ?? null;
+    case "multi_select":
+      return ((raw as { multi_select?: { name?: string }[] }).multi_select ?? []).map((v) => v.name ?? "").filter(Boolean);
+    case "date": {
+      const date = (raw as { date?: { start?: string; end?: string | null } | null }).date;
+      if (!date?.start) return null;
+      const start = splitNotionDate(date.start);
+      const end = date.end ? splitNotionDate(date.end) : null;
+      return end?.date && end.date !== start.date ? `${start.date}~${end.date}` : start.date;
+    }
+    case "number":
+      return typeof (raw as { number?: number | null }).number === "number" ? (raw as { number: number }).number : null;
+    case "url":
+      return ((raw as { url?: string | null }).url ?? null) as string | null;
+    case "formula": {
+      const formula = (raw as { formula?: Record<string, unknown> }).formula ?? {};
+      const kind = typeof formula.type === "string" ? (formula.type as string) : "string";
+      const value = formula[kind];
+      if (kind === "number" && typeof value === "number") return value;
+      if (kind === "boolean") return Boolean(value);
+      if (kind === "date") {
+        const date = value as { start?: string } | null;
+        return date?.start ? splitNotionDate(date.start).date : null;
+      }
+      return typeof value === "string" ? value : null;
+    }
+    default:
+      return null;
+  }
 }
 
 /* ────────────────────────────── writers ────────────────────────────── */
@@ -178,6 +266,20 @@ const checkbox = (value: boolean | undefined) => ({ checkbox: Boolean(value) });
 const number = (value: number | null | undefined) => ({ number: typeof value === "number" && Number.isFinite(value) ? value : null });
 const relation = (ids: string[] | undefined) => ({ relation: (ids ?? []).filter(Boolean).map((id) => ({ id })) });
 const url = (value: string | undefined) => ({ url: value && value.trim() ? value.trim() : null });
+/** A9: photos are stored as external files pointing at the pasted URL. */
+const files = (urls: string[]) => ({
+  files: urls
+    // Notion stores external files by URL; a browser-only data: preview cannot be saved there.
+    .filter((value) => value && value.trim() && /^https?:\/\//i.test(value.trim()))
+    .slice(0, 20)
+    .map((value) => ({ name: photoName(value), type: "external", external: { url: value.trim() } })),
+});
+
+function photoName(value: string): string {
+  const clean = value.split("?")[0] ?? value;
+  const tail = clean.split("/").filter(Boolean).pop() ?? "photo";
+  return decodeURIComponent(tail).slice(0, 90) || "photo";
+}
 
 function withTime(date: string, time: string | null | undefined): string {
   return time ? `${date}T${time}:00.000+09:00` : date;
@@ -206,7 +308,34 @@ const strArray = (patch: Patch, key: string): string[] => {
 
 /* ────────────────────────────── mappers ────────────────────────────── */
 
-function baseOf(page: NotionPage, props: Props) {
+/** B2: writes a value into a property the schema named dynamically. */
+function extraPropertyValue(type: string, value: unknown): Record<string, unknown> | null {
+  switch (type.split(":")[0]) {
+    case "rich_text":
+    case "title":
+      return type.startsWith("title") ? title(typeof value === "string" ? value : "") : richText(typeof value === "string" ? value : "");
+    case "checkbox":
+      return checkbox(value === true);
+    case "select":
+      return select(typeof value === "string" && value ? value : null);
+    case "multi_select":
+      return multiSelect(Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : []);
+    case "date": {
+      const raw = typeof value === "string" ? value : "";
+      if (!raw) return { date: null };
+      const [start, end] = raw.split("~");
+      return { date: { start: start?.slice(0, 10), ...(end ? { end: end.slice(0, 10) } : {}) } };
+    }
+    case "number":
+      return { number: typeof value === "number" && Number.isFinite(value) ? value : null };
+    case "url":
+      return { url: typeof value === "string" && value.trim() ? value.trim() : null };
+    default:
+      return null;
+  }
+}
+
+function baseOf(page: NotionPage, props: Props, resource: keyof typeof KNOWN) {
   return {
     id: page.id,
     url: page.url ?? page.id.replace(/-/g, ""),
@@ -220,6 +349,7 @@ function baseOf(page: NotionPage, props: Props) {
     projectIds: readRelation(props, "연결 프로젝트"),
     createdAt: page.created_time ?? "",
     updatedAt: page.last_edited_time ?? "",
+    extra: readExtraProperties(resource, props),
   };
 }
 
@@ -228,7 +358,7 @@ export function mapCalendar(page: NotionPage): CalendarEvent {
   const when = readDate(props, "날짜");
   const canceled = readCheckbox(props, "취소");
   return {
-    ...baseOf(page, props),
+    ...baseOf(page, props, "calendar"),
     kind: (readSelect(props, "유형") ?? "일정") as CalendarKind,
     category: (readSelect(props, "분류") ?? "개인") as CalendarCategory,
     date: when.date ?? "",
@@ -250,7 +380,7 @@ export function mapTask(page: NotionPage): ProjectTask {
   const when = readDate(props, "날짜");
   const due = readDate(props, "마감일");
   return {
-    ...baseOf(page, props),
+    ...baseOf(page, props, "projects"),
     kind: (readSelect(props, "유형") ?? "할 일") as TaskKind,
     category: (readSelect(props, "분류") ?? "개인") as TaskCategory,
     status: (readStatus(props, "상태") ?? "미완료") as TaskStatus,
@@ -273,7 +403,7 @@ export function mapRoutine(page: NotionPage): Routine {
   const props = page.properties;
   const when = readDate(props, "날짜");
   return {
-    ...baseOf(page, props),
+    ...baseOf(page, props, "routines"),
     kind: (readSelect(props, "유형") ?? "루틴") as RoutineKind,
     category: (readSelect(props, "분류") ?? "개인") === "공부" ? "공부" : "개인",
     date: when.date,
@@ -291,9 +421,11 @@ export function mapBinder(page: NotionPage): BinderEntry {
   const props = page.properties;
   const when = readDate(props, "날짜");
   return {
-    ...baseOf(page, props),
+    ...baseOf(page, props, "binder"),
     kind: (readSelect(props, "유형") ?? "일기") as BinderKind,
     date: when.date,
+    endDate: when.endDate,
+    endTime: when.endTime,
     link: readUrl(props, "링크"),
     tags: readMultiSelect(props, "태그"),
     archiveFlag: readCheckbox(props, "아카이브 표시"),
@@ -306,9 +438,11 @@ export function mapArchive(page: NotionPage): ArchiveEntry {
   const props = page.properties;
   const when = readDate(props, "날짜");
   return {
-    ...baseOf(page, props),
+    ...baseOf(page, props, "archive"),
     kind: (readSelect(props, "유형") ?? "메모") as ArchiveKind,
     date: when.date ?? readDate(props, "작성 기준일").date,
+    endDate: when.endDate,
+    endTime: when.endTime,
     baseDate: readDate(props, "작성 기준일").date,
     rating: readNumber(props, "별점"),
     link: readUrl(props, "링크"),
@@ -388,23 +522,36 @@ export function buildProperties(resource: keyof typeof mappers, patch: Patch): R
   if (resource === "binder") {
     if (has(patch, "kind")) out["유형"] = select(str(patch, "kind", "일기"));
     if (has(patch, "date")) out["날짜"] = dateValue(patch["date"] as string | null);
+    if (has(patch, "endDate") || has(patch, "endTime")) {
+      const start = str(patch, "date");
+      const endDate = typeof patch["endDate"] === "string" ? (patch["endDate"] as string) : null;
+      const endTime = typeof patch["endTime"] === "string" ? (patch["endTime"] as string) : null;
+      out["날짜"] = start ? { date: { start, ...(endDate && endDate !== start ? { end: withTime(endDate, endTime) } : endTime ? { end: withTime(start, endTime) } : {}) } } : { date: null };
+    }
     if (has(patch, "link")) out["링크"] = url(str(patch, "link"));
     if (has(patch, "tags")) out["태그"] = multiSelect(strArray(patch, "tags"));
     if (has(patch, "archiveFlag")) out["아카이브 표시"] = checkbox(bool(patch, "archiveFlag"));
     if (has(patch, "body")) out["기록 데이터"] = richText(str(patch, "body"));
+    if (has(patch, "photos")) out["사진"] = files(strArray(patch, "photos"));
   }
 
   if (resource === "archive") {
     if (has(patch, "kind")) out["유형"] = select(str(patch, "kind", "메모"));
-    if (has(patch, "date")) {
-      out["날짜"] = dateValue(patch["date"] as string | null);
-      if (!has(patch, "baseDate")) out["작성 기준일"] = dateValue(patch["date"] as string | null);
+    if (has(patch, "date") || has(patch, "endDate") || has(patch, "endTime")) {
+      const start = str(patch, "date");
+      const endDate = typeof patch["endDate"] === "string" ? (patch["endDate"] as string) : null;
+      const endTime = typeof patch["endTime"] === "string" ? (patch["endTime"] as string) : null;
+      out["날짜"] = start
+        ? { date: { start, ...(endDate && endDate !== start ? { end: withTime(endDate, endTime || (patch["endTime"] as string | null)) } : endTime ? { end: withTime(start, endTime) } : {}) } }
+        : { date: null };
+      if (!has(patch, "baseDate")) out["작성 기준일"] = dateValue(start || null);
     }
     if (has(patch, "baseDate")) out["작성 기준일"] = dateValue(patch["baseDate"] as string | null);
     if (has(patch, "rating")) out["별점"] = number(numOrNull(patch, "rating"));
     if (has(patch, "link")) out["링크"] = url(str(patch, "link"));
     if (has(patch, "tags")) out["태그"] = multiSelect(strArray(patch, "tags"));
     if (has(patch, "body")) out["기록 데이터"] = richText(str(patch, "body"));
+    if (has(patch, "photos")) out["사진"] = files(strArray(patch, "photos"));
   }
 
   // Shared flags (skipped silently for databases without the property).
@@ -423,8 +570,7 @@ export function buildProperties(resource: keyof typeof mappers, patch: Patch): R
     binder: ["trash", "favorite", "sort", "projectIds"],
     archive: ["trash", "favorite", "sort", "projectIds"],
   };
-  for (const key of supports[resource] ?? []) {
-    const propertyName = shared[key];
+  for (const key of supports[resource] ?? []) {    const propertyName = shared[key];
     if (!propertyName || !has(patch, key)) continue;
     if (key === "hidden" || key === "trash" || key === "favorite") {
       out[propertyName] = checkbox(bool(patch, key));
@@ -434,6 +580,15 @@ export function buildProperties(resource: keyof typeof mappers, patch: Patch): R
       out[propertyName] = number(numOrNull(patch, "sort"));
     } else if (key === "projectIds") {
       out[propertyName] = relation(strArray(patch, "projectIds"));
+    }
+  }
+
+  // B2: properties the schema added later (text · checkbox · select · date · number · url).
+  if (Array.isArray(patch["extraEntries"])) {
+    for (const entry of patch["extraEntries"] as { name?: string; type?: string; value?: unknown }[]) {
+      if (!entry?.name || !entry.type) continue;
+      const built = extraPropertyValue(entry.type, entry.value);
+      if (built) out[entry.name] = built;
     }
   }
 
