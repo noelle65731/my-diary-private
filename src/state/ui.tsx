@@ -9,8 +9,7 @@ import {
   useRef,
   useState,
   type ReactNode,
-} from "react";
-import type { Resource } from "@/lib/types";
+} from "react";import type { Resource } from "@/lib/types";
 import { uid } from "@/lib/utils";
 
 export type TabKey = "calendar" | "projects" | "binder" | "archive";
@@ -69,6 +68,18 @@ export function UiProvider({ children }: { children: ReactNode }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [pendingBinderDate, setPendingBinderDate] = useState<string | null>(null);
+
+  // A4: a layer unwind can re-render the shell; the tab the user was on is kept.
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem("my-diary:tab");
+      if (stored === "calendar" || stored === "projects" || stored === "binder" || stored === "archive") {
+        setTabState(stored);
+      }
+    } catch {
+      /* private mode */
+    }
+  }, []);
 
   const notify = useCallback((message: string, tone: Toast["tone"] = "info") => {
     const id = uid("toast");

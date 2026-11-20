@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { formatShort, todayISO, weekdayKo } from "@/lib/date";
 import { taskTone } from "@/components/common/tone";
 import { CheckIcon, FlagIcon } from "@/components/icons";
+import { RichText } from "@/components/common/rich";
 
 export function TaskRow({
   task,
@@ -39,6 +40,15 @@ export function TaskRow({
           {task.urgent ? <FlagIcon size={11} className="flex-none text-rose-400" /> : null}
           <span className="truncate">{task.title}</span>
         </span>
+        {/* A5: '기타' keeps its own line breaks and partial links in the project list. */}
+        {!compact && task.memo ? (
+          <RichText
+            spans={task.memoRich}
+            value={task.memo}
+            links={false}
+            className="mt-0.5 line-clamp-2 block text-[0.68rem] leading-snug text-ink-400"
+          />
+        ) : null}
         {!compact ? (
           <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[0.62rem] text-ink-400">
             <span className={cn("chip py-0", taskTone(task.category).bg, taskTone(task.category).text)}>{task.category}</span>

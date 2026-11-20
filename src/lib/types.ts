@@ -18,6 +18,14 @@ export type RoutineKind = "루틴" | "날짜별 체크";
 export type BinderKind = "일기" | "노트";
 export type ArchiveKind = "메모" | "책" | "영화" | "레퍼런스" | "읽을거리";
 
+export interface RichTextSpan {
+  text: string;
+  bold?: boolean;
+  italic?: boolean;
+  /** 부분 링크 */
+  href?: string | null;
+}
+
 export interface BaseItem {
   id: string;
   url: string;
@@ -28,8 +36,10 @@ export interface BaseItem {
   trash: boolean;
   /** 즐겨찾기 */
   favorite: boolean;
-  /** 기타 (부제 · 메모) */
+  /** 기타 — Notion `rich_text` 속성의 평문 */
   memo: string;
+  /** 기타 — 굵게·기울임·부분 링크·줄바꿈을 그대로 담은 서식 구간 */
+  memoRich?: RichTextSpan[];
   sort: number | null;
   projectIds: string[];
   createdAt: string;

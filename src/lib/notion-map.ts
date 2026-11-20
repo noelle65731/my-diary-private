@@ -12,12 +12,14 @@ import type {
   CalendarCategory,
   CalendarKind,
   ProjectTask,
+  RichTextSpan,
   Routine,
   RoutineKind,
   TaskCategory,
   TaskKind,
   TaskStatus,
 } from "./types";
+import { coerceSpans, normalizeSpans } from "./richtext";
 import type { NotionPage, NotionProperty, NotionRichText } from "./notion";
 
 type Props = Record<string, NotionProperty>;
@@ -42,6 +44,20 @@ function readTitle(props: Props, name = "제목"): string {
 
 function readRichText(props: Props, name: string): string {
   return plainText((prop(props, name) as { rich_text?: unknown } | undefined)?.rich_text);
+}
+
+/** A5: keeps Notion's per-span formatting (bold / italic / 부분 링크) and line breaks. */
+function readRichSpans(props: Props, name: string): RichTextSpan[] {
+  const items = (prop(props, name) as { rich_text?: unknown } | undefined)?.rich_text;
+  if (!Array.isArray(items)) return [];
+  return normalizeSpans(
+    (items as NotionRichText[]).map((item) => ({
+      text: item.plain_text ?? item.text?.content ?? "",
+      ...(item.annotations?.bold ? { bold: true } : {}),
+      ...(item.annotations?.italic ? { italic: true } : {}),
+      ...(item.href ?? item.text?.link?.url ? { href: item.href ?? item.text?.link?.url ?? null } : {}),
+    })),
+  );
 }
 
 function readSelect(props: Props, name: string): string | null {
@@ -129,6 +145,29 @@ function chunks(text: string): { type: "text"; text: { content: string } }[] {
 
 const title = (value: string) => ({ title: chunks(value).map((c) => ({ type: "text", text: { content: c.text.content } })) });
 const richText = (value: string) => ({ rich_text: chunks(value) });
+
+/**
+ * A5: writes the span list back as Notion `rich_text` items, keeping partial links,
+ * bold/italic and newlines. Notion caps one item's content at 2000 characters.
+ */
+const richTextFromSpans = (spans: RichTextSpan[] | undefined) => {
+  const items: Record<string, unknown>[] = [];
+  for (const span of coerceSpans(spans ?? [])) {
+    const annotations = {
+      ...(span.bold ? { bold: true } : {}),
+      ...(span.italic ? { italic: true } : {}),
+    };
+    for (let i = 0; i < span.text.length; i += 1900) {
+      const content = span.text.slice(i, i + 1900);
+      items.push({
+        type: "text",
+        text: { content, ...(span.href ? { link: { url: span.href } } : {}) },
+        ...(Object.keys(annotations).length > 0 ? { annotations } : {}),
+      });
+    }
+  }
+  return { rich_text: items };
+};
 const select = (value: string | null | undefined) => ({ select: value ? { name: value } : null });
 const status = (value: string | null | undefined) => ({ status: value ? { name: value } : null });
 const multiSelect = (values: string[] | undefined) => ({ multi_select: (values ?? []).filter(Boolean).map((name) => ({ name })) });
@@ -142,6 +181,12 @@ const url = (value: string | undefined) => ({ url: value && value.trim() ? value
 
 function withTime(date: string, time: string | null | undefined): string {
   return time ? `${date}T${time}:00.000+09:00` : date;
+}
+
+/** '기타' keeps formatting when the client sends `memoRich`; plain `memo` still works. */
+function memoValue(patch: Patch): Record<string, unknown> {
+  if (has(patch, "memoRich")) return richTextFromSpans(patch["memoRich"] as RichTextSpan[]);
+  return richText(str(patch, "memo"));
 }
 
 const has = (patch: Patch, key: string) => Object.prototype.hasOwnProperty.call(patch, key);
@@ -170,6 +215,7 @@ function baseOf(page: NotionPage, props: Props) {
     trash: readCheckbox(props, "휴지통"),
     favorite: readCheckbox(props, "즐겨찾기"),
     memo: readRichText(props, "기타"),
+    memoRich: readRichSpans(props, "기타"),
     sort: readNumber(props, "정렬"),
     projectIds: readRelation(props, "연결 프로젝트"),
     createdAt: page.created_time ?? "",
@@ -303,7 +349,7 @@ export function buildProperties(resource: keyof typeof mappers, patch: Patch): R
     if (has(patch, "canceled")) out["취소"] = checkbox(bool(patch, "canceled"));
     if (has(patch, "cancelReason")) out["취소 사유"] = richText(str(patch, "cancelReason"));
     if (has(patch, "cancelAt")) out["취소 시각"] = dateValue(patch["cancelAt"] as string | null);
-    if (has(patch, "memo")) out["기타"] = richText(str(patch, "memo"));
+    if (has(patch, "memo") || has(patch, "memoRich")) out["기타"] = memoValue(patch);
     if (has(patch, "weekKey")) out["주간 키"] = richText(str(patch, "weekKey"));
     if (has(patch, "baseDate")) out["작성 기준일"] = dateValue(patch["baseDate"] as string | null);
   }
@@ -383,7 +429,7 @@ export function buildProperties(resource: keyof typeof mappers, patch: Patch): R
     if (key === "hidden" || key === "trash" || key === "favorite") {
       out[propertyName] = checkbox(bool(patch, key));
     } else if (key === "memo") {
-      out[propertyName] = richText(str(patch, "memo"));
+      out[propertyName] = memoValue(patch);
     } else if (key === "sort") {
       out[propertyName] = number(numOrNull(patch, "sort"));
     } else if (key === "projectIds") {

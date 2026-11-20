@@ -7,24 +7,48 @@ import { CheckIcon, ChevronDownIcon, StarIcon, XIcon } from "@/components/icons"
 
 /* ─────────────────────────── overlay plumbing ─────────────────────────── */
 
-const escapeStack: Array<() => void> = [];
+/**
+ * A4: an overlay stack with a single history entry.
+ *
+ * `이전`/바깥 클릭 move one layer back (the component calls onBack), the X closes
+ * every layer, and the browser's back gesture closes exactly one layer.
+ */
+interface Layer {
+  close: () => void;
+}
+
+const layers: Layer[] = [];
 let scrollLocks = 0;
 let listening = false;
+let unwinding = false;
+
+const hasLayerState = (): boolean =>
+  Boolean(typeof window !== "undefined" && (window.history.state as { diaryLayer?: boolean } | null)?.diaryLayer);
 
 function ensureEscapeListener() {
   if (listening || typeof window === "undefined") return;
   listening = true;
+
   window.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
-    const handler = escapeStack[escapeStack.length - 1];
-    if (handler) {
+    const top = layers[layers.length - 1];
+    if (top) {
       event.preventDefault();
-      handler();
+      top.close();
     }
+  });
+
+  window.addEventListener("popstate", () => {
+    if (hasLayerState()) return;
+    const top = layers[layers.length - 1];
+    if (!top) return;
+    // Keep one entry for the layers that stay open after this step back.
+    if (layers.length > 1) window.history.pushState({ ...(window.history.state ?? {}), diaryLayer: true }, "");
+    top.close();
   });
 }
 
-function useOverlay(open: boolean, onClose: () => void) {
+export function useOverlay(open: boolean, onClose: () => void) {
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
 
@@ -32,42 +56,33 @@ function useOverlay(open: boolean, onClose: () => void) {
     if (!open || typeof window === "undefined") return;
     ensureEscapeListener();
 
-    const handler = () => closeRef.current();
-    escapeStack.push(handler);
+    const layer: Layer = { close: () => closeRef.current() };
+    layers.push(layer);
     scrollLocks += 1;
     document.body.style.overflow = "hidden";
-
-    const layerToken = `diaryLayer-${Math.random().toString(36).slice(2)}`;
-    window.history.pushState({ diaryLayer: layerToken }, "");
-    let active = true;
-    const onPop = () => {
-      if (!active) return;
-      active = false;
-      closeRef.current();
-    };
-    window.addEventListener("popstate", onPop);
+    if (!hasLayerState()) window.history.pushState({ ...(window.history.state ?? {}), diaryLayer: true }, "");
 
     return () => {
-      window.removeEventListener("popstate", onPop);
-      const index = escapeStack.indexOf(handler);
-      if (index >= 0) escapeStack.splice(index, 1);
+      const index = layers.indexOf(layer);
+      if (index >= 0) layers.splice(index, 1);
       scrollLocks = Math.max(0, scrollLocks - 1);
       if (scrollLocks === 0) document.body.style.overflow = "";
-      if (active) {
-        active = false;
-        // Defer the unwind so a StrictMode remount can push its own layer first; only the
-        // layer that is still on top is unwound.
-        window.setTimeout(() => {
-          if ((window.history.state as { diaryLayer?: string } | null)?.diaryLayer === layerToken) {
-            window.history.back();
-          }
-        }, 0);
-      }
+      // Only the last layer removes the shared entry; a StrictMode remount lands first.
+      window.setTimeout(() => {
+        if (unwinding) return;
+        if (layers.length === 0 && hasLayerState()) {
+          unwinding = true;
+          window.history.back();
+          window.setTimeout(() => {
+            unwinding = false;
+          }, 80);
+        }
+      }, 0);
     };
   }, [open]);
 }
 
-function Portal({ children }: { children: ReactNode }) {
+export function Portal({ children }: { children: ReactNode }) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   if (!mounted) return null;
@@ -151,26 +166,36 @@ export interface DrawerProps {
   children: ReactNode;
   footer?: ReactNode;
   width?: "md" | "lg";
+  /** A4: a detail open beside the list keeps the list clickable, so its dim layer goes away. */
+  showBackdrop?: boolean;
 }
 
-export function Drawer({ open, onClose, title, subtitle, children, footer, width = "md" }: DrawerProps) {
+export function Drawer({ open, onClose, title, subtitle, children, footer, width = "md", showBackdrop = true }: DrawerProps) {
   useOverlay(open, onClose);
   if (!open) return null;
 
   return (
     <Portal>
-      <div className="fixed inset-0 z-40 flex items-end justify-end sm:items-stretch">
-        <button
-          type="button"
-          aria-label="닫기"
-          onClick={onClose}
-          className="absolute inset-0 animate-fade-in bg-ink-900/20 backdrop-blur-[1px]"
-        />
+      <div
+        className={cn(
+          "fixed inset-0 z-40 flex items-end justify-end sm:items-stretch",
+          !showBackdrop && "pointer-events-none",
+        )}
+      >
+        {showBackdrop ? (
+          <button
+            type="button"
+            aria-label="닫기"
+            onClick={onClose}
+            className="absolute inset-0 animate-fade-in bg-ink-900/20 backdrop-blur-[1px]"
+          />
+        ) : null}
         <div
           role="dialog"
           aria-modal="true"
+          aria-label={typeof title === "string" && title ? title : "목록"}
           className={cn(
-            "relative z-10 flex max-h-[90vh] w-full animate-slide-up flex-col overflow-hidden rounded-t-3xl border border-paper-300 bg-white shadow-lift sm:my-0 sm:max-h-none sm:animate-slide-in-right sm:rounded-none sm:rounded-l-3xl sm:border-y-0 sm:border-r-0",
+            "pointer-events-auto relative z-10 flex max-h-[90vh] w-full animate-slide-up flex-col overflow-hidden rounded-t-3xl border border-paper-300 bg-white shadow-lift sm:my-0 sm:max-h-none sm:animate-slide-in-right sm:rounded-none sm:rounded-l-3xl sm:border-y-0 sm:border-r-0",
             width === "lg" ? "sm:w-[520px]" : "sm:w-[420px]",
           )}
         >
@@ -316,6 +341,7 @@ export function Segmented<T extends string>({
           key={option.value}
           type="button"
           onClick={() => onChange(option.value)}
+          aria-pressed={value === option.value}
           className={cn(
             "rounded-full font-medium transition",
             size === "sm" ? "px-2.5 py-1 text-[0.72rem]" : "px-3 py-1.5 text-[0.8rem]",

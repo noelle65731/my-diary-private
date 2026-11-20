@@ -13,8 +13,11 @@ const V_DATA_SOURCE = "2025-09-03";
 const MAX_ROWS = 4000;
 
 export interface NotionRichText {
+  type?: string;
   plain_text?: string;
-  text?: { content?: string };
+  href?: string | null;
+  annotations?: { bold?: boolean; italic?: boolean; strikethrough?: boolean; underline?: boolean; code?: boolean };
+  text?: { content?: string; link?: { url?: string } | null };
 }
 
 export interface NotionPage {
@@ -217,6 +220,99 @@ export async function archivePage(pageId: string): Promise<void> {
 export interface DatabaseProbe {
   ok: boolean;
   message: string;
+}
+
+/* ─────────────────────── A5: page body (blocks) ─────────────────────── */
+
+export interface NotionBlock {
+  id: string;
+  type: string;
+  has_children?: boolean;
+  archived?: boolean;
+  paragraph?: { rich_text?: NotionRichText[] };
+  [key: string]: unknown;
+}
+
+function blockPlainText(block: NotionBlock): string {
+  const items = block.paragraph?.rich_text ?? [];
+  return items.map((item) => item.plain_text ?? item.text?.content ?? "").join("");
+}
+
+function paragraphBlock(text: string): Record<string, unknown> {
+  const items: Record<string, unknown>[] = [];
+  for (let i = 0; i < Math.max(text.length, 1); i += 1900) {
+    items.push({ type: "text", text: { content: text.slice(i, i + 1900) } });
+  }
+  return { object: "block", type: "paragraph", paragraph: { rich_text: items } };
+}
+
+/** Every direct child block of a page, following `has_more`. */
+export async function listBlockChildren(blockId: string): Promise<NotionBlock[]> {
+  const blocks: NotionBlock[] = [];
+  let cursor: string | null = null;
+  do {
+    const query: string = new URLSearchParams({ page_size: "100", ...(cursor ? { start_cursor: cursor } : {}) }).toString();
+    const body: { results?: NotionBlock[]; has_more?: boolean; next_cursor?: string | null } = await request(
+      `/blocks/${blockId}/children?${query}`,
+    );
+    blocks.push(...(body.results ?? []));
+    cursor = body.has_more ? body.next_cursor ?? null : null;
+  } while (cursor);
+  return blocks;
+}
+
+async function deleteBlock(blockId: string): Promise<void> {
+  await request(`/blocks/${blockId}`, { method: "DELETE" });
+}
+
+async function appendBlocks(pageId: string, children: Record<string, unknown>[]): Promise<void> {
+  for (let i = 0; i < children.length; i += 50) {
+    await request(`/blocks/${pageId}/children`, {
+      method: "PATCH",
+      body: JSON.stringify({ children: children.slice(i, i + 50) }),
+    });
+  }
+}
+
+export interface PageBody {
+  /** Editable text: paragraph blocks joined with newlines. */
+  text: string;
+  /** Block types that stay untouched (toggles, lists, headings, …). */
+  preserved: string[];
+  paragraphCount: number;
+}
+
+/**
+ * Reads a page body. Only top-level `paragraph` blocks are editable text; every
+ * other block (toggle, list, heading, image …) is left untouched by a write.
+ */
+export async function readPageBody(pageId: string): Promise<PageBody> {
+  const blocks = await listBlockChildren(pageId);
+  const paragraphs = blocks.filter((block) => block.type === "paragraph" && !block.archived);
+  const preserved = [...new Set(blocks.filter((block) => block.type !== "paragraph").map((block) => block.type))];
+  const text = paragraphs.map(blockPlainText).join("\n").replace(/\n+$/, "");
+  return { text, preserved, paragraphCount: paragraphs.length };
+}
+
+/**
+ * Replaces the editable paragraphs of a page body.
+ *
+ * Safe by design: existing paragraph blocks are deleted one by one and the new text
+ * is appended as paragraphs; blocks of every other type are never touched, so a
+ * toggle or list inside the page keeps its children and formatting. If the write
+ * fails halfway, the already-added paragraphs remain, so the result is still readable.
+ */
+export async function replacePageBody(pageId: string, text: string): Promise<PageBody> {
+  const before = await readPageBody(pageId);
+  const blocks = await listBlockChildren(pageId);
+  for (const block of blocks) {
+    if (block.type !== "paragraph" || block.archived) continue;
+    await deleteBlock(block.id);
+  }
+  const lines = text.replace(/\r\n/g, "\n").split("\n");
+  while (lines.length > 0 && lines[lines.length - 1]!.trim() === "") lines.pop();
+  if (lines.length > 0) await appendBlocks(pageId, lines.map(paragraphBlock));
+  return { text: lines.join("\n"), preserved: before.preserved, paragraphCount: lines.length };
 }
 
 /**

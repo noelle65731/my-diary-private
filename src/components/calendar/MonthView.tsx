@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { CalendarEvent, ModeFilter, ProjectTask, Routine } from "@/lib/types";
 import { daysInMonth, formatShort, isSameISO, monthMatrix, todayISO, weekdayKo } from "@/lib/date";
 import { holidayName } from "@/lib/holidays";
@@ -19,6 +19,8 @@ interface MonthViewProps {
   showWeekends: boolean;
   /** A3: titles shown per day before the rest folds into `할 일 N` / `+N 더`. */
   dayItems: 3 | 4 | 5;
+  /** Bumped by the calendar tab when an opened detail's X closes every layer. */
+  closeDayListSignal?: number;
   onSelectDay: (day: string) => void;
   onOpenEvent: (id: string) => void;
   onOpenTask: (id: string) => void;
@@ -55,6 +57,7 @@ export function MonthView({
   weekStartsOn,
   showWeekends,
   dayItems,
+  closeDayListSignal = 0,
   onSelectDay,
   onOpenEvent,
   onOpenTask,
@@ -73,6 +76,11 @@ export function MonthView({
 
   /** A day list opened from a cell — the month stays on screen behind it. */
   const [openDay, setOpenDay] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (closeDayListSignal === 0) return;
+    setOpenDay(null);
+  }, [closeDayListSignal]);
 
   const activeEvents = events.filter(
     (event) => event.kind === "일정" && !event.trash && (mode === "all" || !event.hidden),

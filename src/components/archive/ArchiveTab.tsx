@@ -11,6 +11,8 @@ import { archiveTone } from "@/components/common/tone";
 import { ArchiveIcon, ArrowUpRightIcon, PlusIcon, SearchIcon, StarIcon, TrashIcon } from "@/components/icons";
 import { EmptyState, StarRating } from "@/components/common/primitives";
 import { ArchiveEditor } from "@/components/editors/ArchiveEditor";
+import { ArchiveDetail } from "@/components/detail/ArchiveDetail";
+import { RichText } from "@/components/common/rich";
 
 type SortKey = "recent" | "rating" | "title";
 
@@ -247,7 +249,11 @@ export function ArchiveTab() {
                 <div className="mt-1 flex items-start justify-between gap-2">
                   <button type="button" onClick={() => setEditorId(item.id)} className="min-w-0 flex-1 text-left">
                     <p className="line-clamp-2 text-[0.98rem] font-semibold leading-snug tracking-tight text-ink-900">{item.title}</p>
-                    {item.memo ? <p className="mt-0.5 truncate text-[0.74rem] text-ink-400">{item.memo}</p> : null}
+                    {item.memo ? (
+                      <p className="mt-0.5 line-clamp-1 text-[0.74rem] text-ink-400">
+                        <RichText spans={item.memoRich} value={item.memo} links={false} />
+                      </p>
+                    ) : null}
                   </button>
                   <button
                     type="button"
@@ -347,9 +353,18 @@ export function ArchiveTab() {
         </form>
       </div>
 
-      <ArchiveEditor
-        open={editorId !== null || draft !== null}
+      <ArchiveDetail
+        open={editorId !== null}
         archiveId={editorId}
+        onBack={() => setEditorId(null)}
+        onCloseAll={() => {
+          setEditorId(null);
+          setDraft(null);
+        }}
+      />
+
+      <ArchiveEditor
+        open={draft !== null}
         draft={draft ?? undefined}
         onClose={() => {
           setEditorId(null);

@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import { useData } from "@/state/store";
-import { Modal, Segmented, TextArea, TextInput, Toggle } from "@/components/common/primitives";
+import { Modal, Segmented, TextInput, Toggle } from "@/components/common/primitives";
 import { EditorFooter, ErrorNote, ProjectPicker } from "@/components/editors/shared";
+import { MemoEditor } from "@/components/editors/MemoField";
+import { plainOfSpans, spansFromMarkdown } from "@/lib/richtext";
 import { todayISO } from "@/lib/date";
 import { cn } from "@/lib/utils";
 import {
@@ -140,7 +142,10 @@ function TaskEditorInner({
       important: form.important,
       hidden: form.hidden,
       history: form.history,
-      memo: form.memo,
+      ...(() => {
+        const spans = spansFromMarkdown(form.memo);
+        return { memo: plainOfSpans(spans), memoRich: spans };
+      })(),
       waitFor: form.status === "대기 중" ? form.waitFor : "",
       waitNote: form.status === "대기 중" ? form.waitNote : "",
       cancelReason: form.status === "취소" ? form.cancelReason : "",
@@ -260,13 +265,8 @@ function TaskEditorInner({
         </div>
 
         <div>
-          <p className="label">부제 · 메모</p>
-          <TextArea
-            value={form.memo}
-            onChange={(event) => patch("memo", event.target.value)}
-            placeholder="짧은 설명이나 메모"
-            className="min-h-[64px]"
-          />
+          <p className="label">기타</p>
+          <MemoEditor value={form.memo} onChange={(value) => patch("memo", value)} rows={3} />
         </div>
 
         <div className="grid grid-cols-2 gap-2 rounded-xl border border-paper-300/80 bg-paper-50/60 px-3 py-2">

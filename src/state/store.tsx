@@ -26,6 +26,7 @@ import {
   type Routine,
   type StatusPayload,
 } from "@/lib/types";
+import { coerceSpans } from "@/lib/richtext";
 
 type Patch = Record<string, unknown>;
 
@@ -48,6 +49,14 @@ interface DataContextValue {
   destroy: (resource: Resource, id: string) => Promise<void>;
   setRoutineCount: (routine: Routine, date: string, count: number) => Promise<void>;
   findItem: (resource: Resource, id: string) => AnyItem | undefined;
+  /** A5: the Notion page body of one record ('내용'). */
+  fetchBody: (resource: Resource, id: string) => Promise<PageBodyPayload | null>;
+  saveBody: (resource: Resource, id: string, text: string) => Promise<boolean>;
+}
+
+export interface PageBodyPayload {
+  text: string;
+  preserved: string[];
 }
 
 const DataContext = createContext<DataContextValue | null>(null);
@@ -105,6 +114,7 @@ function draftItem(resource: Resource, patch: Patch, id = uid("new")): AnyItem {
     hidden: Boolean(patch["hidden"] ?? defaults.hidden),
     favorite: Boolean(patch["favorite"] ?? defaults.favorite),
     memo: typeof patch["memo"] === "string" ? (patch["memo"] as string) : defaults.memo,
+    memoRich: Array.isArray(patch["memoRich"]) ? coerceSpans(patch["memoRich"]) : undefined,
     sort: typeof patch["sort"] === "number" ? (patch["sort"] as number) : defaults.sort,
     projectIds: Array.isArray(patch["projectIds"]) ? (patch["projectIds"] as string[]) : defaults.projectIds,
   };
@@ -198,6 +208,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
   const errorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Demo mode keeps page bodies in memory; a connected Notion is read and written for real. */
+  const bodyCache = useRef<Record<string, string>>({});
 
   const reportError = useCallback((message: string) => {
     setSaveError(message);
@@ -456,6 +468,48 @@ export function DataProvider({ children }: { children: ReactNode }) {
     [data],
   );
 
+  const fetchBody = useCallback<DataContextValue["fetchBody"]>(
+    async (resource, id) => {
+      const key = `${resource}:${id}`;
+      if (demo) return { text: bodyCache.current[key] ?? "", preserved: [] };
+      try {
+        const result = await requestJson<{ data: PageBodyPayload }>(`/api/notion/${resource}/${id}/blocks`);
+        return { text: result.data?.text ?? "", preserved: result.data?.preserved ?? [] };
+      } catch (error) {
+        reportError(error instanceof Error ? error.message : "내용을 불러오지 못했습니다.");
+        return null;
+      }
+    },
+    [demo, reportError],
+  );
+
+  const saveBody = useCallback<DataContextValue["saveBody"]>(
+    async (resource, id, text) => {
+      const key = `${resource}:${id}`;
+      if (demo) {
+        bodyCache.current[key] = text;
+        setLastSavedAt(Date.now());
+        return true;
+      }
+      setSavingCount((n) => n + 1);
+      try {
+        await requestJson(`/api/notion/${resource}/${id}/blocks`, {
+          method: "PUT",
+          body: JSON.stringify({ text }),
+        });
+        bodyCache.current[key] = text;
+        setLastSavedAt(Date.now());
+        return true;
+      } catch (error) {
+        reportError(error instanceof Error ? error.message : "내용을 저장하지 못했습니다.");
+        return false;
+      } finally {
+        setSavingCount((n) => Math.max(0, n - 1));
+      }
+    },
+    [demo, reportError],
+  );
+
   const value = useMemo<DataContextValue>(
     () => ({
       data,
@@ -476,6 +530,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       destroy,
       setRoutineCount,
       findItem,
+      fetchBody,
+      saveBody,
     }),
     [
       data,
@@ -496,6 +552,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       destroy,
       setRoutineCount,
       findItem,
+      fetchBody,
+      saveBody,
     ],
   );
 

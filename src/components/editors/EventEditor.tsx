@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import { useData } from "@/state/store";
-import { Modal, Segmented, TextArea, TextInput, Toggle } from "@/components/common/primitives";
+import { Modal, Segmented, TextInput, Toggle } from "@/components/common/primitives";
 import { EditorFooter, ErrorNote, ProjectPicker } from "@/components/editors/shared";
+import { MemoEditor } from "@/components/editors/MemoField";
+import { plainOfSpans, spansFromMarkdown } from "@/lib/richtext";
 import { CalendarIcon, StarIcon } from "@/components/icons";
 import { memoTitle, startOfWeekISO, todayISO, weekKeyOf } from "@/lib/date";
 import { cn } from "@/lib/utils";
@@ -47,7 +49,8 @@ function formFromEvent(event: CalendarEvent): FormState {
     allDay: event.allDay,
     startTime: event.startTime ?? "09:00",
     endTime: event.endTime ?? "",
-    endDate: event.endDate ?? "",
+    // A multi-day event keeps its end date; a single day one ends on its own date.
+    endDate: event.endDate && event.date && event.endDate > event.date ? event.endDate : "",
     memo: event.memo,
     done: event.done,
     favorite: event.favorite,
@@ -120,6 +123,7 @@ function EventEditorInner({
       return;
     }
     const weekStart = startOfWeekISO(form.date);
+    const multiDay = form.kind === "일정" && !!form.endDate && form.endDate > form.date;
     const payload: Record<string, unknown> = {
       title: form.title.trim(),
       kind: form.kind,
@@ -127,8 +131,12 @@ function EventEditorInner({
       date: form.date,
       startTime: form.allDay ? null : form.startTime,
       endTime: form.allDay || form.kind !== "일정" ? null : form.endTime || null,
-      endDate: form.allDay || form.kind !== "일정" ? form.date : form.endDate || form.date,
-      memo: form.memo,
+      // Bug fix: an all-day multi-day event used to lose its end date here.
+      endDate: form.kind === "일정" ? (multiDay ? form.endDate : form.date) : form.date,
+      ...(() => {
+        const spans = spansFromMarkdown(form.memo);
+        return { memo: plainOfSpans(spans), memoRich: spans };
+      })(),
       done: form.done,
       favorite: form.favorite,
       hidden: form.hidden,
@@ -229,13 +237,28 @@ function EventEditorInner({
             />
           </label>
           {form.kind === "일정" ? (
-            <div className="flex items-end pb-1">
-              <Toggle checked={form.allDay} onChange={(value) => patch("allDay", value)} label="종일" />
-            </div>
+            <label className="block">
+              <span className="label">종료 날짜</span>
+              <input
+                type="date"
+                aria-label="종료 날짜"
+                value={form.endDate}
+                min={form.date}
+                onChange={(event) => patch("endDate", event.target.value)}
+                className="input"
+              />
+              <span className="mt-1 block text-[0.66rem] text-ink-400">여러 날이면 종료 날짜를 넣어 주세요.</span>
+            </label>
           ) : (
             <div className="flex items-end pb-2 text-[0.72rem] text-ink-400">주간 키에 자동으로 묶입니다</div>
           )}
         </div>
+
+        {form.kind === "일정" ? (
+          <div className="flex items-center gap-2">
+            <Toggle checked={form.allDay} onChange={(value) => patch("allDay", value)} label="종일" />
+          </div>
+        ) : null}
 
         {form.kind === "일정" && !form.allDay ? (
           <div className="grid grid-cols-2 gap-3">
@@ -260,12 +283,10 @@ function EventEditorInner({
           </div>
         ) : null}
 
-        <TextArea
-          value={form.memo}
-          onChange={(event) => patch("memo", event.target.value)}
-          placeholder="메모 (선택)"
-          className="min-h-[72px]"
-        />
+        <div>
+          <p className="label">기타</p>
+          <MemoEditor value={form.memo} onChange={(value) => patch("memo", value)} rows={3} placeholder="메모 (선택)" />
+        </div>
 
         <div className="rounded-xl border border-paper-300/80 bg-paper-50/60 px-3 py-1">
           <Toggle

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useData } from "@/state/store";
 import { useSettings } from "@/state/settings";
 import { useTabReset, useUi } from "@/state/ui";
@@ -11,6 +11,7 @@ import { PRIORITY_TONES, priorityOf, projectEmoji, routineTone, taskTone } from 
 import { CheckIcon, ChevronRightIcon, InboxIcon, PlusIcon, RepeatIcon } from "@/components/icons";
 import { ProjectDrawer } from "@/components/projects/ProjectDrawer";
 import { TaskEditor } from "@/components/editors/TaskEditor";
+import { TaskDetail } from "@/components/detail/TaskDetail";
 import { RoutineEditor } from "@/components/editors/RoutineEditor";
 import { routineCountForDay } from "@/components/calendar/calendar-utils";
 
@@ -50,6 +51,24 @@ export function ProjectsTab() {
   const [quickTitle, setQuickTitle] = useState("");
   const [quickCategory, setQuickCategory] = useState<TaskCategory>("개인");
   const [busy, setBusy] = useState(false);
+  /**
+   * A4: the open detail registers its save-and-validate step here, so tapping another
+   * task in the right list stores what changed before the centre swaps.
+   */
+  const flushRef = useRef<(() => Promise<boolean>) | null>(null);
+  const registerFlush = (flush: (() => Promise<boolean>) | null) => {
+    flushRef.current = flush;
+  };
+
+  const openTask = async (id: string) => {
+    if (id === taskId) return;
+    if (flushRef.current) {
+      const ok = await flushRef.current();
+      if (!ok) return;
+    }
+    setTaskDraft(null);
+    setTaskId(id);
+  };
 
   useEffect(() => {
     if (!focus) return;
@@ -57,7 +76,7 @@ export function ProjectsTab() {
       const item = data.projects.find((task) => task.id === focus.id);
       if (item) {
         if (item.kind === "프로젝트") setProjectId(item.id);
-        else setTaskId(item.id);
+        else void openTask(item.id);
       }
     }
     if (focus.resource === "routines") setRoutineId(focus.id);
@@ -206,7 +225,7 @@ export function ProjectsTab() {
               </header>
               <ul className="mt-2.5 space-y-1.5">
                 {inbox.slice(0, 4).map((task) => (
-                  <TaskLine key={task.id} task={task} onToggle={() => toggleTask(task)} onOpen={() => setTaskId(task.id)} />
+                  <TaskLine key={task.id} task={task} onToggle={() => toggleTask(task)} onOpen={() => void openTask(task.id)} />
                 ))}
                 {inbox.length === 0 ? <li className="text-[0.7rem] text-ink-300">비어 있습니다.</li> : null}
               </ul>
@@ -266,7 +285,7 @@ export function ProjectsTab() {
                         key={task.id}
                         task={task}
                         onToggle={() => toggleTask(task)}
-                        onOpen={() => setTaskId(task.id)}
+                        onOpen={() => void openTask(task.id)}
                       />
                     ))}
                     {open.length === 0 ? <li className="text-[0.7rem] text-ink-300">남은 할 일이 없습니다.</li> : null}
@@ -280,7 +299,7 @@ export function ProjectsTab() {
                           <li key={task.id} className="flex items-center gap-1.5">
                             <button
                               type="button"
-                              onClick={() => setTaskId(task.id)}
+                              onClick={() => void openTask(task.id)}
                               className="min-w-0 flex-1 truncate text-left text-[0.7rem] text-ink-500"
                             >
                               {task.title}
@@ -353,7 +372,7 @@ export function ProjectsTab() {
         <PriorityView
           tasks={data.projects.filter((task) => task.kind === "할 일" && !task.trash && matchesMode(mode, task, task.category))}
           projects={data.projects}
-          onOpenTask={setTaskId}
+          onOpenTask={(id) => void openTask(id)}
           onOpenProject={setProjectId}
           onToggle={toggleTask}
           onCreateTask={(category, urgent, important) => {
@@ -367,7 +386,7 @@ export function ProjectsTab() {
           projects={data.projects.filter((task) => task.kind === "프로젝트")}
           tasks={data.projects.filter((task) => task.kind === "할 일")}
           routines={data.routines.filter((routine) => routine.kind === "루틴")}
-          onOpenTask={setTaskId}
+          onOpenTask={(id) => void openTask(id)}
           onOpenProject={setProjectId}
           onOpenRoutine={setRoutineId}
           onRestoreTask={(task) => void update("projects", task.id, { status: "미완료", doneAt: null })}
@@ -378,23 +397,28 @@ export function ProjectsTab() {
 
       <ProjectDrawer
         projectId={projectId}
+        showBackdrop={taskId === null}
         onClose={() => setProjectId(null)}
-        onOpenTask={(id) => setTaskId(id)}
+        onOpenTask={(id) => void openTask(id)}
         onEditProject={(id) => {
           setProjectId(null);
-          setTaskId(id);
+          void openTask(id);
         }}
       />
 
-      <TaskEditor
-        open={taskId !== null || taskDraft !== null}
+      <TaskDetail
+        open={taskId !== null}
         taskId={taskId}
-        draft={taskDraft ?? undefined}
-        onClose={() => {
+        sideBySide={projectId !== null}
+        onBack={() => setTaskId(null)}
+        onCloseAll={() => {
           setTaskId(null);
-          setTaskDraft(null);
+          setProjectId(null);
         }}
+        registerFlush={registerFlush}
       />
+
+      <TaskEditor open={taskDraft !== null} draft={taskDraft ?? undefined} onClose={() => setTaskDraft(null)} />
 
       <RoutineEditor
         open={routineId !== null}

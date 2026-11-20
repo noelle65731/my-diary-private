@@ -24,6 +24,7 @@ import { BookIcon, CheckIcon, ChevronLeftIcon, ChevronRightIcon, PlusIcon, Searc
 import { EmptyState } from "@/components/common/primitives";
 import { TagInput } from "@/components/editors/shared";
 import { BinderEditor } from "@/components/editors/BinderEditor";
+import { BinderDetail } from "@/components/detail/BinderDetail";
 import { tasksForDay } from "@/components/calendar/calendar-utils";
 
 type BinderView = "weekly" | "daily" | "notes";
@@ -215,9 +216,18 @@ export function BinderTab() {
         </div>
       ) : null}
 
-      <BinderEditor
-        open={editorId !== null || editorDraft !== null}
+      <BinderDetail
+        open={editorId !== null}
         entryId={editorId}
+        onBack={() => setEditorId(null)}
+        onCloseAll={() => {
+          setEditorId(null);
+          setEditorDraft(null);
+        }}
+      />
+
+      <BinderEditor
+        open={editorDraft !== null}
         draft={editorDraft ?? undefined}
         onClose={() => {
           setEditorId(null);

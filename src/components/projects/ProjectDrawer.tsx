@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { todayISO } from "@/lib/date";
 import type { ProjectTask } from "@/lib/types";
 import { TaskRow } from "@/components/projects/TaskRow";
+import { RichText } from "@/components/common/rich";
 
 type Filter = "all" | "ing" | "done";
 
@@ -17,11 +18,13 @@ export function ProjectDrawer({
   onClose,
   onOpenTask,
   onEditProject,
+  showBackdrop = true,
 }: {
   projectId: string | null;
   onClose: () => void;
   onOpenTask: (id: string) => void;
   onEditProject: (id: string) => void;
+  showBackdrop?: boolean;
 }) {
   const { data, create, update, remove } = useData();
   const [filter, setFilter] = useState<Filter>("all");
@@ -66,6 +69,7 @@ export function ProjectDrawer({
       title={project?.title ?? ""}
       subtitle={project ? `${project.category} · ${project.status}` : ""}
       width="lg"
+      showBackdrop={showBackdrop}
       footer={
         project ? (
           <div className="flex items-center justify-between gap-2">
@@ -94,7 +98,9 @@ export function ProjectDrawer({
       {project ? (
         <div className="space-y-4">
           {project.memo ? (
-            <p className="rounded-xl bg-paper-100/70 px-3 py-2 text-[0.8rem] leading-relaxed text-ink-600">{project.memo}</p>
+            <p className="rounded-xl bg-paper-100/70 px-3 py-2 text-[0.8rem] leading-relaxed text-ink-600">
+              <RichText spans={project.memoRich} value={project.memo} />
+            </p>
           ) : null}
 
           <div>

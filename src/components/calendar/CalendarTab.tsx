@@ -27,6 +27,8 @@ import { YearView } from "@/components/calendar/YearView";
 import { DayView } from "@/components/calendar/DayView";
 import { HabitView } from "@/components/calendar/HabitView";
 import { EventEditor, type EventDraft } from "@/components/editors/EventEditor";
+import { EventDetail } from "@/components/detail/EventDetail";
+import { TaskDetail } from "@/components/detail/TaskDetail";
 import { TaskEditor } from "@/components/editors/TaskEditor";
 import { RoutineEditor } from "@/components/editors/RoutineEditor";
 
@@ -66,6 +68,15 @@ export function CalendarTab() {
   const [routineId, setRoutineId] = useState<string | null>(null);
   /** A8: the week panel (꼭·목표·메모) folds open inside the week view below xl. */
   const [weekPanelOpen, setWeekPanelOpen] = useState(false);
+  /** A4: X closes every layer that came with the detail, including the month day list. */
+  const [dayListSignal, setDayListSignal] = useState(0);
+
+  const closeEveryLayer = () => {
+    setEventEditor({ open: false });
+    setTaskId(null);
+    setRoutineId(null);
+    setDayListSignal((current) => current + 1);
+  };
 
   useEffect(() => {
     setView(settings.calendarDefaultView);
@@ -387,6 +398,7 @@ export function CalendarTab() {
               weekStartsOn={settings.weekStartsOn}
               showWeekends={settings.showWeekends}
               dayItems={settings.monthDayItems}
+              closeDayListSignal={dayListSignal}
               onSelectDay={(day) => {
                 setCursor(day);
                 setView("day");
@@ -521,15 +533,25 @@ export function CalendarTab() {
         </aside>
       ) : null}
 
-      <EventEditor
-        open={eventEditor.open}
+      <EventDetail
+        open={eventEditor.open && !!eventEditor.id}
         eventId={eventEditor.id ?? null}
+        onBack={() => setEventEditor({ open: false })}
+        onCloseAll={closeEveryLayer}
+      />
+      <EventEditor
+        open={eventEditor.open && !eventEditor.id}
         draft={eventEditor.draft}
         onClose={() => setEventEditor({ open: false })}
       />
-      <TaskEditor
-        open={taskId !== null}
+      <TaskDetail
+        open={taskId !== null && !taskId.startsWith("new:")}
         taskId={taskId && !taskId.startsWith("new:") ? taskId : null}
+        onBack={() => setTaskId(null)}
+        onCloseAll={closeEveryLayer}
+      />
+      <TaskEditor
+        open={taskId !== null && taskId.startsWith("new:")}
         draft={taskId?.startsWith("new:") ? { kind: "할 일", projectId: taskId.slice(4) || undefined, date: cursor } : undefined}
         onClose={() => setTaskId(null)}
       />
