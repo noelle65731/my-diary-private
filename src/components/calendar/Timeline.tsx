@@ -2,9 +2,10 @@
 
 import { useMemo } from "react";
 import type { CalendarEvent } from "@/lib/types";
-import { todayISO } from "@/lib/date";
+import { formatShort, minutesToTime, todayISO, weekdayKo } from "@/lib/date";
 import { cn } from "@/lib/utils";
 import { categoryTone } from "@/components/common/tone";
+import { useDnd } from "@/components/common/dnd";
 import {
   eventCoversDay,
   eventEndMinutes,
@@ -12,6 +13,13 @@ import {
   layoutDayEvents,
   timedEventsForDay,
 } from "@/components/calendar/calendar-utils";
+
+export interface EventTimePatch {
+  date: string;
+  startTime: string | null;
+  endTime: string | null;
+  endDate: string | null;
+}
 
 export interface TimelineProps {
   days: string[];
@@ -22,15 +30,27 @@ export interface TimelineProps {
   gutterWidth?: string;
   onOpenEvent: (id: string) => void;
   onCreate?: (date: string, time?: string | null) => void;
-  onMoveEvent?: (id: string, date: string, time: string | null) => void;
+  onMoveEvent?: (id: string, next: EventTimePatch) => void;
+  onResizeEvent?: (id: string, next: EventTimePatch) => void;
   compact?: boolean;
 }
+
+const SNAP = 15;
 
 function hourLabel(minutes: number): string {
   const h = Math.floor(minutes / 60);
   const suffix = h < 12 ? "오전" : "오후";
   const h12 = h % 12 === 0 ? 12 : h % 12;
   return `${suffix} ${h12}`;
+}
+
+function snapMinutes(minutes: number): number {
+  return Math.round(minutes / SNAP) * SNAP;
+}
+
+function timeLabel(minutes: number): string {
+  const clamped = Math.max(0, Math.min(24 * 60, minutes));
+  return minutesToTime(clamped);
 }
 
 export function Timeline({
@@ -43,23 +63,25 @@ export function Timeline({
   onOpenEvent,
   onCreate,
   onMoveEvent,
+  onResizeEvent,
   compact = false,
 }: TimelineProps) {
+  const { start } = useDnd();
   const today = todayISO();
   const active = useMemo(() => events.filter((event) => !event.trash), [events]);
 
   const bounds = useMemo(() => {
-    let start = startHour * 60;
-    let end = endHour * 60;
+    let from = startHour * 60;
+    let to = endHour * 60;
     for (const event of active) {
       if (event.allDay || event.kind !== "일정") continue;
       for (const day of days) {
         if (!eventCoversDay(event, day)) continue;
-        start = Math.min(start, Math.floor(eventStartMinutes(event) / 60) * 60);
-        end = Math.max(end, Math.ceil(eventEndMinutes(event) / 60) * 60);
+        from = Math.min(from, Math.floor(eventStartMinutes(event) / 60) * 60);
+        to = Math.max(to, Math.ceil(eventEndMinutes(event) / 60) * 60);
       }
     }
-    return { start: Math.max(0, start), end: Math.min(24 * 60, Math.max(end, start + 60)) };
+    return { start: Math.max(0, from), end: Math.min(24 * 60, Math.max(to, from + 60)) };
   }, [active, days, endHour, startHour]);
 
   const totalHeight = ((bounds.end - bounds.start) / 60) * hourHeight;
@@ -72,15 +94,76 @@ export function Timeline({
   const now = new Date();
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
   const showNow = days.includes(today) && nowMinutes >= bounds.start && nowMinutes <= bounds.end;
+  const nowTop = ((nowMinutes - bounds.start) / 60) * hourHeight;
 
-  const dropTime = (event: { clientY: number; currentTarget: HTMLDivElement }, boundsStart: number) => {
-    const rect = event.currentTarget.getBoundingClientRect();
-    const offsetY = event.clientY - rect.top;
-    const minutes = boundsStart + (offsetY / hourHeight) * 60;
-    return Math.max(0, Math.min(23 * 60 + 30, Math.round(minutes / 30) * 30));
+  /** Pointer y inside a column → minutes from midnight, snapped to 15 minutes. */
+  const minutesAt = (rect: DOMRect, y: number) => bounds.start + ((y - rect.top) / hourHeight) * 60;
+
+  const columnHint = (date: string, minutes: number) =>
+    `${formatShort(date)} ${weekdayKo(date)} · ${timeLabel(snapMinutes(minutes))}`;
+
+  const handleMove = (event: CalendarEvent) => (pointerEvent: React.PointerEvent<HTMLElement>) => {
+    if (!onMoveEvent) return;
+    const duration = Math.max(SNAP, eventEndMinutes(event) - eventStartMinutes(event));
+    start(
+      pointerEvent,
+      { kind: "event", id: event.id, label: event.title },
+      (target, point) => {
+        if (!target) return;
+        const date = target.zone === "cal-day" ? target.data.date : null;
+        if (!date) return;
+        const dropMinutes = snapMinutes(minutesAt(target.rect, point.y));
+        const from = Math.max(0, Math.min(24 * 60 - duration, dropMinutes));
+        onMoveEvent(event.id, {
+          date,
+          startTime: timeLabel(from),
+          endTime: timeLabel(from + duration),
+          endDate: date,
+        });
+      },
+      {
+        getHint: (target, point) =>
+          target.zone === "cal-day" && target.data.date
+            ? columnHint(target.data.date, minutesAt(target.rect, point.y))
+            : null,
+      },
+    );
   };
 
-  const nowTop = ((nowMinutes - bounds.start) / 60) * hourHeight;
+  const handleResize = (event: CalendarEvent, edge: "start" | "end") => (pointerEvent: React.PointerEvent<HTMLElement>) => {
+    if (!onResizeEvent) return;
+    const columnEl = pointerEvent.currentTarget.parentElement;
+    const label = edge === "start" ? `${event.title} · 시작` : `${event.title} · 끝`;
+    start(
+      pointerEvent,
+      { kind: "event-resize", id: event.id, label },
+      (target, point) => {
+        const rect = columnEl?.getBoundingClientRect() ?? target?.rect;
+        if (!rect) return;
+        const minutes = Math.max(0, Math.min(24 * 60, snapMinutes(minutesAt(rect, point.y))));
+        if (edge === "start") {
+          const end = eventEndMinutes(event);
+          const nextStart = Math.min(minutes, end - SNAP);
+          onResizeEvent(event.id, {
+            date: event.date,
+            startTime: timeLabel(nextStart),
+            endTime: timeLabel(end),
+            endDate: event.endDate && event.endDate > event.date ? event.endDate : event.date,
+          });
+        } else {
+          const from = eventStartMinutes(event);
+          const nextEnd = Math.max(from + SNAP, minutes);
+          onResizeEvent(event.id, {
+            date: event.date,
+            startTime: timeLabel(from),
+            endTime: timeLabel(nextEnd),
+            endDate: event.date,
+          });
+        }
+      },
+      { getHint: () => null },
+    );
+  };
 
   return (
     <div className="relative">
@@ -121,20 +204,14 @@ export function Timeline({
           return (
             <div
               key={day}
-              onClick={(event) => {
-                if (event.target !== event.currentTarget) return;
-                onCreate?.(day, toTime(dropTime(event, bounds.start)));
-              }}
-              onDragOver={(event) => {
-                if (!onMoveEvent) return;
-                event.preventDefault();
-              }}
-              onDrop={(event) => {
-                if (!onMoveEvent) return;
-                event.preventDefault();
-                const id = event.dataTransfer.getData("text/diary-event");
-                if (!id) return;
-                onMoveEvent(id, day, toTime(dropTime(event, bounds.start)));
+              data-drop-zone="cal-day"
+              data-drop-date={day}
+              data-drop-hint={`${formatShort(day)} ${weekdayKo(day)}`}
+              onClick={(clickEvent) => {
+                if (clickEvent.target !== clickEvent.currentTarget) return;
+                const rect = clickEvent.currentTarget.getBoundingClientRect();
+                const minutes = Math.max(0, Math.min(24 * 60 - 60, snapMinutes(minutesAt(rect, clickEvent.clientY))));
+                onCreate?.(day, toTime(minutes));
               }}
               className={cn("relative border-l border-paper-300", isToday && "bg-paper-200/25")}
               style={{
@@ -143,50 +220,66 @@ export function Timeline({
                   "repeating-linear-gradient(to bottom, #eef0f3 0, #eef0f3 1px, transparent 1px, transparent " + `${hourHeight}px)`,
               }}
             >
-
-              {laidOut.map(({ event, start, end, lane, lanes }) => {
-                const top = ((Math.max(start, bounds.start) - bounds.start) / 60) * hourHeight;
-                const height = Math.max(18, ((Math.min(end, bounds.end) - Math.max(start, bounds.start)) / 60) * hourHeight - 2);
+              {laidOut.map(({ event, start: eventStart, end, lane, lanes }) => {
+                const top = ((Math.max(eventStart, bounds.start) - bounds.start) / 60) * hourHeight;
+                const height = Math.max(18, ((Math.min(end, bounds.end) - Math.max(eventStart, bounds.start)) / 60) * hourHeight - 2);
                 const tone = categoryTone(event.category);
                 const width = `calc(${100 / lanes}% - 4px)`;
                 const left = `calc(${(lane * 100) / lanes}% + 2px)`;
+                const resizable = height >= 20 && !!onResizeEvent && !!event.startTime;
+                const handleClass = height > 40 ? "h-[9px]" : "h-[6px]";
                 return (
-                  <button
-                    key={`${event.id}-${day}`}
-                    type="button"
-                    draggable={!!onMoveEvent}
-                    onDragStart={(dragEvent) => {
-                      dragEvent.dataTransfer.setData("text/diary-event", event.id);
-                      dragEvent.dataTransfer.effectAllowed = "move";
-                    }}
-                    onClick={(clickEvent) => {
-                      clickEvent.stopPropagation();
-                      onOpenEvent(event.id);
-                    }}
-                    className={cn(
-                      "absolute overflow-hidden rounded-md border px-1.5 py-[3px] text-left transition hover:brightness-[0.99]",
-                      tone.bg,
-                      tone.border,
-                      event.canceled && "opacity-50",
-                    )}
-                    style={{ top, height, width, left }}
-                  >
-                    <span
+                  <div key={`${event.id}-${day}`} className="absolute" style={{ top, height, width, left }}>
+                    <button
+                      type="button"
+                      data-drag-source="event"
+                      onPointerDown={handleMove(event)}
+                      onClick={(clickEvent) => {
+                        clickEvent.stopPropagation();
+                        onOpenEvent(event.id);
+                      }}
                       className={cn(
-                        "block whitespace-normal break-words text-[0.6rem] font-medium leading-[1.2] md:truncate md:whitespace-nowrap md:text-[0.68rem]",
-                        tone.text,
-                        event.canceled && "line-through",
+                        "absolute inset-0 overflow-hidden rounded-md border px-1.5 py-[3px] text-left transition hover:brightness-[0.99]",
+                        tone.bg,
+                        tone.border,
+                        event.canceled && "opacity-50",
+                        onMoveEvent && "cursor-grab",
                       )}
+                      style={{ touchAction: "pan-y", WebkitTouchCallout: "none" }}
                     >
-                      {event.title}
-                    </span>
-                    {height > 34 ? (
-                      <span className={cn("mt-0.5 hidden truncate text-[0.6rem] leading-tight opacity-80 md:block", tone.text)}>
-                        {event.startTime}
-                        {event.endTime ? `–${event.endTime}` : ""}
+                      <span
+                        className={cn(
+                          "block whitespace-normal break-words text-[0.6rem] font-medium leading-[1.2] md:truncate md:whitespace-nowrap md:text-[0.68rem]",
+                          tone.text,
+                          event.canceled && "line-through",
+                        )}
+                      >
+                        {event.title}
                       </span>
+                      {height > 34 ? (
+                        <span className={cn("mt-0.5 hidden truncate text-[0.6rem] leading-tight opacity-80 md:block", tone.text)}>
+                          {event.startTime}
+                          {event.endTime ? `–${event.endTime}` : ""}
+                        </span>
+                      ) : null}
+                    </button>
+                    {resizable ? (
+                      <>
+                        <span
+                          role="presentation"
+                          aria-hidden="true"
+                          onPointerDown={handleResize(event, "start")}
+                          className={cn("dnd-handle absolute inset-x-1 top-0 z-10 cursor-ns-resize", handleClass)}
+                        />
+                        <span
+                          role="presentation"
+                          aria-hidden="true"
+                          onPointerDown={handleResize(event, "end")}
+                          className={cn("dnd-handle absolute inset-x-1 bottom-0 z-10 cursor-ns-resize", handleClass)}
+                        />
+                      </>
                     ) : null}
-                  </button>
+                  </div>
                 );
               })}
 

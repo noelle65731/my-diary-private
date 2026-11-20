@@ -2,13 +2,15 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { CalendarEvent, ProjectTask, Routine } from "@/lib/types";
-import { isSameISO, todayISO, weekdayKo } from "@/lib/date";
+import { addDaysISO, diffDays, formatShort, isSameISO, todayISO, weekdayKo } from "@/lib/date";
 import { holidayName } from "@/lib/holidays";
 import { cn } from "@/lib/utils";
 import { categoryTone, priorityOf, projectEmoji, routineTone, taskTone } from "@/components/common/tone";
 import { CheckIcon } from "@/components/icons";
+import { isAfterTarget, useDnd } from "@/components/common/dnd";
+import { sortByStoredOrder, sortTasksNewestFirst } from "@/lib/order";
 import { eventCoversDay, routineCountForDay } from "@/components/calendar/calendar-utils";
-import { Timeline } from "@/components/calendar/Timeline";
+import { Timeline, type EventTimePatch } from "@/components/calendar/Timeline";
 
 interface WeekBoardProps {
   days: string[];
@@ -23,9 +25,12 @@ interface WeekBoardProps {
   onOpenTask: (id: string) => void;
   onOpenRoutine: (id: string) => void;
   onCreate: (date: string, time?: string | null) => void;
-  onMoveEvent: (id: string, date: string, time: string | null) => void;
+  onUpdateEvent: (id: string, patch: Record<string, unknown>) => void;
+  onUpdateTask: (id: string, patch: Record<string, unknown>) => void;
   onToggleTask: (task: ProjectTask) => void;
   onRoutineCount: (routine: Routine, date: string, count: number) => void;
+  onReorderProjects: (ordered: ProjectTask[], movedId: string, insertIndex: number) => void;
+  onReorderRoutines: (ordered: Routine[], movedId: string, insertIndex: number) => void;
   onCreateTaskForProject: (projectId: string) => void;
   onCreateRoutine: () => void;
 }
@@ -43,12 +48,16 @@ export function WeekBoard({
   onOpenTask,
   onOpenRoutine,
   onCreate,
-  onMoveEvent,
+  onUpdateEvent,
+  onUpdateTask,
   onToggleTask,
   onRoutineCount,
+  onReorderProjects,
+  onReorderRoutines,
   onCreateTaskForProject,
   onCreateRoutine,
 }: WeekBoardProps) {
+  const { start } = useDnd();
   const today = todayISO();
   const [narrow, setNarrow] = useState(false);
   useEffect(() => {
@@ -75,29 +84,42 @@ export function WeekBoard({
     [visibleTasks, days],
   );
 
+  const orderedProjects = useMemo(
+    () => sortByStoredOrder(projects.filter((project) => !project.trash)),
+    [projects],
+  );
+
   const rows = useMemo(() => {
-    const map = new Map<string, { project: ProjectTask | null; tasks: ProjectTask[] }>();
+    const map = new Map<string, ProjectTask[]>();
     for (const task of weekTasks) {
-      const projectId = task.projectIds[0] ?? "";
-      const project = projects.find((item) => item.id === projectId) ?? null;
-      const key = project?.id ?? "inbox";
-      if (!map.has(key)) map.set(key, { project, tasks: [] });
-      map.get(key)!.tasks.push(task);
+      const projectId = task.projectIds[0] ?? "inbox";
+      if (!map.has(projectId)) map.set(projectId, []);
+      map.get(projectId)!.push(task);
     }
+    const order = orderedProjects.map((project) => project.id);
     return [...map.entries()]
       .sort((a, b) => {
         if (a[0] === "inbox") return -1;
         if (b[0] === "inbox") return 1;
-        const order = { 업무: 0, 개인: 1, 공부: 2 } as const;
-        const pa = a[1].project;
-        const pb = b[1].project;
-        return (order[(pa?.category ?? "개인") as keyof typeof order] ?? 1) - (order[(pb?.category ?? "개인") as keyof typeof order] ?? 1);
+        const left = order.indexOf(a[0]);
+        const right = order.indexOf(b[0]);
+        return (left === -1 ? Number.MAX_SAFE_INTEGER : left) - (right === -1 ? Number.MAX_SAFE_INTEGER : right);
       })
-      .slice(0, 7);
-  }, [weekTasks, projects]);
+      .slice(0, 7)
+      .map(([key, items]) => ({
+        key,
+        project: orderedProjects.find((project) => project.id === key) ?? null,
+        tasks: sortTasksNewestFirst(items),
+      }));
+  }, [weekTasks, orderedProjects]);
+
+  const rowProjects = useMemo(
+    () => rows.map((row) => row.project).filter((project): project is ProjectTask => !!project),
+    [rows],
+  );
 
   const routineGroups = useMemo(() => {
-    const active = routines.filter((routine) => routine.kind === "루틴" && !routine.trash && !routine.history);
+    const active = sortByStoredOrder(routines.filter((routine) => routine.kind === "루틴" && !routine.trash && !routine.history));
     return (["개인", "공부"] as const)
       .map((category) => ({ category, items: active.filter((routine) => routine.category === category) }))
       .filter((group) => group.items.length > 0);
@@ -126,13 +148,109 @@ export function WeekBoard({
 
   const allDayHeight = Math.max(allDayBars.length > 0 ? Math.min(2, Math.max(...allDayBars.map((bar) => bar.lane)) + 1) : 1, 1) * 26 + 8;
 
+  /* ── drag handlers ─────────────────────────────────────────── */
+
+  const handleAllDayDrag = (event: CalendarEvent) => (pointerEvent: React.PointerEvent<HTMLElement>) => {
+    start(
+      pointerEvent,
+      { kind: "event", id: event.id, label: event.title },
+      (target) => {
+        if (!target) return;
+        const date = target.data.date;
+        if (!date || target.zone !== "cal-allday") return;
+        const delta = diffDays(date, event.date);
+        if (delta === 0) return;
+        const multiDay = !!event.endDate && event.endDate > event.date;
+        onUpdateEvent(event.id, {
+          date,
+          endDate: multiDay ? addDaysISO(event.endDate!, delta) : date,
+          startTime: null,
+          endTime: null,
+        });
+      },
+      {
+        getHint: (target) =>
+          target.zone === "cal-allday" && target.data.date
+            ? `${formatShort(target.data.date)} ${weekdayKo(target.data.date)}로 옮기기`
+            : null,
+      },
+    );
+  };
+
+  const handleTaskDrag = (task: ProjectTask) => (pointerEvent: React.PointerEvent<HTMLElement>) => {
+    start(
+      pointerEvent,
+      { kind: "task", id: task.id, label: task.title },
+      (target) => {
+        if (!target) return;
+        const patch: Record<string, unknown> = {};
+        const date = target.zone === "cal-task-cell" ? target.data.date : target.zone === "cal-day" ? target.data.date : null;
+        if (date && task.date !== date) patch.date = date;
+        const projectId = typeof target.data.project === "string" ? target.data.project : null;
+        if (projectId !== null && (task.projectIds[0] ?? "") !== projectId) {
+          patch.projectIds = projectId ? [projectId] : [];
+        }
+        if (Object.keys(patch).length > 0) onUpdateTask(task.id, patch);
+      },
+      {
+        getHint: (target, point) => {
+          const date = target.data.date;
+          if (!date) return null;
+          const projectTitle = target.data.project
+            ? (projects.find((project) => project.id === target.data.project)?.title ?? "프로젝트")
+            : "받은함";
+          return `${formatShort(date)} ${weekdayKo(date)} · ${projectTitle}`;
+        },
+      },
+    );
+  };
+
+  const handleProjectRowDrag = (project: ProjectTask) => (pointerEvent: React.PointerEvent<HTMLElement>) => {
+    const list = rowProjects;
+    start(
+      pointerEvent,
+      { kind: "project", id: project.id, label: project.title },
+      (target, point) => {
+        if (!target) return;
+        let targetId = target.data.id ?? "";
+        if (target.zone === "cal-task-cell") targetId = target.data.project ?? "";
+        else if (target.zone !== "cal-project-row") return;
+        let insert = list.length;
+        if (targetId) {
+          const index = list.findIndex((item) => item.id === targetId);
+          if (index === -1) return;
+          insert = index + (isAfterTarget(target, point.y) ? 1 : 0);
+        }
+        onReorderProjects(list, project.id, insert);
+      },
+      { getHint: () => "줄 순서 바꾸기" },
+    );
+  };
+
+  const handleRoutineRowDrag = (routine: Routine, list: Routine[]) => (pointerEvent: React.PointerEvent<HTMLElement>) => {
+    start(
+      pointerEvent,
+      { kind: "routine", id: routine.id, label: routine.title },
+      (target, point) => {
+        if (!target || target.zone !== "cal-routine-row") return;
+        let insert = list.length;
+        const targetId = target.data.id;
+        if (targetId) {
+          const index = list.findIndex((item) => item.id === targetId);
+          if (index === -1) return;
+          insert = index + (isAfterTarget(target, point.y) ? 1 : 0);
+        }
+        onReorderRoutines(list, routine.id, insert);
+      },
+      { getHint: () => "루틴 순서 바꾸기" },
+    );
+  };
+
   return (
     <div className="min-w-0">
       {/* week day header */}
       <div className="grid items-end border-b border-paper-300 pb-1" style={grid}>
-        <div className="pb-1 text-right text-[0.62rem] text-ink-400">
-          {allDayBars.length > 0 ? "" : ""}
-        </div>
+        <div className="pb-1 text-right text-[0.62rem] text-ink-400" />
         {days.map((day) => {
           const isToday = isSameISO(day, today);
           const holiday = holidayName(day);
@@ -141,6 +259,8 @@ export function WeekBoard({
             <button
               key={day}
               type="button"
+              data-drop-zone="cal-allday"
+              data-drop-date={day}
               onClick={() => onSelectDay(day)}
               className="flex flex-col items-center gap-0.5 pb-0.5 pt-1.5 transition hover:bg-paper-200/40"
             >
@@ -173,7 +293,7 @@ export function WeekBoard({
         <div className="relative" style={{ gridColumn: `2 / span ${days.length}`, height: allDayHeight }}>
           <div className="absolute inset-0 grid" style={{ gridTemplateColumns: `repeat(${days.length}, minmax(0, 1fr))` }}>
             {days.map((day) => (
-              <div key={day} className="border-l border-paper-300" />
+              <div key={day} data-drop-zone="cal-allday" data-drop-date={day} className="border-l border-paper-300" />
             ))}
           </div>
           {allDayBars.map(({ event, startIdx, span, lane }) => {
@@ -182,9 +302,11 @@ export function WeekBoard({
               <button
                 key={event.id}
                 type="button"
+                data-drag-source="event"
+                onPointerDown={handleAllDayDrag(event)}
                 onClick={() => onOpenEvent(event.id)}
                 className={cn(
-                  "absolute h-[22px] overflow-hidden rounded-md border px-1.5 text-left text-[0.62rem] font-medium leading-[20px] md:px-2 md:text-[0.68rem]",
+                  "absolute h-[22px] cursor-grab overflow-hidden rounded-md border px-1.5 text-left text-[0.62rem] font-medium leading-[20px] md:px-2 md:text-[0.68rem]",
                   tone.bg,
                   tone.border,
                   tone.text,
@@ -195,6 +317,8 @@ export function WeekBoard({
                   width: `calc(${(span * 100) / days.length}% - 4px)`,
                   top: lane * 26 + 4,
                   display: lane > 1 ? "none" : "block",
+                  touchAction: "pan-y",
+                  WebkitTouchCallout: "none",
                 }}
               >
                 <span className="line-clamp-1">{event.title}</span>
@@ -214,23 +338,34 @@ export function WeekBoard({
         gutterWidth={gutter}
         onOpenEvent={onOpenEvent}
         onCreate={onCreate}
-        onMoveEvent={onMoveEvent}
+        onMoveEvent={(id, next: EventTimePatch) => onUpdateEvent(id, { ...next })}
+        onResizeEvent={(id, next: EventTimePatch) => onUpdateEvent(id, { ...next })}
       />
 
       {/* attached project rows */}
-      <div className="border-t border-paper-300">
+      <div className="border-t border-paper-300" data-drop-zone="cal-project-row">
         {rows.length === 0 ? (
           <div className="flex items-center justify-center py-4 text-[0.72rem] text-ink-400">이번 주에 예정된 할 일이 없습니다.</div>
         ) : null}
-        {rows.map(([key, row]) => {
-          const project = row.project;
+        {rows.map(({ key, project, tasks: rowTasks }) => {
           const tone = project ? taskTone(project.category) : null;
           return (
-            <div key={key} className="grid border-b border-paper-300/80" style={grid}>
+            <div
+              key={key}
+              data-drop-zone="cal-project-row"
+              data-drop-id={project?.id}
+              className="grid border-b border-paper-300/80"
+              style={grid}
+            >
               <div className="flex min-h-[2.2rem] items-center gap-1.5 py-1 pr-1.5">
                 <span
+                  role="presentation"
+                  aria-hidden="true"
+                  onPointerDown={project ? handleProjectRowDrag(project) : undefined}
+                  title={project ? "끌어서 줄 순서 바꾸기" : undefined}
                   className={cn(
                     "flex h-6 w-6 flex-none items-center justify-center rounded-lg text-[0.72rem]",
+                    project && "cursor-grab",
                     tone ? tone.soft : "bg-paper-200",
                   )}
                 >
@@ -259,9 +394,15 @@ export function WeekBoard({
               </div>
 
               {days.map((day) => {
-                const cell = row.tasks.filter((task) => task.date === day || task.due === day);
+                const cell = rowTasks.filter((task) => task.date === day || task.due === day);
                 return (
-                  <div key={day} className="min-h-[2.2rem] border-l border-paper-300/80 px-1 py-1">
+                  <div
+                    key={day}
+                    data-drop-zone="cal-task-cell"
+                    data-drop-date={day}
+                    data-drop-project={project?.id ?? ""}
+                    className="min-h-[2.2rem] border-l border-paper-300/80 px-1 py-1"
+                  >
                     <div className="space-y-1.5">
                       {cell.map((task) => {
                         const done = task.status === "완료";
@@ -280,7 +421,14 @@ export function WeekBoard({
                             >
                               {done ? <CheckIcon size={9} /> : null}
                             </button>
-                            <button type="button" onClick={() => onOpenTask(task.id)} className="min-w-0 flex-1 text-left">
+                            <button
+                              type="button"
+                              data-drag-source="task"
+                              onPointerDown={handleTaskDrag(task)}
+                              onClick={() => onOpenTask(task.id)}
+                              className="min-w-0 flex-1 cursor-grab text-left"
+                              style={{ touchAction: "pan-y", WebkitTouchCallout: "none" }}
+                            >
                               <span className="flex items-center gap-1">
                                 <span
                                   className={cn(
@@ -315,7 +463,7 @@ export function WeekBoard({
 
       {/* routine rows */}
       {routineGroups.map((group) => (
-        <div key={group.category} className="border-b border-paper-300/80">
+        <div key={group.category} data-drop-zone="cal-routine-row" className="border-b border-paper-300/80">
           <div className="grid" style={grid}>
             <div className="flex items-center gap-1.5 py-1.5 pl-0.5 text-[0.68rem] text-ink-500">
               루틴
@@ -328,11 +476,20 @@ export function WeekBoard({
             const target = routine.targetCount ?? 1;
             const tone = routineTone(index);
             return (
-              <div key={routine.id} className="grid border-t border-paper-300/50" style={grid}>
+              <div
+                key={routine.id}
+                data-drop-zone="cal-routine-row"
+                data-drop-id={routine.id}
+                className="grid border-t border-paper-300/50"
+                style={grid}
+              >
                 <button
                   type="button"
+                  data-drag-source="routine"
+                  onPointerDown={handleRoutineRowDrag(routine, group.items)}
                   onClick={() => onOpenRoutine(routine.id)}
-                  className="flex min-w-0 items-center gap-1 py-[3px] pr-1 text-left text-[0.68rem] text-ink-700 hover:text-ink-900 md:gap-1.5 md:pr-2 md:text-[0.72rem]"
+                  className="flex min-w-0 cursor-grab items-center gap-1 py-[3px] pr-1 text-left text-[0.68rem] text-ink-700 hover:text-ink-900 md:gap-1.5 md:pr-2 md:text-[0.72rem]"
+                  style={{ touchAction: "pan-y", WebkitTouchCallout: "none" }}
                 >
                   <span className={cn("h-[5px] w-[5px] flex-none rounded-full", tone.dot)} />
                   <span className="truncate">{routine.title}</span>
@@ -395,7 +552,9 @@ export function WeekBoard({
         </div>
       ) : null}
 
-      <p className="mt-2 text-[0.64rem] text-ink-300">빈 칸을 누르면 일정이 추가되고, 일정 블록은 끌어서 옮길 수 있습니다.</p>
+      <p className="mt-2 text-[0.64rem] text-ink-300">
+        빈 칸을 누르면 일정이 추가됩니다 · 일정·할 일은 끌어서 옮기고, 줄은 길게 눌러(PC는 잡아서) 순서를 바꿉니다.
+      </p>
     </div>
   );
 }

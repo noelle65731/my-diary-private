@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { useData } from "@/state/store";
 import { useSettings } from "@/state/settings";
 import { useTabReset, useUi } from "@/state/ui";
@@ -9,6 +9,8 @@ import { formatShort, startOfWeekISO, todayISO, weekdayKo } from "@/lib/date";
 import { type ModeFilter, type ProjectTask, type Routine, type TaskCategory } from "@/lib/types";
 import { PRIORITY_TONES, priorityOf, projectEmoji, routineTone, taskTone } from "@/components/common/tone";
 import { CheckIcon, ChevronRightIcon, InboxIcon, PlusIcon, RepeatIcon } from "@/components/icons";
+import { isAfterTarget, useDnd, type DragPoint, type DropTarget } from "@/components/common/dnd";
+import { applySortValues, reorderSortValues, sortByStoredOrder, sortTasksNewestFirst } from "@/lib/order";
 import { ProjectDrawer } from "@/components/projects/ProjectDrawer";
 import { TaskEditor } from "@/components/editors/TaskEditor";
 import { RoutineEditor } from "@/components/editors/RoutineEditor";
@@ -32,6 +34,7 @@ function dateLabel(date: string | null): string {
 
 export function ProjectsTab() {
   const { data, update, setRoutineCount, create } = useData();
+  const { start } = useDnd();
   const { settings, set: setSetting } = useSettings();
   const { focus, clearFocus } = useUi();
 
@@ -78,7 +81,7 @@ export function ProjectsTab() {
   });
 
   const projects = useMemo(
-    () => data.projects.filter((task) => task.kind === "프로젝트" && !task.trash && matchesMode(mode, task, task.category)),
+    () => sortByStoredOrder(data.projects.filter((task) => task.kind === "프로젝트" && !task.trash && matchesMode(mode, task, task.category))),
     [data.projects, mode],
   );
   const tasks = useMemo(
@@ -86,12 +89,12 @@ export function ProjectsTab() {
     [data.projects, mode],
   );
   const routines = useMemo(
-    () => data.routines.filter((routine) => routine.kind === "루틴" && !routine.trash && !routine.history && (mode === "all" || !routine.hidden)),
+    () => sortByStoredOrder(data.routines.filter((routine) => routine.kind === "루틴" && !routine.trash && !routine.history && (mode === "all" || !routine.hidden))),
     [data.routines, mode],
   );
 
   const openTasks = tasks.filter((task) => !task.trash && task.status !== "완료" && task.status !== "취소" && !task.history);
-  const inbox = openTasks.filter((task) => task.projectIds.length === 0);
+  const inbox = sortTasksNewestFirst(openTasks.filter((task) => task.projectIds.length === 0));
   const projectCount = data.projects.filter((task) => task.kind === "프로젝트" && !task.trash && task.status !== "완료" && task.status !== "취소").length;
 
   const toggleTask = (task: ProjectTask) =>
@@ -99,6 +102,97 @@ export function ProjectsTab() {
       status: task.status === "완료" ? "미완료" : "완료",
       doneAt: task.status === "완료" ? null : todayISO(),
     });
+
+  /** Keeps the manual order meaningful when a card is dropped on another card. */
+  const cardInsertIndex = (target: DropTarget, point: DragPoint, index: number): number => {
+    const dx = point.x - (target.rect.left + target.rect.width / 2);
+    const dy = point.y - (target.rect.top + target.rect.height / 2);
+    const after = Math.abs(dx) > Math.abs(dy) ? dx > 0 : dy > 0;
+    return index + (after ? 1 : 0);
+  };
+
+  const taskSiblings = (projectId: string) =>
+    sortTasksNewestFirst(
+      data.projects.filter((task) => task.kind === "할 일" && !task.trash && (task.projectIds[0] ?? "") === projectId),
+    );
+
+  /** Task dropped on a card (or on another task) → change project and order. */
+  const handleTaskDrag = (task: ProjectTask) => (pointerEvent: ReactPointerEvent<HTMLElement>) => {
+    start(
+      pointerEvent,
+      { kind: "task", id: task.id, label: task.title },
+      (target, point) => {
+        if (!target) return;
+        const current = task.projectIds[0] ?? "";
+
+        if (target.zone === "proj-card") {
+          const projectId = target.data.id ?? "";
+          if (projectId === current) return;
+          void update("projects", task.id, { projectIds: projectId ? [projectId] : [] });
+          return;
+        }
+
+        if (target.zone === "proj-task") {
+          const targetTask = data.projects.find((item) => item.id === target.data.id);
+          if (!targetTask || targetTask.id === task.id) return;
+          const targetProject = targetTask.projectIds[0] ?? "";
+          if (targetProject !== current) {
+            void update("projects", task.id, { projectIds: targetProject ? [targetProject] : [] });
+            return;
+          }
+          const siblings = taskSiblings(current);
+          const index = siblings.findIndex((item) => item.id === targetTask.id);
+          if (index === -1) return;
+          const insert = index + (isAfterTarget(target, point.y) ? 1 : 0);
+          applySortValues(update, "projects", siblings, reorderSortValues(siblings, task.id, insert));
+        }
+      },
+      {
+        getHint: (target) => {
+          if (target.zone !== "proj-card" && target.zone !== "proj-task") return null;
+          const projectId = target.zone === "proj-card" ? (target.data.id ?? "") : (data.projects.find((item) => item.id === target.data.id)?.projectIds[0] ?? "");
+          const title = projectId ? (data.projects.find((item) => item.id === projectId)?.title ?? "프로젝트") : "받은함";
+          return `${title}로 옮기기`;
+        },
+      },
+    );
+  };
+
+  /** Project card dropped on another card → reorder the tracks. */
+  const handleProjectDrag = (project: ProjectTask) => (pointerEvent: ReactPointerEvent<HTMLElement>) => {
+    start(
+      pointerEvent,
+      { kind: "project", id: project.id, label: project.title },
+      (target, point) => {
+        if (!target || target.zone !== "proj-card") return;
+        const targetId = target.data.id;
+        if (!targetId || targetId === project.id) return;
+        const index = projects.findIndex((item) => item.id === targetId);
+        if (index === -1) return;
+        const insert = cardInsertIndex(target, point, index);
+        applySortValues(update, "projects", projects, reorderSortValues(projects, project.id, insert));
+      },
+      { getHint: () => "트랙 순서 바꾸기" },
+    );
+  };
+
+  /** Routine row dropped on another row → reorder routines. */
+  const handleRoutineDrag = (routine: Routine, list: Routine[]) => (pointerEvent: ReactPointerEvent<HTMLElement>) => {
+    start(
+      pointerEvent,
+      { kind: "routine", id: routine.id, label: routine.title },
+      (target, point) => {
+        if (!target || target.zone !== "proj-routine") return;
+        const targetId = target.data.id;
+        if (!targetId || targetId === routine.id) return;
+        const index = list.findIndex((item) => item.id === targetId);
+        if (index === -1) return;
+        const insert = index + (isAfterTarget(target, point.y) ? 1 : 0);
+        applySortValues(update, "routines", list, reorderSortValues(list, routine.id, insert));
+      },
+      { getHint: () => "루틴 순서 바꾸기" },
+    );
+  };
 
   const addQuick = async () => {
     if (!quickTitle.trim() || busy) return;
@@ -194,7 +288,11 @@ export function ProjectsTab() {
       {view === "tracks" ? (
         <div className="mt-4 space-y-4">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-            <article className="flex min-h-[11rem] flex-col rounded-2xl border border-paper-300 px-3 py-3">
+            <article
+              data-drop-zone="proj-card"
+              data-drop-id=""
+              className="flex min-h-[11rem] flex-col rounded-2xl border border-paper-300 px-3 py-3"
+            >
               <header className="flex items-start gap-2">
                 <span className="flex h-7 w-7 flex-none items-center justify-center rounded-full bg-paper-200 text-ink-500">
                   <InboxIcon size={14} />
@@ -206,7 +304,14 @@ export function ProjectsTab() {
               </header>
               <ul className="mt-2.5 space-y-1.5">
                 {inbox.slice(0, 4).map((task) => (
-                  <TaskLine key={task.id} task={task} onToggle={() => toggleTask(task)} onOpen={() => setTaskId(task.id)} />
+                  <TaskLine
+                    key={task.id}
+                    task={task}
+                    onToggle={() => toggleTask(task)}
+                    onOpen={() => setTaskId(task.id)}
+                    drag={handleTaskDrag(task)}
+                    drop={{ zone: "proj-task", id: task.id }}
+                  />
                 ))}
                 {inbox.length === 0 ? <li className="text-[0.7rem] text-ink-300">비어 있습니다.</li> : null}
               </ul>
@@ -227,20 +332,29 @@ export function ProjectsTab() {
             </article>
 
             {projects.map((project) => {
-              const children = tasks.filter((task) => !task.trash && task.projectIds.includes(project.id));
+              const children = sortTasksNewestFirst(tasks.filter((task) => !task.trash && task.projectIds.includes(project.id)));
               const open = children.filter((task) => task.status !== "완료" && task.status !== "취소");
-              const recent = settings.showCompletedTasks
-                ? children
-                    .filter((task) => task.status === "완료")
-                    .sort((a, b) => (b.doneAt ?? "").localeCompare(a.doneAt ?? ""))
-                    .slice(0, 2)
-                : [];
-              const last = [...children].sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""))[0];
+              const recent = settings.showCompletedTasks ? children.filter((task) => task.status === "완료").slice(0, 2) : [];
+              const last = children[0];
               const tone = taskTone(project.category);
               return (
-                <article key={project.id} className="flex min-h-[11rem] flex-col rounded-2xl border border-paper-300 px-3 py-3 transition hover:border-paper-400">
+                <article
+                  key={project.id}
+                  data-drop-zone="proj-card"
+                  data-drop-id={project.id}
+                  className="flex min-h-[11rem] flex-col rounded-2xl border border-paper-300 px-3 py-3 transition hover:border-paper-400"
+                >
                   <header className="flex items-start gap-2">
-                    <span className={cn("flex h-7 w-7 flex-none items-center justify-center rounded-full text-[0.8rem]", tone.soft)}>
+                    <span
+                      role="presentation"
+                      aria-hidden="true"
+                      onPointerDown={handleProjectDrag(project)}
+                      title="끌어서 트랙 순서 바꾸기"
+                      className={cn(
+                        "flex h-7 w-7 flex-none cursor-grab items-center justify-center rounded-full text-[0.8rem]",
+                        tone.soft,
+                      )}
+                    >
                       {projectEmoji(project.id, project.category)}
                     </span>
                     <button type="button" onClick={() => setProjectId(project.id)} className="min-w-0 flex-1 text-left">
@@ -267,6 +381,8 @@ export function ProjectsTab() {
                         task={task}
                         onToggle={() => toggleTask(task)}
                         onOpen={() => setTaskId(task.id)}
+                        drag={handleTaskDrag(task)}
+                        drop={{ zone: "proj-task", id: task.id }}
                       />
                     ))}
                     {open.length === 0 ? <li className="text-[0.7rem] text-ink-300">남은 할 일이 없습니다.</li> : null}
@@ -310,7 +426,7 @@ export function ProjectsTab() {
                 const items = routines.filter((routine) => routine.category === category);
                 if (items.length === 0) return null;
                 return (
-                  <article key={category} className="rounded-2xl border border-paper-300 px-3 py-3">
+                  <article key={category} data-drop-zone="proj-routine" className="rounded-2xl border border-paper-300 px-3 py-3">
                     <header className="flex items-start gap-2">
                       <span className="flex h-7 w-7 flex-none items-center justify-center rounded-full bg-paper-200 text-[0.8rem]">
                         <RepeatIcon size={14} className="text-ink-500" />
@@ -330,6 +446,7 @@ export function ProjectsTab() {
                           routines={data.routines}
                           onOpen={() => setRoutineId(routine.id)}
                           onCount={(date, count) => void setRoutineCount(routine, date, count)}
+                          onPointerDown={handleRoutineDrag(routine, items)}
                         />
                       ))}
                     </div>
@@ -356,6 +473,7 @@ export function ProjectsTab() {
           onOpenTask={setTaskId}
           onOpenProject={setProjectId}
           onToggle={toggleTask}
+          onSetPriority={(task, urgent, important) => void update("projects", task.id, { urgent, important })}
           onCreateTask={(category, urgent, important) => {
             setTaskDraft({ kind: "할 일", category, urgent, important });
           }}
@@ -409,16 +527,20 @@ function TaskLine({
   task,
   onToggle,
   onOpen,
+  drag,
+  drop,
 }: {
   task: ProjectTask;
   onToggle: () => void;
   onOpen: () => void;
+  drag?: (event: ReactPointerEvent<HTMLElement>) => void;
+  drop?: { zone: string; id: string };
 }) {
   const done = task.status === "완료";
   const priority = priorityOf(task);
   const tone = taskTone(task.category);
   return (
-    <li className="flex items-start gap-1.5">
+    <li data-drop-zone={drop?.zone} data-drop-id={drop?.id} className="flex items-start gap-1.5">
       <button
         type="button"
         onClick={onToggle}
@@ -430,7 +552,14 @@ function TaskLine({
       >
         {done ? <CheckIcon size={9} /> : null}
       </button>
-      <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-left">
+      <button
+        type="button"
+        data-drag-source="task"
+        onPointerDown={drag}
+        onClick={onOpen}
+        className="min-w-0 flex-1 cursor-grab text-left"
+        style={drag ? { touchAction: "pan-y", WebkitTouchCallout: "none" } : undefined}
+      >
         <span className="flex items-center gap-1">
           <span className={cn("truncate text-[0.76rem] leading-[1.3] text-ink-800", done && "text-ink-400 line-through")}>{task.title}</span>
           {priority !== "기타" ? (
@@ -451,12 +580,14 @@ function RoutineWeekRow({
   toneIndex,
   onOpen,
   onCount,
+  onPointerDown,
 }: {
   routine: Routine;
   routines: Routine[];
   toneIndex: number;
   onOpen: () => void;
   onCount: (date: string, count: number) => void;
+  onPointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
 }) {
   const weekStart = startOfWeekISO(todayISO());
   const days = Array.from({ length: 7 }, (_, i) => {
@@ -469,9 +600,16 @@ function RoutineWeekRow({
   const tone = routineTone(toneIndex);
 
   return (
-    <div>
+    <div data-drop-zone="proj-routine" data-drop-id={routine.id}>
       <div className="flex items-center gap-1.5">
-        <button type="button" onClick={onOpen} className="min-w-0 flex-1 truncate text-left text-[0.74rem] text-ink-700 hover:text-ink-900">
+        <button
+          type="button"
+          data-drag-source="routine"
+          onPointerDown={onPointerDown}
+          onClick={onOpen}
+          className="min-w-0 flex-1 cursor-grab truncate text-left text-[0.74rem] text-ink-700 hover:text-ink-900"
+          style={{ touchAction: "pan-y", WebkitTouchCallout: "none" }}
+        >
           {routine.title}
         </button>
         <span className="flex-none text-[0.66rem] font-medium tabular-nums text-ink-700">
@@ -514,6 +652,7 @@ function PriorityView({
   onOpenTask,
   onOpenProject,
   onToggle,
+  onSetPriority,
   onCreateTask,
 }: {
   tasks: ProjectTask[];
@@ -521,9 +660,11 @@ function PriorityView({
   onOpenTask: (id: string) => void;
   onOpenProject: (id: string) => void;
   onToggle: (task: ProjectTask) => void;
+  onSetPriority: (task: ProjectTask, urgent: boolean, important: boolean) => void;
   onCreateTask: (category: TaskCategory, urgent: boolean, important: boolean) => void;
 }) {
-  const open = tasks.filter((task) => task.status !== "완료" && task.status !== "취소");
+  const { start } = useDnd();
+  const open = sortTasksNewestFirst(tasks.filter((task) => task.status !== "완료" && task.status !== "취소"));
   const quadrants = [
     { key: "do", label: "긴급·중요", urgent: true, important: true },
     { key: "plan", label: "중요", urgent: false, important: true },
@@ -533,10 +674,37 @@ function PriorityView({
 
   const projectOf = (task: ProjectTask) => projects.find((project) => project.id === (task.projectIds[0] ?? "")) ?? null;
 
+  const dragTask = (task: ProjectTask) => (pointerEvent: ReactPointerEvent<HTMLElement>) => {
+    start(
+      pointerEvent,
+      { kind: "task", id: task.id, label: task.title },
+      (target) => {
+        if (!target || target.zone !== "proj-quadrant") return;
+        const urgent = target.data.urgent === "true";
+        const important = target.data.important === "true";
+        if (task.urgent === urgent && task.important === important) return;
+        onSetPriority(task, urgent, important);
+      },
+      {
+        getHint: (target) => {
+          if (target.zone !== "proj-quadrant") return null;
+          const urgent = target.data.urgent === "true" ? "긴급" : "안 급함";
+          const important = target.data.important === "true" ? "중요" : "안 중요";
+          return `${urgent} · ${important}로 옮기기`;
+        },
+      },
+    );
+  };
+
   const card = (quadrant: (typeof quadrants)[number]) => {
     const items = open.filter((task) => task.urgent === quadrant.urgent && task.important === quadrant.important);
     return (
-      <section className="min-h-[10.5rem] rounded-xl border border-paper-300 px-3 py-2.5">
+      <section
+        data-drop-zone="proj-quadrant"
+        data-drop-urgent={String(quadrant.urgent)}
+        data-drop-important={String(quadrant.important)}
+        className="min-h-[10.5rem] rounded-xl border border-paper-300 px-3 py-2.5"
+      >
         <header className="flex items-baseline gap-1.5">
           <h3 className={cn("rounded px-1 text-[0.78rem] font-semibold leading-5", PRIORITY_TONES[quadrant.label].badge)}>
             {quadrant.label}
@@ -558,7 +726,14 @@ function PriorityView({
                 >
                   {task.status === "완료" ? <CheckIcon size={9} /> : null}
                 </button>
-                <button type="button" onClick={() => onOpenTask(task.id)} className="min-w-0 flex-1 text-left">
+                <button
+                  type="button"
+                  data-drag-source="task"
+                  onPointerDown={dragTask(task)}
+                  onClick={() => onOpenTask(task.id)}
+                  className="min-w-0 flex-1 cursor-grab text-left"
+                  style={{ touchAction: "pan-y", WebkitTouchCallout: "none" }}
+                >
                   <span className="flex items-baseline gap-1.5">
                     <span className="truncate text-[0.78rem] text-ink-800">{task.title}</span>
                     {project ? (
@@ -632,7 +807,7 @@ function HistoryView({
 }) {
   const finishedProjects = projects.filter((project) => project.status === "완료" || project.status === "취소" || project.history);
   const pastRoutines = routines.filter((routine) => routine.history || routine.trash);
-  const doneTasks = tasks.filter((task) => task.status === "완료").slice(0, 40);
+  const doneTasks = sortTasksNewestFirst(tasks.filter((task) => task.status === "완료")).slice(0, 40);
   const canceled = tasks.filter((task) => task.status === "취소").slice(0, 20);
 
   return (

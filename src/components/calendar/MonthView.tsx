@@ -2,10 +2,11 @@
 
 import { useMemo } from "react";
 import type { CalendarEvent, ModeFilter, ProjectTask, Routine } from "@/lib/types";
-import { daysInMonth, formatShort, isSameISO, monthMatrix, todayISO, weekdayKo } from "@/lib/date";
+import { addDaysISO, daysInMonth, diffDays, formatShort, isSameISO, monthMatrix, todayISO, weekdayKo } from "@/lib/date";
 import { holidayName } from "@/lib/holidays";
 import { cn } from "@/lib/utils";
 import { categoryTone, routineTone } from "@/components/common/tone";
+import { useDnd } from "@/components/common/dnd";
 import { routineCountForDay } from "@/components/calendar/calendar-utils";
 
 interface MonthViewProps {
@@ -21,6 +22,8 @@ interface MonthViewProps {
   onOpenTask: (id: string) => void;
   onCreate: (date: string) => void;
   onRoutineCount: (routine: Routine, date: string, count: number) => void;
+  onUpdateEvent: (id: string, patch: Record<string, unknown>) => void;
+  onUpdateTask: (id: string, patch: Record<string, unknown>) => void;
 }
 
 type CellItem = { type: "event"; event: CalendarEvent } | { type: "task"; task: ProjectTask };
@@ -37,7 +40,10 @@ export function MonthView({
   onOpenEvent,
   onOpenTask,
   onRoutineCount,
+  onUpdateEvent,
+  onUpdateTask,
 }: MonthViewProps) {
+  const { start } = useDnd();
   const today = todayISO();
   const year = Number(cursor.slice(0, 4));
   const month0 = Number(cursor.slice(5, 7)) - 1;
@@ -58,6 +64,51 @@ export function MonthView({
     () => routines.filter((routine) => routine.kind === "루틴" && !routine.trash && !routine.history && (mode === "all" || !routine.hidden)),
     [routines, mode],
   );
+
+  const handleEventDrag = (event: CalendarEvent) => (pointerEvent: React.PointerEvent<HTMLElement>) => {
+    start(
+      pointerEvent,
+      { kind: "event", id: event.id, label: event.title },
+      (target) => {
+        if (!target || target.zone !== "cal-month-day") return;
+        const date = target.data.date;
+        if (!date || !event.date) return;
+        const delta = diffDays(date, event.date);
+        if (delta === 0) return;
+        onUpdateEvent(event.id, {
+          date,
+          endDate: event.endDate ? addDaysISO(event.endDate, delta) : date,
+          startTime: event.startTime,
+          endTime: event.endTime,
+        });
+      },
+      {
+        getHint: (target) =>
+          target.zone === "cal-month-day" && target.data.date
+            ? `${formatShort(target.data.date)} ${weekdayKo(target.data.date)}로 옮기기`
+            : null,
+      },
+    );
+  };
+
+  const handleTaskDrag = (task: ProjectTask) => (pointerEvent: React.PointerEvent<HTMLElement>) => {
+    start(
+      pointerEvent,
+      { kind: "task", id: task.id, label: task.title },
+      (target) => {
+        if (!target || target.zone !== "cal-month-day") return;
+        const date = target.data.date;
+        if (!date || task.date === date) return;
+        onUpdateTask(task.id, { date });
+      },
+      {
+        getHint: (target) =>
+          target.zone === "cal-month-day" && target.data.date
+            ? `${formatShort(target.data.date)} ${weekdayKo(target.data.date)}로 옮기기`
+            : null,
+      },
+    );
+  };
 
   const itemsForDay = (day: string): CellItem[] => {
     const dayEvents: CellItem[] = activeEvents
@@ -106,6 +157,8 @@ export function MonthView({
               return (
                 <div
                   key={day}
+                  data-drop-zone="cal-month-day"
+                  data-drop-date={day}
                   className={cn(
                     "group relative min-h-[5rem] border-r border-paper-300 px-1 pb-1 pt-1 last:border-r-0 md:min-h-[7.2rem] md:px-2 md:pb-1.5 md:pt-1.5",
                     !inMonth && "bg-paper-200/25",
@@ -143,9 +196,12 @@ export function MonthView({
                           <button
                             key={item.event.id}
                             type="button"
+                            data-drag-source="event"
+                            onPointerDown={handleEventDrag(item.event)}
                             onClick={() => onOpenEvent(item.event.id)}
+                            style={{ touchAction: "pan-y", WebkitTouchCallout: "none" }}
                             className={cn(
-                              "flex w-full items-start gap-1 rounded px-0.5 py-[1px] text-left text-[0.6rem] leading-[1.25] md:px-1 md:text-[0.68rem] md:leading-[1.35]",
+                              "flex w-full cursor-grab items-start gap-1 rounded px-0.5 py-[1px] text-left text-[0.6rem] leading-[1.25] md:px-1 md:text-[0.68rem] md:leading-[1.35]",
                               multiDay ? cn(tone.bg, tone.text) : tone.text,
                               item.event.canceled && "line-through opacity-50",
                               item.event.done && "opacity-60",
@@ -160,9 +216,12 @@ export function MonthView({
                         <button
                           key={item.task.id}
                           type="button"
+                          data-drag-source="task"
+                          onPointerDown={handleTaskDrag(item.task)}
                           onClick={() => onOpenTask(item.task.id)}
+                          style={{ touchAction: "pan-y", WebkitTouchCallout: "none" }}
                           className={cn(
-                            "hidden w-full items-center gap-1 truncate px-1 py-[1px] text-left text-[0.68rem] leading-[1.35] text-ink-500 md:flex",
+                            "hidden w-full cursor-grab items-center gap-1 truncate px-1 py-[1px] text-left text-[0.68rem] leading-[1.35] text-ink-500 md:flex",
                             item.task.status === "완료" && "text-ink-300 line-through",
                           )}
                         >

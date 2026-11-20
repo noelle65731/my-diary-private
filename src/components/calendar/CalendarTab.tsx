@@ -16,6 +16,7 @@ import {
 } from "@/lib/date";
 import { holidayName } from "@/lib/holidays";
 import { cn, matchesMode } from "@/lib/utils";
+import { applySortValues, reorderSortValues } from "@/lib/order";
 import type { CalendarEvent, CalendarKind, ModeFilter, ProjectTask, Routine } from "@/lib/types";
 import { ChevronLeftIcon, ChevronRightIcon, PlusIcon, SearchIcon } from "@/components/icons";
 import { WeekBoard } from "@/components/calendar/WeekBoard";
@@ -50,7 +51,7 @@ function eventMode(event: CalendarEvent): "업무" | "개인" | "공부" {
 }
 
 export function CalendarTab() {
-  const { data, update, setRoutineCount, findItem, create } = useData();
+  const { data, update, setRoutineCount, create } = useData();
   const { settings } = useSettings();
   const { focus, clearFocus, openBinderForDate, setSearchOpen } = useUi();
 
@@ -173,21 +174,20 @@ export function CalendarTab() {
     void update("calendar", event.id, { done: !event.done });
   };
 
-  const moveEvent = (id: string, date: string, time: string | null) => {
-    const item = findItem("calendar", id) as CalendarEvent | undefined;
-    if (!item) return;
-    const duration =
-      item.startTime && item.endTime
-        ? Math.max(15, minutesOf(item.endTime) - minutesOf(item.startTime))
-        : 60;
-    const nextStart = time ?? null;
-    const nextEnd = nextStart ? minutesToTime(minutesOf(nextStart) + duration) : null;
-    void update("calendar", id, {
-      date,
-      startTime: nextStart,
-      endTime: nextEnd,
-      endDate: date,
-    });
+  const moveEvent = (id: string, patch: Record<string, unknown>) => {
+    void update("calendar", id, patch);
+  };
+
+  const moveTask = (id: string, patch: Record<string, unknown>) => {
+    void update("projects", id, patch);
+  };
+
+  const reorderProjects = (ordered: ProjectTask[], movedId: string, insertIndex: number) => {
+    applySortValues(update, "projects", ordered, reorderSortValues(ordered, movedId, insertIndex));
+  };
+
+  const reorderRoutines = (ordered: Routine[], movedId: string, insertIndex: number) => {
+    applySortValues(update, "routines", ordered, reorderSortValues(ordered, movedId, insertIndex));
   };
 
   const addFavorite = async (titleText: string) => {
@@ -335,6 +335,8 @@ export function CalendarTab() {
               onOpenTask={openTask}
               onCreate={(date) => createEvent(date, null)}
               onRoutineCount={(routine, date, count) => void setRoutineCount(routine, date, count)}
+              onUpdateEvent={moveEvent}
+              onUpdateTask={moveTask}
             />
           ) : null}
 
@@ -355,9 +357,12 @@ export function CalendarTab() {
               onOpenTask={openTask}
               onOpenRoutine={(id) => setRoutineId(id)}
               onCreate={createEvent}
-              onMoveEvent={moveEvent}
+              onUpdateEvent={moveEvent}
+              onUpdateTask={moveTask}
               onToggleTask={toggleTask}
               onRoutineCount={(routine, date, count) => void setRoutineCount(routine, date, count)}
+              onReorderProjects={reorderProjects}
+              onReorderRoutines={reorderRoutines}
               onCreateTaskForProject={(projectId) => setTaskId(projectId ? `new:${projectId}` : "new:")}
               onCreateRoutine={() => setRoutineId("new")}
             />
@@ -380,9 +385,12 @@ export function CalendarTab() {
               onOpenTask={openTask}
               onOpenRoutine={(id) => setRoutineId(id)}
               onCreate={createEvent}
-              onMoveEvent={moveEvent}
+              onUpdateEvent={moveEvent}
+              onUpdateTask={moveTask}
               onToggleTask={toggleTask}
               onRoutineCount={(routine, date, count) => void setRoutineCount(routine, date, count)}
+              onReorderProjects={reorderProjects}
+              onReorderRoutines={reorderRoutines}
               onCreateTaskForProject={(projectId) => setTaskId(projectId ? `new:${projectId}` : "new:")}
               onCreateRoutine={() => setRoutineId("new")}
             />
@@ -399,6 +407,7 @@ export function CalendarTab() {
               onOpenEvent={openEvent}
               onOpenTask={openTask}
               onCreate={createEvent}
+              onUpdateEvent={moveEvent}
               onToggleTask={toggleTask}
               onRoutineCount={(routine, date, count) => void setRoutineCount(routine, date, count)}
               onWriteDiary={openBinderForDate}
@@ -494,16 +503,4 @@ export function CalendarTab() {
       />
     </div>
   );
-}
-
-function minutesOf(time: string): number {
-  const parts = time.split(":");
-  return Number(parts[0] ?? 0) * 60 + Number(parts[1] ?? 0);
-}
-
-function minutesToTime(minutes: number): string {
-  const value = Math.max(0, Math.min(1440, minutes));
-  const h = Math.floor(value / 60) % 24;
-  const m = value % 60;
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }

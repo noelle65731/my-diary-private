@@ -25,6 +25,7 @@ interface DayViewProps {
   onOpenEvent: (id: string) => void;
   onOpenTask: (id: string) => void;
   onCreate: (date: string, time?: string | null) => void;
+  onUpdateEvent: (id: string, patch: Record<string, unknown>) => void;
   onToggleTask: (task: ProjectTask) => void;
   onRoutineCount: (routine: Routine, date: string, count: number) => void;
   onWriteDiary: (date: string) => void;
@@ -41,6 +42,7 @@ export function DayView({
   onOpenEvent,
   onOpenTask,
   onCreate,
+  onUpdateEvent,
   onToggleTask,
   onRoutineCount,
   onWriteDiary,
@@ -100,6 +102,8 @@ export function DayView({
           gutterWidth="3.4rem"
           onOpenEvent={onOpenEvent}
           onCreate={onCreate}
+          onMoveEvent={(id, next) => onUpdateEvent(id, { ...next })}
+          onResizeEvent={(id, next) => onUpdateEvent(id, { ...next })}
         />
 
         <div className="mt-3 flex items-center justify-between border-t border-paper-300 pt-2 text-[0.68rem] text-ink-400">
