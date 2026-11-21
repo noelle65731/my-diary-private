@@ -678,7 +678,8 @@ function AgendaChip({ item }: { item: AgendaItem }) {
       data-agenda-item={item.kind}
       title={`${item.kind} · ${item.time ? `${item.time} ` : ""}${item.title}${item.waiting ? " (대기 중)" : ""}${item.dueNote ? ` · ${item.dueNote}` : ""}`}
       className={cn(
-        "flex min-w-0 max-w-[9.5rem] flex-none items-center gap-1 rounded-full border px-1.5 py-px text-[calc(12.5px*var(--fs))] leading-[1.55] sm:max-w-[11rem]",
+        // A31: 이름이 긴 일정도 잘리지 않게 폭을 넉넉히 — 좁은 화면에서는 한 줄을 다 씁니다.
+        "flex min-w-0 max-w-full flex-none items-center gap-1 rounded-full border px-1.5 py-px text-[calc(12.5px*var(--fs))] leading-[1.55] sm:max-w-[20rem]",
         item.kind === "일정" ? "border-line-soft bg-white" : "border-paper-200 bg-paper-200/60",
         muted ? "text-ink-400" : "text-ink-700",
       )}
