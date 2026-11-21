@@ -188,7 +188,15 @@ export function formatMonthKo(iso: string): string {
   return `${d.getFullYear()}년 ${d.getMonth() + 1}월`;
 }
 
-/** `오전 9:30` style label from `HH:MM`. */
+/** `오전 9:30` style label from `HH:MM`. *//**
+ * `14:00~15:30` / `14:00` — the short 시간 지정 label a task row carries next to its date
+ * (blank when the task has no start time, i.e. it is all-day).
+ */
+export function timeRangeLabel(start: string | null | undefined, end: string | null | undefined): string {
+  if (!start) return "";
+  return end && end > start ? `${start}~${end}` : start;
+}
+
 export function formatTimeKo(time: string | null | undefined): string {
   if (!time) return "";
   const parts = time.split(":");

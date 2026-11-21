@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import type { CalendarEvent, ProjectTask, Routine } from "@/lib/types";
-import { formatFullKo } from "@/lib/date";
+import { formatFullKo, timeRangeLabel } from "@/lib/date";
 import { holidayName } from "@/lib/holidays";
 import { cn } from "@/lib/utils";
 import { routineTone, taskTone } from "@/components/common/tone";
@@ -213,6 +213,9 @@ export function DayView({
                       </button>
                       <button type="button" onClick={() => onOpenTask(task.id)} className="min-w-0 flex-1 text-left">
                         <span className={cn("block text-[calc(15px*var(--fs))] leading-snug text-ink-800", (done || task.status === "취소") && "text-ink-400 line-through")}>
+                          {task.startTime ? (
+                            <span className="mr-1 text-[calc(14px*var(--fs))] tabular-nums text-ink-400">{timeRangeLabel(task.startTime, task.endTime)}</span>
+                          ) : null}
                           {task.title}
                           {task.status === "취소" ? (
                             <span className="ml-1 rounded bg-paper-200 px-1 text-[calc(12px*var(--fs))] not-italic text-ink-500">취소</span>

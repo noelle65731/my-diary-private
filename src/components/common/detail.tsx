@@ -17,6 +17,7 @@ export function DetailShell({
   onClose,
   label,
   subtitle,
+  notionUrl,
   sideBySide = false,
   footer,
   children,
@@ -26,6 +27,8 @@ export function DetailShell({
   onClose: () => void;
   label: ReactNode;
   subtitle?: ReactNode;
+  /** The record's Notion page — opened in a new tab/app so its own reminder can be turned on. */
+  notionUrl?: string | null;
   /** On a wide screen the right list stays usable, so the sheet only covers the centre. */
   sideBySide?: boolean;
   footer?: ReactNode;
@@ -87,6 +90,18 @@ export function DetailShell({
               <p className="truncate text-[calc(15px*var(--fs))] font-medium text-ink-700">{label}</p>
               {subtitle ? <p className="truncate text-[calc(13.5px*var(--fs))] text-ink-400">{subtitle}</p> : null}
             </div>
+            {notionUrl ? (
+              <a
+                href={notionUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="노션에서 열기"
+                title="이 항목의 노션 페이지를 새 탭에서 열기"
+                className="btn-outline btn-xs flex-none"
+              >
+                노션에서 열기
+              </a>
+            ) : null}
             <button type="button" onClick={onClose} className="icon-btn" aria-label="전체 닫기" title="전체 닫기">
               <XIcon size={18} />
             </button>

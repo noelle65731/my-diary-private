@@ -112,6 +112,8 @@ export function buildDemoData(): AllData {
     category: "개인",
     status: "미완료",
     date: null,
+    startTime: null,
+    endTime: null,
     due: null,
     doneAt: null,
     checkedAt: null,

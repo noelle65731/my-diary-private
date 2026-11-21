@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CalendarEvent, ModeFilter, ProjectTask, Routine } from "@/lib/types";
-import { isSameISO, todayISO, weekdayKo } from "@/lib/date";
+import { isSameISO, timeRangeLabel, todayISO, weekdayKo } from "@/lib/date";
 import { holidayName } from "@/lib/holidays";
 import { cn } from "@/lib/utils";
 import { mergeCategories } from "@/state/categories";
@@ -776,6 +776,11 @@ export function WeekBoard({
                               className="min-w-0 flex-1 touch-manipulation select-none text-left"
                             >
                               <span className={cn("flex gap-1", narrow ? "items-start" : "items-center")}>
+                                {!narrow && task.startTime ? (
+                                  <span className="flex-none text-[0.6rem] tabular-nums text-ink-400">
+                                    {timeRangeLabel(task.startTime, task.endTime)}
+                                  </span>
+                                ) : null}
                                 {narrow && done ? (
                                   <span className={cn("mt-[5px] h-[5px] w-[5px] flex-none rounded-full", taskColor.solid)} />
                                 ) : null}
@@ -804,8 +809,13 @@ export function WeekBoard({
                                   <span className="flex-none rounded bg-paper-200 px-1 text-[calc(12px*var(--fs))] font-medium leading-[1.4] text-ink-500">대기</span>
                                 ) : null}
                               </span>
-                              {narrow && (priority !== "기타" || waiting) ? (
+                              {narrow && (priority !== "기타" || waiting || !!task.startTime) ? (
                                 <span className="mt-0.5 flex flex-wrap items-center gap-1">
+                                  {task.startTime ? (
+                                    <span className="rounded bg-paper-200 px-[3px] text-[0.55rem] tabular-nums leading-[1.35] text-ink-500">
+                                      {timeRangeLabel(task.startTime, task.endTime)}
+                                    </span>
+                                  ) : null}
                                   {priority !== "기타" ? (
                                     <span
                                       className={cn(

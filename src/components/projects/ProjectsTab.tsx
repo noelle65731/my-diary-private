@@ -8,7 +8,7 @@ import { useSettings } from "@/state/settings";
 import { useCategoryOptions } from "@/state/categories";
 import { useTabReset, useUi } from "@/state/ui";
 import { cn, categoryNameOf, matchesMode } from "@/lib/utils";
-import { formatShort, startOfWeekISO, todayISO, weekdayKo } from "@/lib/date";
+import { formatShort, startOfWeekISO, timeRangeLabel, todayISO, weekdayKo } from "@/lib/date";
 import { type ModeFilter, type ProjectTask, type Routine, type TaskCategory } from "@/lib/types";
 import { PRIORITY_TONES, priorityOf, routineTone, taskTone } from "@/components/common/tone";
 import { useCategoryColors } from "@/state/category-colors";
@@ -34,6 +34,15 @@ const WEEKDAY_LETTERS = ["월", "화", "수", "목", "금", "토", "일"];
 function dateLabel(date: string | null): string {
   if (!date) return "";
   return `${formatShort(date)} ${weekdayKo(date)}`;
+}
+
+/** The date a task row shows, plus its 시작~종료 when that date is the task's own day. */
+function taskDateLabel(task: ProjectTask): string {
+  const shown = task.due ?? task.date;
+  if (!shown) return "";
+  const day = dateLabel(shown);
+  const time = shown === task.date ? timeRangeLabel(task.startTime, task.endTime) : "";
+  return time ? `${day} ${time}` : day;
 }
 
 export function ProjectsTab() {
@@ -788,7 +797,7 @@ function TaskLine({
           ) : null}
         </span>
       </button>
-      <span className="flex-none text-[calc(13px*var(--fs))] tabular-nums text-ink-400">{dateLabel(task.due ?? task.date)}</span>
+      <span className="flex-none text-[calc(13px*var(--fs))] tabular-nums text-ink-400">{taskDateLabel(task)}</span>
     </li>
   );
 }
@@ -961,7 +970,7 @@ function PriorityView({
                     ) : null}
                   </span>
                 </button>
-                <span className="flex-none text-[calc(13.5px*var(--fs))] tabular-nums text-ink-400">{dateLabel(task.due ?? task.date)}</span>
+                <span className="flex-none text-[calc(13.5px*var(--fs))] tabular-nums text-ink-400">{taskDateLabel(task)}</span>
               </li>
             );
           })}

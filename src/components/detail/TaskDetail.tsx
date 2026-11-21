@@ -16,7 +16,7 @@ import {
 import { InlineMemo } from "@/components/editors/MemoField";
 import { ProjectPicker } from "@/components/editors/shared";
 import { editableMemo, plainOfSpans, spansFromMarkdown } from "@/lib/richtext";
-import { addDaysISO, formatFullKo, formatShort, todayISO, weekdayKo } from "@/lib/date";
+import { addDaysISO, formatFullKo, formatShort, formatTimeKo, todayISO, weekdayKo } from "@/lib/date";
 import {
   TASK_STATUSES,
   type ExtraProperty,
@@ -28,7 +28,7 @@ import {
 } from "@/lib/types";
 import { DynamicProperties, type SchemaMap } from "@/components/detail/DynamicProperties";
 import { ProjectIconPicker } from "@/components/common/ProjectIcon";
-import { cn } from "@/lib/utils";
+import { cn, notionPageUrl } from "@/lib/utils";
 import { useSettings } from "@/state/settings";
 import { useCategoryOptions } from "@/state/categories";
 
@@ -38,6 +38,10 @@ interface TaskForm {
   category: TaskCategory;
   status: TaskStatus;
   date: string;
+  /** 시간 지정 — off keeps the task all-day (the day is saved without a clock). */
+  timed: boolean;
+  startTime: string;
+  endTime: string;
   due: string;
   urgent: boolean;
   important: boolean;
@@ -61,6 +65,9 @@ function formFromTask(task: ProjectTask): TaskForm {
     category: task.category,
     status: task.status,
     date: task.date ?? "",
+    timed: !!task.startTime,
+    startTime: task.startTime ?? "09:00",
+    endTime: task.endTime ?? "",
     due: task.due ?? "",
     urgent: task.urgent,
     important: task.important,
@@ -94,7 +101,17 @@ function buildPatch(task: ProjectTask, draft: TaskForm, changed: string[]): Reco
     }
     if (draft.status !== "취소") patch.cancelReason = "";
   }
-  if (has("date")) patch.date = draft.date || null;
+  if (has("date") || has("timed") || has("startTime") || has("endTime")) {
+    // 시간 지정: `date` stays the day, the clock goes to Notion as start/end of that day.
+    // Turning 시간 지정 off writes the day alone again.
+    const day = draft.date;
+    const timed = draft.timed && !!day;
+    const start = timed ? draft.startTime || "09:00" : null;
+    const end = timed && draft.endTime && draft.endTime > (draft.startTime || "09:00") ? draft.endTime : null;
+    patch.date = day || null;
+    patch.startTime = start;
+    patch.endTime = end;
+  }
   if (has("due")) patch.due = draft.due || null;
   if (has("urgent")) patch.urgent = draft.urgent;
   if (has("important")) patch.important = draft.important;
@@ -287,6 +304,7 @@ function TaskDetailInner({
       onClose={() => leave(onCloseAll)}
       label={`${task.kind} · ${draft.category}`}
       subtitle={project ? project.title : task.kind === "할 일" ? "index" : undefined}
+      notionUrl={notionPageUrl(task)}
       sideBySide={sideBySide}
       footer={
         <>
@@ -356,7 +374,13 @@ function TaskDetailInner({
               setField(null);
             }}
           />
-          <span className="text-[calc(14px*var(--fs))] text-ink-400">{formatShort(draft.date || task.createdAt.slice(0, 10) || todayISO())}</span>
+          <span className="text-[calc(14px*var(--fs))] text-ink-400">
+            {formatShort(draft.date || task.createdAt.slice(0, 10) || todayISO())}
+            {draft.date ? ` ${weekdayKo(draft.date)}` : ""}
+            {draft.timed && draft.date
+              ? ` · ${formatTimeKo(draft.startTime)}${draft.endTime ? `–${formatTimeKo(draft.endTime)}` : ""}`
+              : ""}
+          </span>
         </div>
 
         {draft.status === "대기 중" && !isProject ? (
@@ -486,6 +510,55 @@ function TaskDetailInner({
               onClear={() => set("due", "")}
             />
           </div>
+          {/* 시간 지정 — off (the default) saves the day alone; on adds 시작 · 종료 시간. */}
+          <div className="mt-1 grid gap-2 sm:grid-cols-3">
+            <div>
+              <p className="text-[0.64rem] text-ink-400">시간</p>
+              <button
+                type="button"
+                aria-pressed={draft.timed}
+                aria-label={draft.timed ? "시간 지정 끄기" : "시간 지정 켜기"}
+                onClick={() => {
+                  set("timed", !draft.timed);
+                  if (!draft.timed && !draft.date) set("date", todayISO());
+                }}
+                className={
+                  draft.timed
+                    ? "mt-0.5 rounded-full border border-ink-900 bg-ink-900 px-3 py-1 text-[0.8rem] text-paper-50"
+                    : "mt-0.5 rounded-full border border-paper-400 bg-white px-3 py-1 text-[0.8rem] text-ink-600"
+                }
+              >
+                시간 지정
+              </button>
+            </div>
+            {draft.timed ? (
+              <>
+                <InlineText
+                  label="시작"
+                  type="time"
+                  value={draft.startTime}
+                  onChange={(value) => set("startTime", value)}
+                  active={field === "startTime"}
+                  onActivate={() => setField("startTime")}
+                  onDone={() => setField(null)}
+                  display={formatTimeKo(draft.startTime)}
+                />
+                <InlineText
+                  label="종료"
+                  type="time"
+                  value={draft.endTime}
+                  onChange={(value) => set("endTime", value)}
+                  active={field === "endTime"}
+                  onActivate={() => setField("endTime")}
+                  onDone={() => setField(null)}
+                  display={draft.endTime ? formatTimeKo(draft.endTime) : undefined}
+                  placeholder="종료 시각 없음"
+                  hint="종료는 시작보다 늦게 적습니다. 비우면 시작 시각만 저장됩니다."
+                />
+              </>
+            ) : null}
+          </div>
+
         </DetailSection>
 
         <DetailSection title="기타">

@@ -15,6 +15,7 @@ import { TagInput } from "@/components/editors/shared";
 import { renderMarkdown } from "@/lib/markdown";
 import { formatFullKo, formatShort, todayISO, weekdayKo } from "@/lib/date";
 import { BINDER_KINDS, type BinderEntry, type BinderKind } from "@/lib/types";
+import { notionPageUrl } from "@/lib/utils";
 import { PhotoEditor, PhotoGallery } from "@/components/common/PhotoField";
 
 interface BinderForm {
@@ -116,6 +117,7 @@ function BinderDetailInner({
       onClose={() => leave(onCloseAll)}
       label={`${draft.kind} · ${formatShort(draft.date)}`}
       subtitle={formatFullKo(draft.date)}
+      notionUrl={notionPageUrl(entry)}
       footer={
         <>
           <div className="flex items-center gap-1">

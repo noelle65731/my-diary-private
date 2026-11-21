@@ -61,6 +61,18 @@ export function sortByDate<T>(items: T[], get: (item: T) => string | null): T[] 
   });
 }
 
+/**
+ * The Notion page of a record: its own `url`, or `notion.so/<id>` built from the page id.
+ * An id that is not a Notion page id (demo rows, a row not yet saved) gives `""`, so the
+ * UI can leave the link out instead of opening a page that does not exist.
+ */
+export function notionPageUrl(item: { id: string; url?: string | null }): string {
+  const saved = (item.url ?? "").trim();
+  if (/^https?:\/\//i.test(saved)) return saved;
+  const bare = item.id.replace(/-/g, "");
+  return /^[0-9a-f]{32}$/i.test(bare) ? `https://www.notion.so/${bare}` : "";
+}
+
 export function stripHtml(text: string): string {
   return text.replace(/<[^>]*>/g, "");
 }

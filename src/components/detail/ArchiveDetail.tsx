@@ -18,6 +18,7 @@ import { renderMarkdown } from "@/lib/markdown";
 import { editableMemo, plainOfSpans, spansFromMarkdown } from "@/lib/richtext";
 import { formatFullKo, formatShort, todayISO, weekdayKo } from "@/lib/date";
 import { ARCHIVE_KINDS, type ArchiveEntry, type ArchiveKind } from "@/lib/types";
+import { notionPageUrl } from "@/lib/utils";
 import { PhotoEditor, PhotoGallery } from "@/components/common/PhotoField";
 
 interface ArchiveForm {
@@ -135,6 +136,7 @@ function ArchiveDetailInner({
       onClose={() => leave(onCloseAll)}
       label={`${draft.kind} · ${draft.date ? formatShort(draft.date) : "날짜 없음"}`}
       subtitle={draft.date ? formatFullKo(draft.date) : undefined}
+      notionUrl={notionPageUrl(entry)}
       footer={
         <>
           <div className="flex items-center gap-1">

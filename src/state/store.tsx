@@ -203,6 +203,8 @@ function draftItem(resource: Resource, patch: Patch, id = uid("new")): AnyItem {
       category: (patch["category"] as ProjectTask["category"]) ?? "개인",
       status: (patch["status"] as ProjectTask["status"]) ?? "미완료",
       date: (patch["date"] as string | null) ?? null,
+      startTime: (patch["startTime"] as string | null) ?? null,
+      endTime: (patch["endTime"] as string | null) ?? null,
       due: (patch["due"] as string | null) ?? null,
       doneAt: null,
       checkedAt: null,

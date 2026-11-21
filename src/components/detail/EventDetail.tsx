@@ -20,6 +20,7 @@ import { InlineMemo } from "@/components/editors/MemoField";
 import { ProjectPicker } from "@/components/editors/shared";
 import { editableMemo, plainOfSpans, spansFromMarkdown } from "@/lib/richtext";
 import { formatShort, startOfWeekISO, todayISO, weekKeyOf, weekdayKo } from "@/lib/date";
+import { notionPageUrl } from "@/lib/utils";
 import {
   CALENDAR_CATEGORIES,
   currentCalendarCategory,
@@ -185,6 +186,7 @@ function EventDetailInner({
       onClose={() => leave(onCloseAll)}
       label={`${draft.kind} · ${draft.category}`}
       subtitle={draft.date ? `${formatShort(draft.date)} ${weekdayKo(draft.date)}` : undefined}
+      notionUrl={notionPageUrl(event)}
       footer={
         <>
           <div className="flex items-center gap-1">

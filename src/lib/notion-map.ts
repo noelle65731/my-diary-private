@@ -426,6 +426,10 @@ export function mapTask(page: NotionPage): ProjectTask {
     category: (readSelect(props, "분류") ?? "개인") as TaskCategory,
     status: (readStatus(props, "상태") ?? "미완료") as TaskStatus,
     date: when.date,
+    // 시간 지정: the day sits in `date`, the clock in these two; an end that fell on
+    // another day (edited in Notion) is not shown as this day's end time.
+    startTime: when.time,
+    endTime: when.time && (!when.endDate || when.endDate === when.date) ? when.endTime : null,
     due: due.date,
     doneAt: readDate(props, "완료일").date,
     checkedAt: readDate(props, "확인일").date,
@@ -535,7 +539,22 @@ export function buildProperties(resource: keyof typeof mappers, patch: Patch, cu
     if (has(patch, "kind")) out["유형"] = select(str(patch, "kind", "할 일"));
     if (has(patch, "category")) out["분류"] = select(str(patch, "category", "개인"));
     if (has(patch, "status")) out["상태"] = status(str(patch, "status", "미완료"));
-    if (has(patch, "date")) out["날짜"] = dateValue(patch["date"] as string | null);
+    if (has(patch, "date") || has(patch, "startTime") || has(patch, "endTime")) {
+      // 시간 지정: `2026-11-21T14:00:00.000+09:00` (end `15:30:00.000+09:00`) — the same
+      // KST ISO shape the calendar writes. Without a start time the day is saved alone.
+      const start = typeof patch["date"] === "string" ? (patch["date"] as string) : null;
+      const startTime = typeof patch["startTime"] === "string" && patch["startTime"] ? (patch["startTime"] as string) : null;
+      const endTime = typeof patch["endTime"] === "string" && patch["endTime"] ? (patch["endTime"] as string) : null;
+      const day = start ? start.slice(0, 10) : "";
+      out["날짜"] = start
+        ? {
+            date: {
+              start: withTime(day, startTime),
+              ...(startTime && endTime && endTime > startTime ? { end: withTime(day, endTime) } : {}),
+            },
+          }
+        : { date: null };
+    }
     if (has(patch, "due")) out["마감일"] = dateValue(patch["due"] as string | null);
     if (has(patch, "doneAt")) out["완료일"] = dateValue(patch["doneAt"] as string | null);
     if (has(patch, "checkedAt")) out["확인일"] = dateValue(patch["checkedAt"] as string | null);

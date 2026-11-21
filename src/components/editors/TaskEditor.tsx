@@ -9,7 +9,7 @@ import { EditorFooter, ErrorNote, ProjectPicker } from "@/components/editors/sha
 import { ProjectIconPicker } from "@/components/common/ProjectIcon";
 import { MemoEditor } from "@/components/editors/MemoField";
 import { plainOfSpans, spansFromMarkdown } from "@/lib/richtext";
-import { todayISO } from "@/lib/date";
+import { formatTimeKo, todayISO } from "@/lib/date";
 import { cn } from "@/lib/utils";
 import {
   TASK_STATUSES,
@@ -35,6 +35,10 @@ interface FormState {
   category: TaskCategory;
   status: TaskStatus;
   date: string;
+  /** 시간 지정 — off keeps the new task all-day (the default). */
+  timed: boolean;
+  startTime: string;
+  endTime: string;
   due: string;
   urgent: boolean;
   important: boolean;
@@ -55,6 +59,9 @@ function formFromTask(task: ProjectTask): FormState {
     category: task.category,
     status: task.status,
     date: task.date ?? "",
+    timed: !!task.startTime,
+    startTime: task.startTime ?? "09:00",
+    endTime: task.endTime ?? "",
     due: task.due ?? "",
     urgent: task.urgent,
     important: task.important,
@@ -76,6 +83,9 @@ function formFromDraft(draft?: TaskDraft): FormState {
     category: draft?.category ?? "개인",
     status: "미완료",
     date: draft?.date ?? "",
+    timed: false,
+    startTime: "09:00",
+    endTime: "",
     due: "",
     urgent: draft?.urgent ?? false,
     important: draft?.important ?? false,
@@ -174,6 +184,9 @@ function TaskEditorInner({
       category: form.category,
       status: form.status,
       date: form.date || null,
+      // 시간 지정: a start/end on the day, or the day alone when it is off.
+      startTime: form.timed && form.date ? form.startTime || "09:00" : null,
+      endTime: form.timed && form.date && form.endTime && form.endTime > (form.startTime || "09:00") ? form.endTime : null,
       due: form.due || null,
       doneAt: completed ? existing?.doneAt ?? todayISO() : null,
       urgent: form.urgent,
@@ -351,6 +364,47 @@ function TaskEditorInner({
             <span className="label">마감일</span>
             <input type="date" value={form.due} onChange={(event) => patch("due", event.target.value)} className="input" />
           </label>
+        </div>
+
+        {/* 시간 지정 — 기본은 시간 없이(날짜만). 켜면 시작·종료 시간을 함께 저장합니다. */}
+        <div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              aria-pressed={form.timed}
+              aria-label={form.timed ? "시간 지정 끄기" : "시간 지정 켜기"}
+              onClick={() => {
+                patch("timed", !form.timed);
+                if (!form.timed && !form.date) patch("date", todayISO());
+              }}
+              className={cn(
+                "chip border transition",
+                form.timed ? "border-ink-900 bg-ink-900 text-paper-50" : "border-paper-400 bg-white/60 text-ink-600 hover:border-ink-400",
+              )}
+            >
+              시간 지정
+            </button>
+            {form.timed ? (
+              <span className="text-[0.7rem] text-ink-400">
+                {formatTimeKo(form.startTime)}
+                {form.endTime ? `–${formatTimeKo(form.endTime)}` : ""}
+              </span>
+            ) : (
+              <span className="text-[0.7rem] text-ink-400">기본은 날짜만 저장합니다</span>
+            )}
+          </div>
+          {form.timed ? (
+            <div className="mt-2 grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="label">시작 시간</span>
+                <input type="time" value={form.startTime} onChange={(event) => patch("startTime", event.target.value)} className="input" />
+              </label>
+              <label className="block">
+                <span className="label">종료 시간</span>
+                <input type="time" value={form.endTime} onChange={(event) => patch("endTime", event.target.value)} className="input" />
+              </label>
+            </div>
+          ) : null}
         </div>
 
         <div>

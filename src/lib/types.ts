@@ -89,7 +89,12 @@ export interface ProjectTask extends BaseItem {
   kind: TaskKind;
   category: TaskCategory;
   status: TaskStatus;
+  /** YYYY-MM-DD — the day only; a time lives in `startTime` / `endTime`. */
   date: string | null;
+  /** HH:MM — null when the task is all-day (no 시간 지정). */
+  startTime: string | null;
+  /** HH:MM — the end of the same day; null when only a start was given. */
+  endTime: string | null;
   due: string | null;
   doneAt: string | null;
   checkedAt: string | null;

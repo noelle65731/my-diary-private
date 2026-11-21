@@ -2,7 +2,7 @@
 
 import type { ProjectTask } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { formatShort, todayISO, weekdayKo } from "@/lib/date";
+import { formatShort, timeRangeLabel, todayISO, weekdayKo } from "@/lib/date";
 import { taskTone } from "@/components/common/tone";
 import { useCategoryColors } from "@/state/category-colors";
 import { CheckIcon, FlagIcon } from "@/components/icons";
@@ -95,7 +95,12 @@ export function TaskRow({
           <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[calc(13px*var(--fs))] text-ink-400">
             <span className={cn("chip py-0", categoryColor.toneOf(task.category, taskTone(task.category)).bg, categoryColor.toneOf(task.category, taskTone(task.category)).text)}>{task.category}</span>
             {showProjectName ? <span className="truncate">{showProjectName}</span> : null}
-            {task.date ? <span>{formatShort(task.date)} {weekdayKo(task.date)}</span> : null}
+            {task.date ? (
+              <span>
+                {formatShort(task.date)} {weekdayKo(task.date)}
+                {task.startTime ? ` ${timeRangeLabel(task.startTime, task.endTime)}` : ""}
+              </span>
+            ) : null}
             {task.due ? (
               <span className={cn(overdue && "font-medium text-rose-500")}>
                 마감 {formatShort(task.due)}

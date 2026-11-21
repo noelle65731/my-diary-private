@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { CalendarEvent, ModeFilter, ProjectTask, Routine } from "@/lib/types";
-import { daysInMonth, formatShort, isSameISO, monthMatrix, todayISO, weekdayKo } from "@/lib/date";
+import { daysInMonth, formatShort, isSameISO, monthMatrix, timeRangeLabel, todayISO, weekdayKo } from "@/lib/date";
 import { holidayName } from "@/lib/holidays";
 import { cn } from "@/lib/utils";
 import { routineTone, taskTone } from "@/components/common/tone";
@@ -329,6 +329,11 @@ export function MonthView({
                               className="border-b-2 pb-[0.5px]"
                               style={{ borderColor: underline }}
                             >
+                              {item.task.startTime ? (
+                                <span className="mr-1 hidden tabular-nums opacity-80 md:inline">
+                                  {timeRangeLabel(item.task.startTime, item.task.endTime)}
+                                </span>
+                              ) : null}
                               {item.task.title}
                             </span>
                           </button>
@@ -564,6 +569,11 @@ function DayListPanel({
                         {task.title}
                       </button>
                       {waiting ? <span className="mt-[1px] flex-none rounded bg-paper-200 px-1 text-[calc(12.5px*var(--fs))] text-ink-500">대기</span> : null}
+                      {task.startTime ? (
+                        <span className="mt-[3px] flex-none text-[calc(12.5px*var(--fs))] tabular-nums text-ink-400">
+                          {timeRangeLabel(task.startTime, task.endTime)}
+                        </span>
+                      ) : null}
                     </li>
                   );
                 })}

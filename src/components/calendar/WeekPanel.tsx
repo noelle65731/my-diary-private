@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { CalendarEvent, ProjectTask } from "@/lib/types";
-import { addDaysISO, formatShort, toISO, todayISO, weekKeyOf } from "@/lib/date";
+import { addDaysISO, formatShort, timeRangeLabel, toISO, todayISO, weekKeyOf } from "@/lib/date";
 import { cn } from "@/lib/utils";
 import { CheckIcon, PencilIcon } from "@/components/icons";
 import { MiniMonth } from "@/components/calendar/MiniMonth";
@@ -274,6 +274,10 @@ export function WeekPanel({
             {favorites.slice(0, 8).map(({ kind, item }) => {
               const done = kind === "event" ? (item as CalendarEvent).done : (item as ProjectTask).status === "완료";
               const date = kind === "event" ? (item as CalendarEvent).date : ((item as ProjectTask).due ?? (item as ProjectTask).date);
+              const time =
+                kind === "task" && date && date === (item as ProjectTask).date
+                  ? timeRangeLabel((item as ProjectTask).startTime, (item as ProjectTask).endTime)
+                  : "";
               return (
                 <li key={`${kind}-${item.id}`} className="flex items-center gap-2 py-[3px]">
                   <button
@@ -300,6 +304,7 @@ export function WeekPanel({
                   {date ? (
                     <span className="flex-none text-[calc(13px*var(--fs))] tabular-nums text-ink-400">
                       {formatShort(date)} {["일", "월", "화", "수", "목", "금", "토"][new Date(`${date}T12:00:00`).getDay()]}
+                      {time ? ` ${time}` : ""}
                     </span>
                   ) : (
                     <span className="flex-none text-[calc(13px*var(--fs))] text-ink-300">index</span>
