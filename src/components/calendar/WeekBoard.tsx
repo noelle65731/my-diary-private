@@ -394,22 +394,30 @@ export function WeekBoard({
               key={day}
               type="button"
               data-today={isToday ? "true" : undefined}
+              data-week-day-head={day}
+              title={`${Number(day.slice(5, 7))}월 ${Number(day.slice(8, 10))}일 ${weekdayKo(day)}요일 · 하루 보기`}
+              aria-label={`${Number(day.slice(5, 7))}월 ${Number(day.slice(8, 10))}일 하루 보기`}
               onClick={() => onSelectDay(day)}
-              className="flex flex-col items-center gap-0.5 pb-0.5 pt-1.5 transition hover:bg-paper-200/40"
+              className="group/day flex flex-col items-center gap-0.5 pb-0.5 pt-1.5 transition hover:bg-paper-200/40"
             >
-              <span className={cn("text-[calc(14px*var(--fs))]", dow === 6 ? "text-blue-500" : dow === 0 ? "text-red-400" : "text-ink-400")}>
+              <span
+                className={cn(
+                  "text-[calc(14px*var(--fs))] transition group-hover/day:font-semibold",
+                  dow === 6 ? "text-blue-500" : dow === 0 ? "text-red-400" : "text-ink-400 group-hover/day:text-ink-700",
+                )}
+              >
                 {weekdayKo(day)}
               </span>
               <span
                 className={cn(
                   "flex h-8 min-w-8 items-center justify-center rounded-full px-1 text-[calc(18px*var(--fs))] font-semibold leading-none tabular-nums md:h-9 md:min-w-9 md:text-[calc(20px*var(--fs))]",
                   isToday
-                    ? "bg-ink-900 text-white"
+                    ? "bg-ink-900 text-white group-hover/day:ring-2 group-hover/day:ring-ink-900/20"
                     : holiday || dow === 0
-                      ? "text-red-500"
+                      ? "text-red-500 group-hover/day:bg-red-50 group-hover/day:ring-1 group-hover/day:ring-inset group-hover/day:ring-red-200"
                       : dow === 6
-                        ? "text-blue-600"
-                        : "text-ink-900",
+                        ? "text-blue-600 group-hover/day:bg-blue-50 group-hover/day:ring-1 group-hover/day:ring-inset group-hover/day:ring-blue-200"
+                        : "text-ink-900 group-hover/day:bg-paper-200 group-hover/day:ring-1 group-hover/day:ring-inset group-hover/day:ring-ink-900/15",
                 )}
               >
                 {String(Number(day.slice(8, 10)))}

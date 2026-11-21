@@ -12,11 +12,13 @@ interface YearViewProps {
   tasks: ProjectTask[];
   hiddenIncluded: boolean;
   onPickDay: (day: string) => void;
+  /** A21: 월 이름을 누르면 그 달의 월간 보기로 갑니다. */
+  onPickMonth?: (monthKey: string) => void;
 }
 
 const MONTH_NAMES = ["1월", "2월", "3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "11월", "12월"];
 
-export function YearView({ year, events, tasks, hiddenIncluded, onPickDay }: YearViewProps) {
+export function YearView({ year, events, tasks, hiddenIncluded, onPickDay, onPickMonth }: YearViewProps) {
   const today = todayISO();
 
   const counts = useMemo(() => {
@@ -43,7 +45,7 @@ export function YearView({ year, events, tasks, hiddenIncluded, onPickDay }: Yea
   return (
     <div className="year-grid grid grid-cols-2 gap-x-5 gap-y-2 sm:grid-cols-3 xl:grid-cols-4 xl:gap-x-6">
       {Array.from({ length: 12 }, (_, month0) => (
-        <MonthMini key={month0} year={year} month0={month0} today={today} counts={counts} onPickDay={onPickDay} />
+        <MonthMini key={month0} year={year} month0={month0} today={today} counts={counts} onPickDay={onPickDay} onPickMonth={onPickMonth} />
       ))}
     </div>
   );
@@ -55,19 +57,33 @@ function MonthMini({
   today,
   counts,
   onPickDay,
+  onPickMonth,
 }: {
   year: number;
   month0: number;
   today: string;
   counts: Map<string, number>;
   onPickDay: (day: string) => void;
+  onPickMonth?: (monthKey: string) => void;
 }) {
   const matrix = monthMatrix(year, month0, 1);
   const monthKey = `${year}-${String(month0 + 1).padStart(2, "0")}`;
 
   return (
-    <div className="min-w-0">
-      <p className="mb-0.5 text-[length:var(--yr-month)] font-semibold leading-none text-ink-900">{MONTH_NAMES[month0]}</p>
+    <div className="group/month min-w-0">
+      <button
+        type="button"
+        data-year-month={monthKey}
+        onClick={() => onPickMonth?.(monthKey)}
+        title={`${MONTH_NAMES[month0]} 월간 보기`}
+        aria-label={`${MONTH_NAMES[month0]} 월간 보기`}
+        className="-mx-1 mb-0.5 flex w-[calc(100%+0.5rem)] items-baseline gap-1 rounded px-1 text-left text-[length:var(--yr-month)] font-semibold leading-none text-ink-900 transition hover:bg-paper-200/70"
+      >
+        {MONTH_NAMES[month0]}
+        <span aria-hidden className="text-[calc(11px*var(--fs))] font-normal text-ink-300 opacity-0 transition group-hover/month:opacity-100">
+          월간 ›
+        </span>
+      </button>
       <div className="grid grid-cols-7 gap-y-0.5 text-center">
         {["월", "화", "수", "목", "금", "토", "일"].map((label, index) => (
           <span

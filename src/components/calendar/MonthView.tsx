@@ -25,6 +25,8 @@ interface MonthViewProps {
   /** Bumped by the calendar tab when an opened detail's X closes every layer. */
   closeDayListSignal?: number;
   onSelectDay: (day: string) => void;
+  /** A21: 한 주 줄(빈 공간)을 누르면 그 주의 주간 보기로 — `day`는 그 주 아무 날이나 됩니다. */
+  onSelectWeek?: (day: string) => void;
   onOpenEvent: (id: string) => void;
   onOpenTask: (id: string) => void;
   /** A10: a tap on the month checkbox completes the task, a second tap clears it. */
@@ -66,6 +68,7 @@ export function MonthView({
   dayItems,
   closeDayListSignal = 0,
   onSelectDay,
+  onSelectWeek,
   onOpenEvent,
   onOpenTask,
   onToggleTask,
@@ -168,7 +171,7 @@ export function MonthView({
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col">
-      <div className="grid flex-none grid-cols-7 border-b border-paper-300">
+      <div className="grid flex-none grid-cols-7 border-b border-paper-300 pr-[1.15rem] lg:pr-0">
         {weekdays.map((label, index) => {
           const dow = weekStartsOn === 1 ? (index + 1) % 7 : index;
           return (
@@ -191,10 +194,20 @@ export function MonthView({
           const dow = new Date(`${row[index]}T12:00:00`).getDay();
           return dow !== 0 && dow !== 6;
         });
+        const weekStartDay = row[0] ?? cells[0] ?? cursor;
         return (
           <div
             key={rowIndex}
-            className="grid min-h-0 flex-1 border-b border-paper-300 last:border-b-0"
+            data-month-row={weekStartDay}
+            onClick={(event) => {
+              // A21: 한 주 전체가 '주간 보기'로 가는 줄입니다. 날짜·일정·할 일·더보기는
+              // 각자 할 일을 하도록 그대로 두고, 줄의 빈 공간만 주간 이동으로 씁니다.
+              const target = event.target as HTMLElement;
+              if (!onSelectWeek) return;
+              if (target.closest("[data-month-item]") || target.closest("[data-day-num]") || target.closest("[data-month-more]")) return;
+              onSelectWeek(weekStartDay);
+            }}
+            className="group/row relative grid min-h-0 flex-1 border-b border-paper-300 pr-[1.15rem] transition-colors last:border-b-0 hover:bg-[#eef1f6]/70 lg:pr-0"
             style={{ gridTemplateColumns: `repeat(${cells.length}, minmax(0,1fr))`, minHeight: cellMinHeight }}
           >
             {cells.map((day) => {
@@ -212,6 +225,9 @@ export function MonthView({
                   key={day}
                   data-month-cell={day}
                   onClick={(event) => {
+                    // A21: 주 줄이 주간 보기로 가는 동안에는 빈 공간 클릭으로 하루 목록을 열지 않습니다
+                    // (하루 목록은 `할 일 N` · `+N 더`에서 열립니다). 주간 이동이 없을 때만 예전처럼 엽니다.
+                    if (onSelectWeek) return;
                     // A16/A19: on a phone the whole cell leads to that day's list, and on a
                     // desktop the white space, the date and +N do too — chips keep opening
                     // their own record, so a click that landed on one is left alone.
@@ -236,7 +252,14 @@ export function MonthView({
                   <div className="flex items-center justify-between">
                     <button
                       type="button"
-                      onClick={() => setOpenDay(day)}
+                      data-day-num={day}
+                      title={`${formatShort(day)} ${weekdayKo(day)}요일 · 하루 보기`}
+                      aria-label={`${formatShort(day)} 하루 보기`}
+                      onClick={(event) => {
+                        // A21: 날짜 숫자는 그 날의 일간 보기로 갑니다 (줄 클릭과 겹치지 않게 멈춥니다).
+                        event.stopPropagation();
+                        onSelectDay(day);
+                      }}
                       className={cn(
                         "flex h-[1.25rem] min-w-[1.25rem] items-center justify-center rounded-full px-1 text-[calc(14px*var(--fs))] font-medium tabular-nums transition md:h-[1.4rem] md:min-w-[1.4rem] md:text-[calc(15px*var(--fs))]",
                         isToday
@@ -248,7 +271,8 @@ export function MonthView({
                               : inMonth
                                 ? "text-ink-700"
                                 : "text-ink-300",
-                        !isToday && "hover:bg-paper-200",
+                        !isToday && "hover:bg-paper-200 group-hover/row:bg-paper-200/80",
+                        "hover:ring-1 hover:ring-inset hover:ring-ink-900/15",
                       )}
                     >
                       {Number(day.slice(8, 10))}
@@ -343,7 +367,11 @@ export function MonthView({
                     {restTasks > 0 ? (
                       <button
                         type="button"
-                        onClick={() => setOpenDay(day)}
+                        data-month-more={day}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setOpenDay(day);
+                        }}
                         className="block w-full px-0.5 text-left text-[calc(13px*var(--fs))] text-ink-500 hover:text-ink-800 md:px-1 md:text-[calc(13.5px*var(--fs))]"
                       >
                         할 일 {restTasks}
@@ -352,7 +380,11 @@ export function MonthView({
                     {restEvents > 0 ? (
                       <button
                         type="button"
-                        onClick={() => setOpenDay(day)}
+                        data-month-more={day}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setOpenDay(day);
+                        }}
                         className="block w-full px-0.5 text-left text-[calc(13px*var(--fs))] text-ink-400 hover:text-ink-700 md:px-1 md:text-[calc(13.5px*var(--fs))]"
                       >
                         +{restEvents} 더
@@ -362,6 +394,42 @@ export function MonthView({
                 </div>
               );
             })}
+            {onSelectWeek ? (
+              <>
+                {/* 좁은 화면: 오른쪽에 늘 보이는 '주' 기둥 — 칸 내용과 겹치지 않게 자리를 비워 둡니다. */}
+                <button
+                  type="button"
+                  data-week-link={weekStartDay}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onSelectWeek(weekStartDay);
+                  }}
+                  aria-label={`${formatShort(weekStartDay)}부터 한 주 주간 보기`}
+                  title="이 주 주간 보기"
+                  className="absolute right-0 top-1/2 z-20 flex w-[1.15rem] -translate-y-1/2 flex-col items-center gap-[1px] rounded-l-md border border-r-0 border-paper-300 bg-white py-1 text-[calc(10px*var(--fs))] font-medium leading-none text-ink-400 transition hover:bg-paper-100 hover:text-ink-900 lg:hidden"
+                >
+                  주
+                  <span aria-hidden className="text-[calc(9px*var(--fs))]">
+                    ›
+                  </span>
+                </button>
+                {/* 넓은 화면: 그 주 줄에 마우스를 올릴 때만 나타나는 '이 주 보기'. */}
+                <button
+                  type="button"
+                  data-week-link-wide={weekStartDay}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onSelectWeek(weekStartDay);
+                  }}
+                  aria-label={`${formatShort(weekStartDay)}부터 한 주 주간 보기`}
+                  title="이 주 주간 보기"
+                  className="pointer-events-none absolute right-1 top-1 z-20 hidden items-center gap-0.5 rounded-full border border-paper-300 bg-white/95 px-1.5 py-[1px] text-[calc(11.5px*var(--fs))] font-medium leading-[1.3] text-ink-500 opacity-0 shadow-sm transition hover:border-ink-900 hover:text-ink-900 group-hover/row:pointer-events-auto group-hover/row:opacity-100 group-focus-within/row:pointer-events-auto group-focus-within/row:opacity-100 lg:flex"
+                >
+                  이 주 보기
+                  <span aria-hidden>›</span>
+                </button>
+              </>
+            ) : null}
           </div>
         );
       })}

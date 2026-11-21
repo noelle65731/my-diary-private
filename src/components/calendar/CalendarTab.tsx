@@ -489,7 +489,7 @@ export function CalendarTab() {
                 {option}
               </button>
             ))}
-            <span className="ml-auto text-[calc(13.5px*var(--fs))] text-ink-400">날짜를 누르면 하루 보기로 이동합니다</span>
+            <span className="ml-auto text-[calc(13.5px*var(--fs))] text-ink-400">월 이름을 누르면 월간, 날짜를 누르면 하루 보기로 이동합니다</span>
           </div>
           <div className="mt-3">
             <YearView
@@ -500,6 +500,12 @@ export function CalendarTab() {
               onPickDay={(day) => {
                 setCursor(day);
                 setView("day");
+              }}
+              onPickMonth={(monthKey) => {
+                // A21: 연간 → 월간. 그 달 1일로 커서를 두고 월간 보기를 엽니다.
+                setYear(Number(monthKey.slice(0, 4)));
+                setCursor(`${monthKey}-01`);
+                setView("month");
               }}
             />
           </div>
@@ -527,6 +533,11 @@ export function CalendarTab() {
               onSelectDay={(day) => {
                 setCursor(day);
                 setView("day");
+              }}
+              onSelectWeek={(day) => {
+                // A21: 월간 → 주간. 그 주 아무 날이나 커서로 두면 주간 보기가 그 주를 엽니다.
+                setCursor(day);
+                setView("week");
               }}
               onOpenEvent={openEvent}
               onOpenTask={openTask}
