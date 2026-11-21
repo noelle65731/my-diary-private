@@ -150,7 +150,7 @@ function readDate(props: Props, name: string): DateValue {
 
 const KNOWN: Record<string, string[]> = {
   calendar: ["제목", "유형", "분류", "날짜", "완료", "취소", "취소 사유", "취소 시각", "기타", "NOW 숨김", "즐겨찾기", "휴지통", "주간 키", "작성 기준일", "연결 프로젝트", "정렬"],
-  projects: ["제목", "유형", "분류", "상태", "날짜", "마감일", "완료일", "확인일", "긴급", "중요", "NOW 숨김", "History", "휴지통", "기타", "대기 대상", "대기 내용", "취소 사유", "취소 시각", "반복 묶음 ID", "연결 프로젝트", "정렬"],
+  projects: ["제목", "유형", "분류", "상태", "날짜", "마감일", "완료일", "확인일", "긴급", "중요", "NOW 숨김", "즐겨찾기", "History", "휴지통", "기타", "대기 대상", "대기 내용", "취소 사유", "취소 시각", "반복 묶음 ID", "연결 프로젝트", "정렬"],
   routines: ["제목", "유형", "분류", "날짜", "반복 요일", "목표 횟수", "실행 횟수", "한 번의 양", "단위", "NOW 숨김", "History", "휴지통", "연결 루틴", "정렬"],
   binder: ["제목", "유형", "날짜", "링크", "태그", "즐겨찾기", "아카이브 표시", "휴지통", "기록 데이터", "사진", "연결 프로젝트", "정렬"],
   archive: ["제목", "유형", "날짜", "작성 기준일", "별점", "링크", "태그", "즐겨찾기", "휴지통", "기록 데이터", "사진", "연결 프로젝트", "정렬"],
@@ -465,6 +465,8 @@ export function mapTask(page: NotionPage): ProjectTask {
   const props = page.properties;
   const when = readDate(props, "날짜");
   const due = readDate(props, "마감일");
+  const urgent = readCheckbox(props, "긴급");
+  const important = readCheckbox(props, "중요");
   return {
     ...baseOf(page, props, "projects"),
     kind: (readSelect(props, "유형") ?? "할 일") as TaskKind,
@@ -478,8 +480,15 @@ export function mapTask(page: NotionPage): ProjectTask {
     due: due.date,
     doneAt: readDate(props, "완료일").date,
     checkedAt: readDate(props, "확인일").date,
-    urgent: readCheckbox(props, "긴급"),
-    important: readCheckbox(props, "중요"),
+    urgent,
+    important,
+    /**
+     * A29: 프로젝트 · 할 일 DB에는 `즐겨찾기` 속성이 없습니다(README 의 다섯 DB 중 캘린더·일기·
+     * 아카이브에만 있음). 그래서 이번 주 꼭은 속성이 있는 DB면 그 값을, 없으면 할 일을 만들 때
+     * 함께 켜는 `긴급`·`중요` 를 표시로 읽습니다 — 엔터로 더한 항목이 저장 뒤에도 목록에 남아
+     * 쌓이도록(예전에는 favorite 가 늘 false 로 돌아와 사라졌습니다).
+     */
+    favorite: "즐겨찾기" in props ? readCheckbox(props, "즐겨찾기") : urgent && important,
     history: readCheckbox(props, "History"),
     waitFor: readRichText(props, "대기 대상"),
     waitNote: readRichText(props, "대기 내용"),
@@ -687,6 +696,8 @@ export function buildProperties(resource: keyof typeof mappers, patch: Patch, cu
   };
   const supports: Record<string, string[]> = {
     calendar: ["hidden", "trash", "favorite", "memo", "sort", "projectIds"],
+    // A29: projects 에는 `즐겨찾기` 속성이 없어 favorite 를 보내지 않습니다(보내면 노션이 400).
+    // 이번 주 꼭 표시는 긴급·중요로 저장됩니다 — mapTask 의 favorite 읽기를 참고하세요.
     projects: ["hidden", "trash", "memo", "sort", "projectIds"],
     routines: ["hidden", "trash", "sort"],
     binder: ["trash", "favorite", "sort", "projectIds"],

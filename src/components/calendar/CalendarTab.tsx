@@ -54,7 +54,7 @@ function eventMode(event: CalendarEvent): string {
 export function CalendarTab() {
   /** A20: 주간 보기 오른쪽 패널도 스크롤바가 움직일 때만 보입니다. */
   const weekPanelBar = useAutoHideScrollbar();
-  const { data, update, setRoutineCount, findItem, create } = useData();
+  const { data, update, remove, setRoutineCount, findItem, create } = useData();
   const { settings, addCategory, removeCategory } = useSettings();
   // A16: the 분류 filter shares one list with the routine/task pickers.
   const categoryOptions = useCategoryOptions();
@@ -329,14 +329,20 @@ export function CalendarTab() {
     });
   };
 
-  const addFavorite = async (titleText: string) => {
+  /**
+   * A29: '이번 주 꼭' — 지금 보고 있는 주에 항목이 쌓입니다. 이번 주를 보고 있으면 오늘,
+   * 다른 주를 보고 있으면 그 주의 월요일 날짜로 놓여 그 주의 목록에 남습니다.
+   */
+  const addFavorite = async (titleText: string, targetWeekStart: string) => {
+    const today = todayISO();
+    const inWeek = today >= targetWeekStart && today <= addDaysISO(targetWeekStart, 6);
     // A8: one creation turns on 긴급 · 중요 · 별표 together, so the title lands in '이번 주 꼭'
     // straight away (and stays there after being moved to the inbox).
     await create("projects", {
       title: titleText,
       kind: "할 일",
       category: "개인",
-      date: todayISO(),
+      date: inWeek ? today : targetWeekStart,
       status: "미완료",
       urgent: true,
       important: true,
@@ -364,7 +370,8 @@ export function CalendarTab() {
       events={events}
       tasks={tasks}
       onCreateGoal={addWeeklyGoal}
-      onCreateFavorite={(title) => void addFavorite(title)}
+      onCreateFavorite={(title) => addFavorite(title, weekStart)}
+      onDeleteGoal={(goal) => void remove("calendar", goal.id)}
       onCreateMemo={createMemo}
       onOpenEvent={openEvent}
       onOpenTask={openTask}

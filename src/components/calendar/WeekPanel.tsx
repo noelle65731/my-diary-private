@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { CalendarEvent, ProjectTask } from "@/lib/types";
 import { addDaysISO, formatShort, timeRangeLabel, toISO, todayISO, weekKeyOf } from "@/lib/date";
 import { cn } from "@/lib/utils";
-import { CheckIcon, PencilIcon } from "@/components/icons";
+import { useAutoHideScrollbar } from "@/lib/use-auto-hide-scroll";
+import { ArrowUpRightIcon, CheckIcon, PencilIcon, TrashIcon } from "@/components/icons";
 import { MiniMonth } from "@/components/calendar/MiniMonth";
 
 interface WeekPanelProps {
@@ -13,7 +14,10 @@ interface WeekPanelProps {
   tasks: ProjectTask[];
   /** A10: a goal is written and edited right here — no separate window. */
   onCreateGoal: (title: string) => Promise<void> | void;
-  onCreateFavorite: (title: string) => void;
+  /** A29: 엔터로 더한 항목은 목록에 쌓입니다 — 저장이 끝날 때까지 기다립니다. */
+  onCreateFavorite: (title: string) => Promise<void> | void;
+  /** A29: 목표 줄에서 바로 휴지통으로 보냅니다(휴지통 보기에서 복원 가능). */
+  onDeleteGoal: (goal: CalendarEvent) => void;
   /** Creates this week's memo (title from the real writing day) with its first text. */
   onCreateMemo: (text: string) => Promise<string | null>;
   onOpenEvent: (id: string) => void;
@@ -150,6 +154,7 @@ export function WeekPanel({
   tasks,
   onCreateGoal,
   onCreateFavorite,
+  onDeleteGoal,
   onCreateMemo,
   onOpenEvent,
   onOpenTask,
@@ -202,6 +207,10 @@ export function WeekPanel({
   const [goalDraft, setGoalDraft] = useState("");
   const [savingMemo, setSavingMemo] = useState(false);
   const [goalBusy, setGoalBusy] = useState(false);
+  /** A29: 같은 제목을 연달아 두 번 보내도 한 번만 저장하도록 저장 중인 제목을 기억합니다. */
+  const pendingFavorites = useRef<Set<string>>(new Set());
+  /** A29: 항목이 늘어나도 패널 높이는 그대로 — 목록만 스크롤되고 스크롤바는 움직일 때만 보입니다. */
+  const favoriteBar = useAutoHideScrollbar();
 
   useEffect(() => {
     setSelectedMemoId(null);
@@ -224,8 +233,11 @@ export function WeekPanel({
   const addFavorite = () => {
     const title = favoriteDraft.trim();
     if (!title) return;
-    onCreateFavorite(title);
+    // A29: 저장 중인 같은 제목은 다시 보내지 않습니다(엔터 두 번·연타 방지).
+    if (pendingFavorites.current.has(title)) return;
+    pendingFavorites.current.add(title);
     setFavoriteDraft("");
+    void Promise.resolve(onCreateFavorite(title)).finally(() => pendingFavorites.current.delete(title));
   };
 
   const addGoal = async () => {
@@ -270,8 +282,15 @@ export function WeekPanel({
         {favorites.length === 0 ? (
           <p className="mt-1 text-[calc(13.5px*var(--fs))] leading-snug text-ink-300">아직 없습니다.</p>
         ) : (
-          <ul className="mt-1.5 divide-y divide-paper-300/60">
-            {favorites.slice(0, 8).map(({ kind, item }) => {
+          <ul
+            onScroll={favoriteBar.onScroll}
+            className={cn(
+              "mt-1.5 max-h-[188px] divide-y divide-paper-300/60 overflow-y-auto overscroll-contain",
+              favoriteBar.className,
+            )}
+            data-week-favorites
+          >
+            {favorites.map(({ kind, item }) => {
               const done = kind === "event" ? (item as CalendarEvent).done : (item as ProjectTask).status === "완료";
               const date = kind === "event" ? (item as CalendarEvent).date : ((item as ProjectTask).due ?? (item as ProjectTask).date);
               const time =
@@ -340,7 +359,7 @@ export function WeekPanel({
         </header>
         <ul className="mt-1.5 space-y-[3px]">
           {goals.map((goal) => (
-            <li key={goal.id} className="flex items-center gap-2 leading-[1.3]">
+            <li key={goal.id} className="group/goal flex items-center gap-2 leading-[1.3]">
               <button
                 type="button"
                 onClick={() => onToggleEventDone(goal)}
@@ -358,6 +377,24 @@ export function WeekPanel({
                 editLabel="목표 고치기"
                 onSave={(next) => onUpdateEvent(goal.id, { title: next })}
               />
+              <button
+                type="button"
+                onClick={() => onOpenEvent(goal.id)}
+                aria-label={`${goal.title} 상세 열기`}
+                title="상세 열기"
+                className="flex-none rounded p-[3px] text-ink-400 opacity-100 transition hover:bg-paper-200 hover:text-ink-800 focus-visible:opacity-100 sm:opacity-0 sm:group-hover/goal:opacity-100 sm:focus-visible:opacity-100"
+              >
+                <ArrowUpRightIcon size={13} />
+              </button>
+              <button
+                type="button"
+                onClick={() => onDeleteGoal(goal)}
+                aria-label={`${goal.title} 삭제`}
+                title="삭제 (휴지통으로 보내기)"
+                className="flex-none rounded p-[3px] text-ink-400 opacity-100 transition hover:bg-rose-50 hover:text-rose-500 focus-visible:opacity-100 sm:opacity-0 sm:group-hover/goal:opacity-100 sm:focus-visible:opacity-100"
+              >
+                <TrashIcon size={13} />
+              </button>
             </li>
           ))}
           {goals.length === 0 ? <li className="text-[calc(14px*var(--fs))] text-ink-400">아직 없습니다.</li> : null}
