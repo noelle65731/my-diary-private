@@ -314,19 +314,24 @@ def main():
 
         ctx, page = new_context(browser, 402, 874, mock)
         page.screenshot(path=f"{OUT}/check-mobile-week.png")
-        box = page.locator("[data-timeline-column]").first.bounding_box()
-        scroller = page.locator("[data-timeline-column]").first.evaluate_handle("el => el.closest('.overflow-x-auto, [class*=overflow-x-auto]')")
-        # scroll the board sideways and read the time gutter position
+        # 시간 열(3.2rem)이 가로 이동 중에도 고정되는지: 실제로 스크롤한 뒤 위치를 비교한다
         gutter_label = page.locator("text=오전 10").first
+        def scroll_board(value):
+            return page.evaluate("""(target) => {
+                const col = document.querySelector('[data-timeline-column]');
+                let node = col.parentElement;
+                while (node && node.scrollWidth <= node.clientWidth) node = node.parentElement;
+                if (!node) return null;
+                node.scrollLeft = target;
+                return node.scrollLeft;
+            }""", value)
+        to_left = scroll_board(0)
+        page.wait_for_timeout(400)
         g1 = gutter_label.bounding_box()
-        page.evaluate("""() => {
-            const col = document.querySelector('[data-timeline-column]');
-            let node = col.parentElement;
-            while (node && node.scrollWidth <= node.clientWidth) node = node.parentElement;
-            if (node) node.scrollLeft = node.scrollLeft + 120;
-        }""")
-        page.wait_for_timeout(500)
+        moved = scroll_board(140)
+        page.wait_for_timeout(400)
         g2 = gutter_label.bounding_box()
+        check("모바일 보드가 실제로 가로 이동함", moved is not None and to_left is not None and moved != to_left, f"{to_left} -> {moved}")
         check("모바일 가로 이동에도 시간 열 고정", bool(g1 and g2) and abs(g1["x"] - g2["x"]) < 2, f"{g1} {g2}")
         page.screenshot(path=f"{OUT}/check-mobile-week-scrolled.png")
 
