@@ -119,6 +119,14 @@ function requiredField(draft: TaskForm): string | null {
   return null;
 }
 
+/** A10: waiting is amber, canceled is rose, done is sage — three distinct pills. */
+function statusPill(status: TaskStatus): string {
+  if (status === "대기 중") return "border-amber-300 bg-amber-100 text-amber-800 hover:bg-amber-100";
+  if (status === "취소") return "border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-50";
+  if (status === "완료") return "border-sage-400 bg-sage-400 text-white hover:bg-sage-400";
+  return "border-ink-900 bg-ink-900 text-paper-50 hover:bg-ink-800";
+}
+
 /**
  * A4: a task opens as a readable page. Every shown value edits in place, the status
  * opens its choices on one tap, and only real changes reach Notion.
@@ -246,6 +254,9 @@ function TaskDetailInner({
 
   const project = task.projectIds.length > 0 ? data.projects.find((item) => item.id === task.projectIds[0]) ?? null : null;
   const categories = TASK_CATEGORIES;
+  /** A10: a project itself carries no 대기/긴급/중요 — only its tasks do. */
+  const isProject = draft.kind === "프로젝트";
+  const statusOptions = isProject ? TASK_STATUSES.filter((status) => status !== "대기 중") : TASK_STATUSES;
 
   return (
     <DetailShell
@@ -305,7 +316,8 @@ function TaskDetailInner({
         <div className="flex flex-wrap items-center gap-2 pt-1">
           <InlineStatus
             value={draft.status}
-            options={TASK_STATUSES}
+            options={statusOptions}
+            toneOf={statusPill}
             onChange={(value) => {
               set("status", value);
               setField(null);
@@ -314,7 +326,7 @@ function TaskDetailInner({
           <span className="text-[0.7rem] text-ink-400">{formatShort(draft.date || task.createdAt.slice(0, 10) || todayISO())}</span>
         </div>
 
-        {draft.status === "대기 중" ? (
+        {draft.status === "대기 중" && !isProject ? (
           <div className="mt-1 grid gap-2 rounded-xl border border-amber-200 bg-amber-50/60 px-2.5 py-1.5 sm:grid-cols-2">
             <InlineText
               label="대기 대상"
@@ -373,7 +385,7 @@ function TaskDetailInner({
               active={field === "cancelReason"}
               onActivate={() => setField("cancelReason")}
               onDone={() => setField(null)}
-              placeholder="왜 접었나요?"
+              placeholder="왜 취소되었나요?"
             />
             <div className="mt-1 flex flex-wrap gap-1">
               {["일정 변경", "필요 없어짐", "다른 일 우선", "외부 사정"].map((reason) => (
@@ -501,12 +513,19 @@ function TaskDetailInner({
 
         <DetailSection title="표시">
           <InlineFlags
-            flags={[
-              { key: "urgent", label: "긴급", on: draft.urgent },
-              { key: "important", label: "중요", on: draft.important },
-              { key: "hidden", label: "숨김", on: draft.hidden },
-              { key: "history", label: "History", on: draft.history },
-            ]}
+            flags={
+              isProject
+                ? [
+                    { key: "hidden", label: "숨김", on: draft.hidden },
+                    { key: "history", label: "History", on: draft.history },
+                  ]
+                : [
+                    { key: "urgent", label: "긴급", on: draft.urgent },
+                    { key: "important", label: "중요", on: draft.important },
+                    { key: "hidden", label: "숨김", on: draft.hidden },
+                    { key: "history", label: "History", on: draft.history },
+                  ]
+            }
             onToggle={(key) => {
               if (key === "urgent") set("urgent", !draft.urgent);
               if (key === "important") set("important", !draft.important);

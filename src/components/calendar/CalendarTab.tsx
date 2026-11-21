@@ -19,7 +19,7 @@ import {
 } from "@/lib/date";
 import { holidayName } from "@/lib/holidays";
 import { cn, matchesMode } from "@/lib/utils";
-import type { CalendarEvent, CalendarKind, ModeFilter, ProjectTask, Routine } from "@/lib/types";
+import type { CalendarEvent, ModeFilter, ProjectTask, Routine } from "@/lib/types";
 import { ChevronLeftIcon, ChevronRightIcon, PlusIcon, SearchIcon } from "@/components/icons";
 import { ModeChips } from "@/components/common/ModeChips";
 import { WeekBoard } from "@/components/calendar/WeekBoard";
@@ -203,7 +203,17 @@ export function CalendarTab() {
   const openTask = (id: string) => setTaskId(id);
   const createEvent = (date: string, time?: string | null, endTime?: string | null) =>
     setEventEditor({ open: true, draft: { date, startTime: time ?? null, endTime: endTime ?? null } });
-  const createWeekly = (kind: CalendarKind) => setEventEditor({ open: true, draft: { date: weekStart, kind } });
+  /** A10: a weekly goal is written on the week screen itself and saved as a 주간 목표 record. */
+  const addWeeklyGoal = async (title: string) => {
+    await create("calendar", {
+      title,
+      kind: "주간 목표",
+      category: "개인",
+      date: weekStart,
+      weekKey: weekKeyOf(weekStart),
+      baseDate: weekStart,
+    });
+  };
 
   const toggleTask = (task: ProjectTask) => {
     const done = task.status === "완료";
@@ -263,7 +273,7 @@ export function CalendarTab() {
   };
 
   /** A8: this week's memo — title follows the real writing day, the record joins the week. */
-  const createMemo = async (): Promise<string | null> => {
+  const createMemo = async (text: string): Promise<string | null> => {
     const created = await create("calendar", {
       title: memoTitle(todayISO(), "주간 메모"),
       kind: "주간 메모",
@@ -271,7 +281,7 @@ export function CalendarTab() {
       date: weekStart,
       weekKey: weekKeyOf(weekStart),
       baseDate: weekStart,
-      memo: "",
+      memo: text,
     });
     return created?.id ?? null;
   };
@@ -281,7 +291,7 @@ export function CalendarTab() {
       weekStart={weekStart}
       events={events}
       tasks={tasks}
-      onCreateGoal={createWeekly}
+      onCreateGoal={addWeeklyGoal}
       onCreateFavorite={(title) => void addFavorite(title)}
       onCreateMemo={createMemo}
       onOpenEvent={openEvent}
@@ -307,7 +317,7 @@ export function CalendarTab() {
         <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
           <div className="min-w-0">
             <p className="text-[0.66rem] tracking-[0.02em] text-ink-400">{meta}</p>
-            <h1 className="mt-1.5 truncate text-[1.95rem] font-semibold leading-none tracking-[-0.035em] text-ink-900 md:text-[2.3rem]">
+            <h1 className="mt-1.5 truncate text-[1.15rem] font-semibold leading-none tracking-[-0.02em] text-ink-900 md:text-[1.2rem]">
               {title}
             </h1>
           </div>
@@ -437,6 +447,7 @@ export function CalendarTab() {
               }}
               onOpenEvent={openEvent}
               onOpenTask={openTask}
+              onToggleTask={toggleTask}
               onUpdateEvent={(id, patch) => void update("calendar", id, patch)}
               onCreate={(date) => createEvent(date, null)}
               onRoutineCount={(routine, date, count) => void setRoutineCount(routine, date, count)}

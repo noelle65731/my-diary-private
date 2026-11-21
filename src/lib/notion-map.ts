@@ -94,12 +94,23 @@ function readRelation(props: Props, name: string): string[] {
   return Array.isArray(value) ? value.map((v) => v.id ?? "").filter(Boolean) : [];
 }
 
+interface NotionFileEntry {
+  name?: string;
+  type?: string;
+  external?: { url?: string };
+  file?: { url?: string };
+  file_upload?: { id?: string };
+}
+
+function readFileEntries(props: Props, name: string): NotionFileEntry[] {
+  const value = (prop(props, name) as { files?: NotionFileEntry[] } | undefined)?.files;
+  return Array.isArray(value) ? value : [];
+}
+
 function readFiles(props: Props, name: string): string[] {
-  const value = (prop(props, name) as { files?: { name?: string; type?: string; external?: { url?: string }; file?: { url?: string } }[] } | undefined)?.files;
-  if (!Array.isArray(value)) return [];
   // A9 bug fix: the old order returned the file name instead of its URL, so a saved
   // photo opened as an empty link. URL first, name only as a last resort.
-  return value
+  return readFileEntries(props, name)
     .map((f) => f.external?.url ?? f.file?.url ?? f.name ?? "")
     .filter(Boolean);
 }
@@ -266,13 +277,28 @@ const checkbox = (value: boolean | undefined) => ({ checkbox: Boolean(value) });
 const number = (value: number | null | undefined) => ({ number: typeof value === "number" && Number.isFinite(value) ? value : null });
 const relation = (ids: string[] | undefined) => ({ relation: (ids ?? []).filter(Boolean).map((id) => ({ id })) });
 const url = (value: string | undefined) => ({ url: value && value.trim() ? value.trim() : null });
-/** A9: photos are stored as external files pointing at the pasted URL. */
-const files = (urls: string[]) => ({
+/**
+ * A10: photos are written as Notion file uploads (`upload:<file_upload id>`) or as
+ * external links. `existing` holds the page's current files so a Notion-hosted photo
+ * that came back as a signed URL is re-sent as the same file object instead of being
+ * turned into a short-lived external link.
+ */
+const files = (urls: string[], existing: NotionFileEntry[] = []) => ({
   files: urls
-    // Notion stores external files by URL; a browser-only data: preview cannot be saved there.
-    .filter((value) => value && value.trim() && /^https?:\/\//i.test(value.trim()))
-    .slice(0, 20)
-    .map((value) => ({ name: photoName(value), type: "external", external: { url: value.trim() } })),
+    .map((value) => {
+      const clean = (value ?? "").trim();
+      if (!clean) return null;
+      if (clean.startsWith("upload:")) {
+        const id = clean.slice("upload:".length).trim();
+        return id ? { name: "photo", type: "file_upload", file_upload: { id } } : null;
+      }
+      if (!/^https?:\/\//i.test(clean)) return null;
+      const kept = existing.find((entry) => (entry.external?.url ?? entry.file?.url ?? "") === clean);
+      if (kept) return kept;
+      return { name: photoName(clean), type: "external", external: { url: clean } };
+    })
+    .filter((entry): entry is Record<string, unknown> => entry !== null)
+    .slice(0, 20),
 });
 
 function photoName(value: string): string {
@@ -462,8 +488,9 @@ export const mappers = {
 
 /* ───────────────────────── build write payloads ────────────────────── */
 
-export function buildProperties(resource: keyof typeof mappers, patch: Patch): Record<string, unknown> {
+export function buildProperties(resource: keyof typeof mappers, patch: Patch, current?: NotionPage): Record<string, unknown> {
   const out: Record<string, unknown> = {};
+  const currentPhotos = current ? readFileEntries(current.properties as Props, "사진") : [];
 
   if (has(patch, "title")) out["제목"] = title(str(patch, "title"));
 
@@ -532,7 +559,7 @@ export function buildProperties(resource: keyof typeof mappers, patch: Patch): R
     if (has(patch, "tags")) out["태그"] = multiSelect(strArray(patch, "tags"));
     if (has(patch, "archiveFlag")) out["아카이브 표시"] = checkbox(bool(patch, "archiveFlag"));
     if (has(patch, "body")) out["기록 데이터"] = richText(str(patch, "body"));
-    if (has(patch, "photos")) out["사진"] = files(strArray(patch, "photos"));
+    if (has(patch, "photos")) out["사진"] = files(strArray(patch, "photos"), currentPhotos);
   }
 
   if (resource === "archive") {
@@ -551,7 +578,7 @@ export function buildProperties(resource: keyof typeof mappers, patch: Patch): R
     if (has(patch, "link")) out["링크"] = url(str(patch, "link"));
     if (has(patch, "tags")) out["태그"] = multiSelect(strArray(patch, "tags"));
     if (has(patch, "body")) out["기록 데이터"] = richText(str(patch, "body"));
-    if (has(patch, "photos")) out["사진"] = files(strArray(patch, "photos"));
+    if (has(patch, "photos")) out["사진"] = files(strArray(patch, "photos"), currentPhotos);
   }
 
   // Shared flags (skipped silently for databases without the property).

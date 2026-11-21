@@ -64,23 +64,26 @@ export async function PATCH(
     // conflict — the two values are shown side by side instead of silently overwritten.
     const expected = typeof patch["expectedUpdatedAt"] === "string" ? (patch["expectedUpdatedAt"] as string) : "";
     delete patch["expectedUpdatedAt"];
-    if (expected) {
-      const current = await retrievePage(id);
-      const stamp = current.last_edited_time ?? "";
+    let currentPage: NotionPage | null = null;
+    if (expected || Object.prototype.hasOwnProperty.call(patch, "photos")) {
+      currentPage = await retrievePage(id);
+    }
+    if (expected && currentPage) {
+      const stamp = currentPage.last_edited_time ?? "";
       if (stamp && stamp !== expected) {
         const mapConflict = mappers[resource] as (page: NotionPage) => unknown;
         return NextResponse.json(
           {
             ok: false,
             error: { message: "다른 곳에서 먼저 수정되었습니다.", code: "conflict" },
-            current: mapConflict(current),
+            current: mapConflict(currentPage),
             serverUpdatedAt: stamp,
           },
           { status: 409 },
         );
       }
     }
-    const page = await updatePage(id, buildProperties(resource, patch));
+    const page = await updatePage(id, buildProperties(resource, patch, currentPage ?? undefined));
     const map = mappers[resource] as (page: NotionPage) => unknown;
     return NextResponse.json({ ok: true, data: map(page) });
   } catch (error) {

@@ -81,11 +81,11 @@ function MonthMini({
   return (
     <div>
       <p className="mb-1.5 text-[0.9rem] font-semibold text-ink-900">{MONTH_NAMES[month0]}</p>
-      <div className="grid grid-cols-7 gap-y-1 text-center">
+      <div className="grid grid-cols-7 gap-y-1.5 text-center">
         {["월", "화", "수", "목", "금", "토", "일"].map((label, index) => (
           <span
             key={label}
-            className={cn("text-[0.58rem]", index === 6 ? "text-red-400" : index === 5 ? "text-blue-500" : "text-ink-300")}
+            className={cn("text-[0.62rem]", index === 6 ? "text-red-400" : index === 5 ? "text-blue-500" : "text-ink-300")}
           >
             {label}
           </span>
@@ -96,14 +96,14 @@ function MonthMini({
           const holiday = holidayName(day);
           const isToday = day === today;
           const dow = new Date(`${day}T12:00:00`).getDay();
-          if (!inMonth) return <span key={day} className="h-5" />;
+          if (!inMonth) return <span key={day} className="h-7" />;
           return (
             <button
               key={day}
               type="button"
               onClick={() => onPickDay(day)}
               className={cn(
-                "relative mx-auto flex h-5 w-5 items-center justify-center rounded-full text-[0.62rem] tabular-nums transition hover:bg-paper-200",
+                "relative mx-auto flex h-7 w-7 items-center justify-center rounded-full text-[0.8rem] tabular-nums transition hover:bg-paper-200 md:h-8 md:w-8 md:text-[0.86rem]",
                 isToday && "bg-ink-900 font-semibold text-white hover:bg-ink-800",
                 !isToday && (holiday || dow === 0) && "text-red-500",
                 !isToday && dow === 6 && "text-blue-600",
@@ -112,7 +112,7 @@ function MonthMini({
               title={holiday ? `${day} ${holiday}` : day}
             >
               {Number(day.slice(8, 10))}
-              {count > 0 && !isToday ? <span className="absolute bottom-[1px] h-[3px] w-[3px] rounded-full bg-sky-500" /> : null}
+              {count > 0 && !isToday ? <span className="absolute bottom-[2px] h-[3px] w-[3px] rounded-full bg-sky-500" /> : null}
             </button>
           );
         })}

@@ -129,6 +129,16 @@ function TaskEditorInner({
   const patch = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((current) => ({ ...current, [key]: value }));
 
+  /** A10: a project has no 대기/긴급/중요 of its own — those belong to its tasks. */
+  const isProject = form.kind === "프로젝트";
+  const statuses = TASK_STATUSES.filter((status) => status !== "대기 중" || !isProject || form.status === "대기 중");
+  const statusChip = (status: TaskStatus) => {
+    if (status === "대기 중") return "border-amber-300 bg-amber-100 text-amber-800";
+    if (status === "취소") return "border-rose-200 bg-rose-50 text-rose-600";
+    if (status === "완료") return "border-sage-400 bg-sage-400 text-white";
+    return "border-ink-900 bg-ink-900 text-paper-50";
+  };
+
   const save = async () => {
     if (!form.title.trim()) {
       setError("제목을 입력해 주세요.");
@@ -220,16 +230,14 @@ function TaskEditorInner({
         <div>
           <p className="label">상태</p>
           <div className="flex flex-wrap gap-1.5">
-            {TASK_STATUSES.map((status) => (
+            {statuses.map((status) => (
               <button
                 key={status}
                 type="button"
                 onClick={() => patch("status", status)}
                 className={cn(
                   "chip border transition",
-                  form.status === status
-                    ? "border-ink-900 bg-ink-900 text-paper-50"
-                    : "border-paper-400 bg-white/60 text-ink-600 hover:border-ink-400",
+                  form.status === status ? statusChip(status) : "border-paper-400 bg-white/60 text-ink-600 hover:border-ink-400",
                 )}
               >
                 {status}
@@ -238,7 +246,7 @@ function TaskEditorInner({
           </div>
         </div>
 
-        {form.status === "대기 중" ? (
+        {form.status === "대기 중" && !isProject ? (
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
               <span className="label">대기 대상</span>
@@ -254,7 +262,7 @@ function TaskEditorInner({
         {form.status === "취소" ? (
           <label className="block">
             <span className="label">취소 사유</span>
-            <TextInput value={form.cancelReason} onChange={(event) => patch("cancelReason", event.target.value)} placeholder="왜 접었나요?" />
+            <TextInput value={form.cancelReason} onChange={(event) => patch("cancelReason", event.target.value)} placeholder="왜 취소되었나요?" />
           </label>
         ) : null}
 
@@ -275,8 +283,12 @@ function TaskEditorInner({
         </div>
 
         <div className="grid grid-cols-2 gap-2 rounded-xl border border-paper-300/80 bg-paper-50/60 px-3 py-2">
-          <Toggle checked={form.urgent} onChange={(value) => patch("urgent", value)} label="긴급" />
-          <Toggle checked={form.important} onChange={(value) => patch("important", value)} label="중요" />
+          {isProject ? null : (
+            <>
+              <Toggle checked={form.urgent} onChange={(value) => patch("urgent", value)} label="긴급" />
+              <Toggle checked={form.important} onChange={(value) => patch("important", value)} label="중요" />
+            </>
+          )}
           <Toggle checked={form.hidden} onChange={(value) => patch("hidden", value)} label="기본 보기에서 숨김" />
           <Toggle checked={form.history} onChange={(value) => patch("history", value)} label="지난 기록으로 보내기" />
         </div>

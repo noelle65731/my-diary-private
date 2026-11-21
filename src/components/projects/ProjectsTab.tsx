@@ -15,6 +15,7 @@ import { TaskEditor } from "@/components/editors/TaskEditor";
 import { TaskDetail } from "@/components/detail/TaskDetail";
 import { RoutineEditor } from "@/components/editors/RoutineEditor";
 import { routineCountForDay } from "@/components/calendar/calendar-utils";
+import { sortProjectTaskList, sortTasksNewestFirst } from "@/lib/order";
 
 type ProjectView = "tracks" | "priority" | "history";
 
@@ -168,7 +169,7 @@ export function ProjectsTab() {
           <p className="text-[0.66rem] text-ink-400">
             트랙 {projectCount} · 남은 할 일 {openTasks.length}
           </p>
-          <h1 className="mt-1.5 text-[1.95rem] font-semibold leading-none tracking-[-0.035em] text-ink-900 md:text-[2.3rem]">프로젝트</h1>
+          <h1 className="mt-1.5 text-[1.15rem] font-semibold leading-none tracking-[-0.02em] text-ink-900 md:text-[1.2rem]">프로젝트</h1>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
@@ -266,7 +267,7 @@ export function ProjectsTab() {
             </article>
 
             {projects.map((project) => {
-              const children = tasks.filter((task) => !task.trash && task.projectIds.includes(project.id));
+              const children = sortProjectTaskList(tasks.filter((task) => !task.trash && task.projectIds.includes(project.id)));
               const open = children.filter((task) => task.status !== "완료" && task.status !== "취소");
               const recent = settings.showCompletedTasks
                 ? children
@@ -274,6 +275,7 @@ export function ProjectsTab() {
                     .sort((a, b) => (b.doneAt ?? "").localeCompare(a.doneAt ?? ""))
                     .slice(0, settings.projectCompletedPreview)
                 : [];
+              const orderedOpen = sortTasksNewestFirst(open);
               const last = [...children].sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""))[0];
               const tone = taskTone(project.category);
               return (
@@ -326,7 +328,7 @@ export function ProjectsTab() {
 
                   <p className="mt-2 text-[0.64rem] text-ink-400">남은 할 일 {open.length}</p>
                   <ul className="mt-1 space-y-1.5">
-                    {open.slice(0, 4).map((task) => (
+                    {orderedOpen.slice(0, 4).map((task) => (
                       <TaskLine
                         key={task.id}
                         task={task}
@@ -638,7 +640,7 @@ function PriorityView({
   onCreateTask: (category: TaskCategory, urgent: boolean, important: boolean) => void;
 }) {
   const { update } = useData();
-  const open = tasks.filter((task) => task.status !== "완료" && task.status !== "취소");
+  const open = sortTasksNewestFirst(tasks.filter((task) => task.status !== "완료" && task.status !== "취소"));
   const quadrants = [
     { key: "do", label: "긴급·중요", urgent: true, important: true },
     { key: "plan", label: "중요", urgent: false, important: true },
@@ -675,8 +677,9 @@ function PriorityView({
           {items.map((task) => {
             const project = projectOf(task);
             const tone = taskTone(project?.category ?? task.category);
-            // A7: no 긴급/중요 and not in the inbox — it has not been classified yet.
-            const unclassified = !task.urgent && !task.important && task.projectIds.length === 0;
+            // A10: a task with neither 긴급 nor 중요 is still unclassified — say so in small,
+            // faint letters (기타 사분면 included), whether or not it already has a project.
+            const unclassified = !task.urgent && !task.important;
             return (
               <li key={task.id} className="flex items-start gap-1.5">
                 <button
@@ -691,7 +694,7 @@ function PriorityView({
                   <span className="flex items-baseline gap-1.5">
                     <span className="truncate text-[0.78rem] text-ink-800">{task.title}</span>
                     {unclassified ? (
-                      <span className="flex-none rounded bg-paper-200 px-1 text-[0.58rem] font-medium leading-4 text-ink-500">분류 전</span>
+                      <span className="flex-none text-[0.56rem] font-normal leading-4 tracking-tight text-ink-300">분류 전</span>
                     ) : null}
                     {project ? (
                       <span className={cn("flex-none text-[0.64rem]", tone.text)}>{project.title}</span>

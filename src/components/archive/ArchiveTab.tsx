@@ -121,7 +121,7 @@ export function ArchiveTab() {
               .map((kind) => `${kind} ${counts[kind]}`)
               .join(" · ") || "아직 담긴 것이 없습니다"}
           </p>
-          <h1 className="mt-1.5 text-[1.95rem] font-semibold leading-none tracking-[-0.035em] text-ink-900 md:text-[2.3rem]">아카이브</h1>
+          <h1 className="mt-1.5 text-[1.15rem] font-semibold leading-none tracking-[-0.02em] text-ink-900 md:text-[1.2rem]">아카이브</h1>
         </div>
 
         <div className="flex flex-none items-center gap-1.5">

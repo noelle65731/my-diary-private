@@ -267,10 +267,13 @@ export function InlineStatus<T extends string>({
   value,
   options,
   onChange,
+  toneOf,
 }: {
   value: T;
   options: readonly T[];
   onChange: (value: T) => void;
+  /** A10: 대기 중 and 취소 wear their own colour, so the state reads at a glance. */
+  toneOf?: (value: T) => string;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -280,7 +283,10 @@ export function InlineStatus<T extends string>({
         onClick={() => setOpen((current) => !current)}
         aria-label="상태 변경"
         aria-expanded={open}
-        className="inline-flex items-center gap-1 rounded-full border border-ink-900 bg-ink-900 px-2.5 py-1 text-[0.78rem] font-medium text-paper-50 transition hover:bg-ink-800"
+        className={cn(
+          "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[0.78rem] font-medium transition",
+          toneOf ? toneOf(value) : "border-ink-900 bg-ink-900 text-paper-50 hover:bg-ink-800",
+        )}
       >
         {value}
         <ChevronDownIcon size={11} className={cn("transition", open && "rotate-180")} />

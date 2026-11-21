@@ -96,7 +96,7 @@ export function BinderTab() {
                 ? `${weekStart.slice(0, 4)}년 ${isoWeekNumber(weekStart)}주차`
                 : `${formatFullKo(cursor)}`}
           </p>
-          <h1 className="mt-1.5 text-[1.95rem] font-semibold leading-none tracking-[-0.035em] text-ink-900 md:text-[2.3rem]">
+          <h1 className="mt-1.5 text-[1.15rem] font-semibold leading-none tracking-[-0.02em] text-ink-900 md:text-[1.2rem]">
             {view === "notes"
               ? "Notes"
               : view === "weekly"
@@ -496,7 +496,16 @@ function DailyView({
                 }}
                 onBlur={flush}
                 placeholder={"# 오늘\n\n있었던 일을 천천히 적어 보세요.\n\n- 기억하고 싶은 장면\n- 내일의 다짐"}
-                className="min-h-[360px] w-full resize-y border-none bg-transparent px-0 py-1 text-[0.92rem] leading-[1.85] text-ink-800 outline-none placeholder:text-ink-300"
+                // A10: the ruled line sits exactly at the bottom of each 26px text row, so
+                // many lines of writing never get covered by it.
+                style={{
+                  lineHeight: "26px",
+                  backgroundImage:
+                    "repeating-linear-gradient(to bottom, transparent 0, transparent 25px, #eef0f3 25px, #eef0f3 26px)",
+                  backgroundAttachment: "local",
+                  backgroundPosition: "0 1px",
+                }}
+                className="min-h-[360px] w-full resize-y border-none bg-transparent px-0 py-0 text-[0.92rem] text-ink-800 outline-none placeholder:text-ink-300"
               />
             )}
           </div>

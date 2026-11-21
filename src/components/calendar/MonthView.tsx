@@ -6,7 +6,7 @@ import { daysInMonth, formatShort, isSameISO, monthMatrix, todayISO, weekdayKo }
 import { holidayName } from "@/lib/holidays";
 import { cn } from "@/lib/utils";
 import { categoryTone, routineTone, taskTone } from "@/components/common/tone";
-import { ChevronLeftIcon, ChevronRightIcon, XIcon } from "@/components/icons";
+import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, XIcon } from "@/components/icons";
 import { eventCoversDay, routineCountForDay } from "@/components/calendar/calendar-utils";
 
 interface MonthViewProps {
@@ -24,6 +24,8 @@ interface MonthViewProps {
   onSelectDay: (day: string) => void;
   onOpenEvent: (id: string) => void;
   onOpenTask: (id: string) => void;
+  /** A10: a tap on the month checkbox completes the task, a second tap clears it. */
+  onToggleTask?: (task: ProjectTask) => void;
   onUpdateEvent: (id: string, patch: Record<string, unknown>) => void;
   onCreate: (date: string) => void;
   onRoutineCount: (routine: Routine, date: string, count: number) => void;
@@ -63,6 +65,7 @@ export function MonthView({
   onSelectDay,
   onOpenEvent,
   onOpenTask,
+  onToggleTask,
   onUpdateEvent,
   onRoutineCount,
   onMoveItem,
@@ -179,7 +182,7 @@ export function MonthView({
                     if ((type === "event" || type === "task") && id) onMoveItem(type, id, day);
                   }}
                   className={cn(
-                    "group relative min-h-[5rem] border-r border-paper-300 px-1 pb-1 pt-1 last:border-r-0 md:min-h-[7.2rem] md:px-2 md:pb-1.5 md:pt-1.5",
+                    "group relative min-h-[5rem] border-r border-paper-300 px-0.5 pb-1 pt-1 last:border-r-0 md:min-h-[7.2rem] md:px-2 md:pb-1.5 md:pt-1.5",
                     !inMonth && "bg-paper-200/25",
                   )}
                 >
@@ -233,24 +236,45 @@ export function MonthView({
                           </button>
                         );
                       }
+                      const taskDone = item.task.status === "완료";
+                      const taskColor = taskTone(item.task.category);
                       return (
-                        <button
+                        <div
                           key={item.task.id}
-                          type="button"
                           draggable={!!onMoveItem}
                           onDragStart={(event) => {
                             event.dataTransfer.setData("text/diary-item", `task:${item.task.id}`);
                             event.dataTransfer.effectAllowed = "move";
                           }}
-                          onClick={() => onOpenTask(item.task.id)}
-                          className={cn(
-                            "flex w-full items-center gap-1 px-0.5 py-[1px] text-left text-[0.6rem] leading-[1.25] text-ink-500 md:px-1 md:text-[0.68rem] md:leading-[1.35]",
-                            item.task.status === "완료" && "text-ink-300 line-through",
-                          )}
+                          className="flex w-full items-center gap-0.5 px-0.5 py-[1px] md:gap-1 md:px-1"
                         >
-                          <span className="hidden h-[9px] w-[9px] flex-none rounded-[2px] border border-ink-300 md:block" />
-                          <span className="truncate">{item.task.title}</span>
-                        </button>
+                          <button
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              onToggleTask?.(item.task);
+                            }}
+                            aria-label={taskDone ? `${item.task.title} 완료 해제` : `${item.task.title} 완료`}
+                            aria-pressed={taskDone}
+                            title={taskDone ? "다시 누르면 완료 해제" : "누르면 완료"}
+                            className={cn(
+                              "flex h-[10px] w-[10px] flex-none items-center justify-center rounded-[2px] border transition md:h-[11px] md:w-[11px] md:rounded-[3px]",
+                              taskDone ? cn(taskColor.solid, "border-transparent text-white") : "border-ink-300 hover:border-ink-500",
+                            )}
+                          >
+                            {taskDone ? <CheckIcon size={7} /> : null}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onOpenTask(item.task.id)}
+                            className={cn(
+                              "min-w-0 flex-1 truncate text-left text-[0.6rem] leading-[1.25] text-ink-500 md:text-[0.68rem] md:leading-[1.35]",
+                              taskDone && "text-ink-300 line-through",
+                            )}
+                          >
+                            {item.task.title}
+                          </button>
+                        </div>
                       );
                     })}
                     {restTasks > 0 ? (
@@ -301,6 +325,7 @@ export function MonthView({
           }}
           onOpenEvent={onOpenEvent}
           onOpenTask={onOpenTask}
+          onToggleTask={onToggleTask}
           onMoveAllDay={(id, direction) => moveAllDay(openDayDate, id, direction)}
         />
       ) : null}
@@ -320,6 +345,7 @@ function DayListPanel({
   onGoDay,
   onOpenEvent,
   onOpenTask,
+  onToggleTask,
   onMoveAllDay,
 }: {
   day: string;
@@ -328,6 +354,7 @@ function DayListPanel({
   onGoDay: () => void;
   onOpenEvent: (id: string) => void;
   onOpenTask: (id: string) => void;
+  onToggleTask?: (task: ProjectTask) => void;
   onMoveAllDay: (id: string, direction: -1 | 1) => void;
 }) {
   const holiday = holidayName(day);
@@ -448,7 +475,18 @@ function DayListPanel({
                   const waiting = task.status === "대기 중";
                   return (
                     <li key={task.id} className="flex items-start gap-2">
-                      <span className={cn("mt-[5px] h-[9px] w-[9px] flex-none rounded-[2px] border", task.status === "완료" ? cn(tone.solid, "border-transparent") : "border-ink-300")} />
+                      <button
+                        type="button"
+                        onClick={() => onToggleTask?.(task)}
+                        aria-label={task.status === "완료" ? `${task.title} 완료 해제` : `${task.title} 완료`}
+                        aria-pressed={task.status === "완료"}
+                        className={cn(
+                          "mt-[3px] flex h-[15px] w-[15px] flex-none items-center justify-center rounded-[4px] border transition",
+                          task.status === "완료" ? cn(tone.solid, "border-transparent text-white") : "border-ink-300 hover:border-ink-500",
+                        )}
+                      >
+                        {task.status === "완료" ? <CheckIcon size={9} /> : null}
+                      </button>
                       <button
                         type="button"
                         onClick={() => onOpenTask(task.id)}

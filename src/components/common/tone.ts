@@ -109,12 +109,12 @@ export const STATUS_TONES: Record<TaskStatus, Tone> = {
     solidText: "text-white",
   },
   취소: {
-    text: "text-ink-400",
-    bg: "bg-paper-200",
-    border: "border-paper-300",
-    dot: "bg-paper-400",
-    soft: "bg-paper-200/50",
-    solid: "bg-paper-400",
+    text: "text-rose-500",
+    bg: "bg-rose-50",
+    border: "border-rose-200",
+    dot: "bg-rose-300",
+    soft: "bg-rose-50",
+    solid: "bg-rose-300",
     solidText: "text-white",
   },
 };

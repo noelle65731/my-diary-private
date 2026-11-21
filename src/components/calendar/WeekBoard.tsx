@@ -101,7 +101,7 @@ export function WeekBoard({
     const delta = box.left - frame.left;
     scroller.current.scrollLeft += delta - (scroller.current.clientWidth - box.width) / 2;
   }, [narrow, dayKey]);
-  const gutter = narrow ? "2.6rem" : "7.6rem";
+  const gutter = narrow ? "3.2rem" : "7.6rem";
   const grid = useMemo(
     () => ({ gridTemplateColumns: `${gutter} repeat(${days.length}, minmax(0, 1fr))` }),
     [days.length, gutter],
@@ -174,7 +174,7 @@ export function WeekBoard({
   const laneCount = allDayBars.length > 0 ? Math.max(...allDayBars.map((bar) => bar.lane)) + 1 : 0;
   const visibleLanes = allDayExpanded ? laneCount : Math.min(3, laneCount);
   const hiddenBars = allDayExpanded ? 0 : allDayBars.filter((bar) => bar.lane >= 3).length;
-  const allDayHeight = Math.max(visibleLanes, 1) * 26 + (hiddenBars > 0 ? 18 : 0) + 8;
+  const allDayHeight = Math.max(visibleLanes, 1) * 24 + (hiddenBars > 0 ? 18 : 0) + 6;
 
   return (
     <div className="min-w-0">
@@ -250,7 +250,7 @@ export function WeekBoard({
       ) : null}
       {/* week day header */}
       <div className="grid items-end border-b border-paper-300 pb-1" style={grid}>
-        <div className="sticky left-0 z-20 bg-white pb-1 text-right text-[0.62rem] text-ink-400">
+        <div className="sticky left-0 z-20 self-stretch bg-white pb-1 text-right text-[0.62rem] text-ink-400">
           {allDayBars.length > 0 ? "" : ""}
         </div>
         {days.map((day) => {
@@ -332,7 +332,7 @@ export function WeekBoard({
                 style={{
                   left: `calc(${(startIdx * 100) / days.length}% + 2px)`,
                   width: `calc(${(span * 100) / days.length}% - 4px)`,
-                  top: lane * 26 + 4,
+                  top: lane * 24 + 3,
                   display: lane >= visibleLanes ? "none" : "block",
                 }}
               >
@@ -352,8 +352,10 @@ export function WeekBoard({
         </div>
       </div>
 
-      {/* timeline — capped to about 2/5 of the screen so the project and routine rows stay the centre of the week */}
-      <div className="flex items-center justify-end gap-2 border-b border-paper-300/70 px-1 py-1">
+      {/* timeline — a 4–5 hour window on a laptop, so 종일·시간·프로젝트·루틴·목표·메모
+          stay inside the first screen. On a phone the board scrolls as one piece so the
+          sticky time column keeps working while the days move sideways. */}
+      <div className="flex items-center justify-end gap-2 border-b border-paper-300/70 px-1 py-[3px]">
         <button
           type="button"
           onClick={() => setTimeExpanded((open) => !open)}
@@ -366,17 +368,18 @@ export function WeekBoard({
       </div>
       <div
         className={cn(
-          "relative overflow-y-auto overflow-x-clip overscroll-contain border-b border-paper-300/60",
-          timeExpanded ? "max-h-[86dvh]" : narrow ? "max-h-[34dvh]" : "max-h-[36dvh]",
+          "relative border-b border-paper-300/60",
+          narrow ? "overflow-visible" : "overflow-y-auto overflow-x-clip overscroll-contain",
+          !narrow && (timeExpanded ? "max-h-[86dvh]" : "max-h-[9.6rem]"),
         )}
       >
-        <div className="pt-1">
+        <div className="pt-0.5">
           <Timeline
             days={days}
             events={visibleEvents.filter((event) => event.kind === "일정")}
             startHour={startHour}
             endHour={endHour}
-            hourHeight={timeExpanded ? (narrow ? 46 : 38) : narrow ? 30 : 24}
+            hourHeight={timeExpanded ? 40 : 32}
             gutterWidth={gutter}
             onOpenEvent={onOpenEvent}
             onCreate={onCreate}
@@ -388,7 +391,7 @@ export function WeekBoard({
 
       {/* attached project rows */}
       <div className="border-t border-paper-300">
-        <div className="flex items-center justify-between border-b border-paper-300/70 bg-paper-50/50 px-2 py-1">
+        <div className="flex items-center justify-between border-b border-paper-300/70 bg-paper-50/50 px-2 py-[3px]">
           <span className="text-[0.64rem] text-ink-400">프로젝트 · 루틴</span>
           <button
             type="button"
@@ -408,7 +411,7 @@ export function WeekBoard({
           const tone = project ? taskTone(project.category) : null;
           return (
             <div key={key} className="grid border-b border-paper-300/80" style={grid}>
-              <div className="sticky left-0 z-20 flex min-h-[2.2rem] items-center gap-1.5 bg-white py-1 pr-1.5">
+              <div className="sticky left-0 z-20 flex min-h-[2rem] items-center gap-1.5 bg-white py-0.5 pr-1.5">
                 <button
                   type="button"
                   onClick={() => (project ? onOpenTask(project.id) : onCreateTaskForProject(""))}
@@ -448,7 +451,7 @@ export function WeekBoard({
                 return (
                   <div
                     key={day}
-                    className={cn("min-h-[2.2rem] border-l border-paper-300/80 py-1", narrow ? "px-[3px]" : "px-1")}
+                    className={cn("min-h-[2rem] border-l border-paper-300/80 py-0.5", narrow ? "px-[3px]" : "px-1")}
                   >
                     <div className={cn(narrow ? "space-y-1.5" : "space-y-1")}>
                       {cell.map((task) => {
@@ -660,7 +663,7 @@ export function WeekBoard({
       </div>
       <p className="mt-2 text-[0.64rem] text-ink-300">
         {narrow
-          ? "시간표는 위아래로 밀어 볼 수 있고, ‘전체 일정 보기’로 넓게 볼 수 있어요. 할 일 제목을 한 번 누르면 완료, 다시 누르면 해제되고 오른쪽 › 를 누르면 상세가 열립니다."
+          ? "요일을 옆으로 밀어도 왼쪽 시간은 그대로 보입니다. 할 일 제목을 한 번 누르면 완료, 다시 누르면 해제되고 오른쪽 › 를 누르면 상세가 열립니다."
           : "시간표는 위아래로 스크롤되고 ‘전체 일정 보기’로 넓게 볼 수 있습니다. 빈 칸을 누르면 일정이 추가되고, 일정 블록은 끌어서 옮길 수 있습니다."}
       </p>
     </div>

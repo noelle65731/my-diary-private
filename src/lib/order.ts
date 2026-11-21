@@ -117,6 +117,41 @@ export function sortTasksNewestFirst(tasks: ProjectTask[]): ProjectTask[] {
   return [...tasks].sort(compareTasksNewestFirst);
 }
 
+/** Open items above, completed/canceled below; inside a group the newest date comes first. */
+export function isClosedTask(task: ProjectTask): boolean {
+  return task.status === "완료" || task.status === "취소";
+}
+
+/**
+ * A10: the one order every project task list uses (card, drawer, detail list).
+ * Open → closed, then newest date on top; the manual `sort` only reorders items
+ * that sit on the same date, so a drag can never break the date order.
+ */
+export function sortProjectTaskList(tasks: ProjectTask[]): ProjectTask[] {
+  return [...tasks].sort((a, b) => {
+    const closedA = isClosedTask(a);
+    const closedB = isClosedTask(b);
+    if (closedA !== closedB) return closedA ? 1 : -1;
+    return compareTasksNewestFirst(a, b);
+  });
+}
+
+/** New `sort` values that reorder only the given same-date group. */
+export function reorderSameDate(
+  group: ProjectTask[],
+  movedId: string,
+  targetId: string,
+): Array<{ id: string; sort: number }> {
+  const ids = group.map((item) => item.id);
+  const from = ids.indexOf(movedId);
+  const to = ids.indexOf(targetId);
+  if (from < 0 || to < 0 || from === to) return [];
+  const next = [...ids];
+  next.splice(from, 1);
+  next.splice(to, 0, movedId);
+  return next.map((id, index) => ({ id, sort: (index + 1) * 10 }));
+}
+
 /** Insertion index for a vertical list drop, from the target element's position. */
 export function listInsertIndex(listLength: number, targetIndex: number | null, after: boolean): number {
   if (targetIndex === null || Number.isNaN(targetIndex)) return listLength;

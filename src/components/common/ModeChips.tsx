@@ -39,15 +39,14 @@ export function ModeChips({ mode, onChange, categories, showCustom, onAddCategor
           key={item.value}
           type="button"
           onClick={() => onChange(item.value)}
+          aria-label={item.label}
           className={cn(
             "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[0.76rem] font-medium transition",
             mode === item.value ? "bg-ink-900 text-white" : "bg-paper-200 text-ink-500 hover:bg-paper-300/70 hover:text-ink-800",
           )}
         >
+          {/* A10: NOW is written once — no lowercase duplicate next to it. */}
           {item.label}
-          <span className={cn("text-[0.6rem] font-normal", mode === item.value ? "text-white/60" : "text-ink-300")}>
-            {item.value}
-          </span>
         </button>
       ))}
       {categories.map((category) => (

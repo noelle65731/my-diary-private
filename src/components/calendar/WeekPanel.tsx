@@ -4,17 +4,18 @@ import { useEffect, useMemo, useState } from "react";
 import type { CalendarEvent, ProjectTask } from "@/lib/types";
 import { addDaysISO, formatShort, toISO, todayISO, weekKeyOf } from "@/lib/date";
 import { cn } from "@/lib/utils";
-import { CheckIcon } from "@/components/icons";
+import { CheckIcon, PencilIcon } from "@/components/icons";
 import { MiniMonth } from "@/components/calendar/MiniMonth";
 
 interface WeekPanelProps {
   weekStart: string;
   events: CalendarEvent[];
   tasks: ProjectTask[];
-  onCreateGoal: (kind: "주간 목표" | "주간 메모") => void;
+  /** A10: a goal is written and edited right here — no separate window. */
+  onCreateGoal: (title: string) => Promise<void> | void;
   onCreateFavorite: (title: string) => void;
-  /** Creates this week's memo (title from the real writing day) and returns its id. */
-  onCreateMemo: () => Promise<string | null>;
+  /** Creates this week's memo (title from the real writing day) with its first text. */
+  onCreateMemo: (text: string) => Promise<string | null>;
   onOpenEvent: (id: string) => void;
   onOpenTask: (id: string) => void;
   onToggleEventDone: (event: CalendarEvent) => void;
@@ -29,6 +30,118 @@ function memoWeekStart(event: CalendarEvent): string {
   if (event.baseDate) return event.baseDate;
   if (event.date) return event.date;
   return "";
+}
+
+/**
+ * A10: one title that edits where it stands. A click turns the text into an input;
+ * leaving the field — Tab, another click, a switch to another tab — keeps the change,
+ * and a field that was only read (nothing typed) never writes to Notion.
+ */
+function InlineTitle({
+  value,
+  onSave,
+  done,
+  className,
+  editLabel,
+}: {
+  value: string;
+  onSave: (next: string) => void;
+  done?: boolean;
+  className?: string;
+  editLabel: string;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+
+  useEffect(() => {
+    if (!editing) setDraft(value);
+  }, [value, editing]);
+
+  const commit = () => {
+    setEditing(false);
+    const next = draft.trim();
+    if (next && next !== value) onSave(next);
+    else setDraft(value);
+  };
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={commit}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            commit();
+          }
+          if (event.key === "Escape") {
+            setDraft(value);
+            setEditing(false);
+          }
+        }}
+        aria-label={editLabel}
+        className="min-w-0 flex-1 rounded-md border border-paper-400 bg-white px-1.5 py-0.5 text-[0.76rem] text-ink-800 outline-none"
+      />
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => setEditing(true)}
+      aria-label={editLabel}
+      title="눌러서 바로 고치기"
+      className={cn(
+        "group/title flex min-w-0 flex-1 items-center gap-1 text-left text-[0.76rem] text-ink-700",
+        done && "text-ink-400 line-through",
+        className,
+      )}
+    >
+      <span className="min-w-0 truncate">{value}</span>
+      <PencilIcon size={9} className="flex-none text-ink-200 transition group-hover/title:text-ink-400" />
+    </button>
+  );
+}
+
+/**
+ * A10: this week's memo is a field on the week screen itself. Typing and leaving writes
+ * once; opening it and leaving without a keystroke writes nothing.
+ */
+function MemoBox({
+  initial,
+  placeholder,
+  onCommit,
+}: {
+  initial: string;
+  placeholder: string;
+  onCommit: (text: string) => void;
+}) {
+  const [text, setText] = useState(initial);
+
+  useEffect(() => {
+    setText(initial);
+  }, [initial]);
+
+  return (
+    <textarea
+      value={text}
+      onChange={(event) => setText(event.target.value)}
+      onBlur={() => {
+        if (text !== initial) onCommit(text);
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          setText(initial);
+          (event.target as HTMLTextAreaElement).blur();
+        }
+      }}
+      placeholder={placeholder}
+      aria-label="이번 주 메모"
+      className="mt-1.5 min-h-[6.5rem] w-full resize-none rounded-xl border border-transparent bg-paper-200/70 px-3 py-2 text-[0.76rem] leading-relaxed text-ink-700 outline-none transition focus:border-paper-400 focus:bg-white"
+    />
+  );
 }
 
 export function WeekPanel({
@@ -85,13 +198,14 @@ export function WeekPanel({
   );
   const currentMemo = memos.find((event) => event.weekKey === weekKey || inWeek(event.date)) ?? null;
   const [selectedMemoId, setSelectedMemoId] = useState<string | null>(null);
-  const [memoDraft, setMemoDraft] = useState<string | null>(null);
   const [favoriteDraft, setFavoriteDraft] = useState("");
+  const [goalDraft, setGoalDraft] = useState("");
   const [savingMemo, setSavingMemo] = useState(false);
+  const [goalBusy, setGoalBusy] = useState(false);
 
   useEffect(() => {
     setSelectedMemoId(null);
-    setMemoDraft(null);
+    setGoalDraft("");
   }, [weekStart]);
 
   const activeMemo = (selectedMemoId ? memos.find((event) => event.id === selectedMemoId) : null) ?? currentMemo ?? null;
@@ -114,24 +228,38 @@ export function WeekPanel({
     setFavoriteDraft("");
   };
 
-  const createMemo = async () => {
+  const addGoal = async () => {
+    const title = goalDraft.trim();
+    if (!title || goalBusy) return;
+    setGoalBusy(true);
+    setGoalDraft("");
+    try {
+      await onCreateGoal(title);
+    } finally {
+      setGoalBusy(false);
+    }
+  };
+
+  const commitMemo = async (text: string) => {
+    if (activeMemo) {
+      onUpdateEvent(activeMemo.id, { memo: text });
+      return;
+    }
+    if (!text.trim()) return;
     setSavingMemo(true);
     try {
-      const id = await onCreateMemo();
-      if (id) {
-        setSelectedMemoId(id);
-        setMemoDraft(null);
-      }
+      const id = await onCreateMemo(text);
+      if (id) setSelectedMemoId(id);
     } finally {
       setSavingMemo(false);
     }
   };
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-4">
       <MiniMonth cursor={todayISO()} weekStart={weekStart} marks={marks} onPick={onPickDay} onMonth={onMonth} />
 
-      <section className="border-t border-paper-300 pt-4">
+      <section className="border-t border-paper-300 pt-3.5">
         <header className="flex items-center justify-between">
           <h3 className="text-[0.92rem] font-semibold text-ink-900">이번 주 꼭</h3>
         </header>
@@ -152,7 +280,7 @@ export function WeekPanel({
                   <button
                     type="button"
                     onClick={() => (kind === "event" ? onToggleEventDone(item as CalendarEvent) : onToggleTask(item as ProjectTask))}
-                    aria-label="완료"
+                    aria-label={done ? "완료 해제" : "완료"}
                     className={cn(
                       "flex h-[15px] w-[15px] flex-none items-center justify-center rounded-full border transition",
                       done ? "border-ink-900 bg-ink-900 text-white" : "border-ink-300 hover:border-ink-500",
@@ -199,7 +327,7 @@ export function WeekPanel({
         </form>
       </section>
 
-      <section className="border-t border-paper-300 pt-4">
+      <section className="border-t border-paper-300 pt-3.5">
         <header className="flex items-center justify-between">
           <h3 className="text-[0.92rem] font-semibold text-ink-900">이번 주 목표</h3>
           <span className="text-[0.66rem] text-ink-400">
@@ -212,6 +340,7 @@ export function WeekPanel({
               <button
                 type="button"
                 onClick={() => onToggleEventDone(goal)}
+                aria-label={goal.done ? "목표 완료 해제" : "목표 완료"}
                 className={cn(
                   "flex h-[15px] w-[15px] flex-none items-center justify-center rounded-full border transition",
                   goal.done ? "border-ink-900 bg-ink-900 text-white" : "border-ink-300 hover:border-ink-500",
@@ -219,27 +348,38 @@ export function WeekPanel({
               >
                 {goal.done ? <CheckIcon size={9} /> : null}
               </button>
-              <button
-                type="button"
-                onClick={() => onOpenEvent(goal.id)}
-                className={cn("min-w-0 flex-1 truncate text-left text-[0.76rem] text-ink-700", goal.done && "text-ink-400 line-through")}
-              >
-                {goal.title}
-              </button>
+              <InlineTitle
+                value={goal.title}
+                done={goal.done}
+                editLabel="목표 고치기"
+                onSave={(next) => onUpdateEvent(goal.id, { title: next })}
+              />
             </li>
           ))}
-          {goals.length === 0 ? <li className="text-[0.7rem] text-ink-400">이번 주 목표를 정해 보세요.</li> : null}
+          {goals.length === 0 ? <li className="text-[0.7rem] text-ink-400">아래에 목표를 적고 Enter를 누르세요.</li> : null}
         </ul>
-        <button
-          type="button"
-          onClick={() => onCreateGoal("주간 목표")}
-          className="mt-1.5 text-[0.7rem] text-ink-400 transition hover:text-ink-700"
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            void addGoal();
+          }}
+          className="mt-1.5"
         >
-          + 목표 추가
-        </button>
+          <input
+            value={goalDraft}
+            onChange={(event) => setGoalDraft(event.target.value)}
+            onBlur={() => {
+              if (goalDraft.trim()) void addGoal();
+            }}
+            placeholder="+ 목표 추가 (Enter)"
+            aria-label="주간 목표 추가"
+            disabled={goalBusy}
+            className="w-full rounded-lg border border-transparent bg-paper-200/70 px-2.5 py-1.5 text-[0.76rem] text-ink-900 placeholder:text-ink-400 focus:border-paper-400 focus:bg-white focus:outline-none disabled:opacity-60"
+          />
+        </form>
       </section>
 
-      <section className="border-t border-paper-300 pt-4">
+      <section className="border-t border-paper-300 pt-3.5">
         <header className="flex items-center justify-between gap-2">
           <h3 className="text-[0.92rem] font-semibold text-ink-900">주간 메모</h3>
           {memos.length > 0 ? <span className="text-[0.64rem] text-ink-400">이전 메모 {memos.length}개</span> : null}
@@ -248,10 +388,7 @@ export function WeekPanel({
         {memos.length > 0 ? (
           <select
             value={activeMemo?.id ?? ""}
-            onChange={(event) => {
-              setSelectedMemoId(event.target.value || null);
-              setMemoDraft(null);
-            }}
+            onChange={(event) => setSelectedMemoId(event.target.value || null)}
             aria-label="주간 메모 기록 선택"
             className="mt-2 w-full rounded-lg border border-paper-300 bg-white px-2 py-1.5 text-[0.72rem] text-ink-700 focus:border-paper-400 focus:outline-none"
           >
@@ -265,45 +402,19 @@ export function WeekPanel({
           </select>
         ) : null}
 
-        {activeMemo ? (
-          <>
-            <textarea
-              key={activeMemo.id}
-              value={memoDraft ?? activeMemo.memo}
-              onChange={(event) => setMemoDraft(event.target.value)}
-              onBlur={() => {
-                if (memoDraft !== null && memoDraft !== activeMemo.memo) {
-                  onUpdateEvent(activeMemo.id, { memo: memoDraft });
-                }
-                setMemoDraft(null);
-              }}
-              placeholder="이번 주에 남기고 싶은 생각"
-              className="mt-1.5 min-h-[7.5rem] w-full resize-none rounded-xl border border-transparent bg-paper-200/70 px-3 py-2 text-[0.76rem] leading-relaxed text-ink-700 outline-none transition focus:border-paper-400 focus:bg-white"
-            />
-            <p className="mt-1 text-[0.64rem] text-ink-300">
-              {activeMemo.id === currentMemo?.id ? activeMemo.title : `${memoWeekStart(activeMemo)} 주의 기록 · 읽기·수정 가능`}
-            </p>
-            {!currentMemo ? (
-              <button
-                type="button"
-                onClick={() => void createMemo()}
-                disabled={savingMemo}
-                className="mt-1 text-[0.68rem] text-ink-400 transition hover:text-ink-700 disabled:opacity-50"
-              >
-                + 이번 주 메모 쓰기
-              </button>
-            ) : null}
-          </>
-        ) : (
-          <button
-            type="button"
-            onClick={() => void createMemo()}
-            disabled={savingMemo}
-            className="mt-2 w-full rounded-xl border border-dashed border-paper-300 px-3 py-6 text-left text-[0.72rem] text-ink-400 transition hover:border-ink-300 hover:text-ink-600 disabled:opacity-50"
-          >
-            + 이번 주 메모 남기기
-          </button>
-        )}
+        <MemoBox
+          key={`${activeMemo?.id ?? "new"}-${weekKey}`}
+          initial={activeMemo?.memo ?? ""}
+          placeholder={savingMemo ? "저장 중…" : "이번 주에 남기고 싶은 생각을 바로 적으세요"}
+          onCommit={(text) => void commitMemo(text)}
+        />
+        <p className="mt-1 text-[0.64rem] text-ink-300">
+          {activeMemo
+            ? activeMemo.id === currentMemo?.id
+              ? activeMemo.title
+              : `${memoWeekStart(activeMemo)} 주의 기록 · 읽기·수정 가능`
+            : "여기에 쓰고 바깥을 누르면 이번 주 메모로 저장됩니다."}
+        </p>
       </section>
     </div>
   );

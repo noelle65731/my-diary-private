@@ -13,17 +13,57 @@ export function TaskRow({
   onToggle,
   compact = false,
   showProjectName,
+  draggable,
+  onDragStart,
+  onDragOver,
+  onDrop,
 }: {
   task: ProjectTask;
   onOpen: () => void;
   onToggle: () => void;
   compact?: boolean;
   showProjectName?: string | null;
+  /** A10: same-date manual ordering inside a project's task list. */
+  draggable?: boolean;
+  onDragStart?: () => void;
+  onDragOver?: () => void;
+  onDrop?: () => void;
 }) {
   const done = task.status === "완료";
   const overdue = task.due && task.due < todayISO() && !done && task.status !== "취소";
   return (
-    <li className={cn("group flex items-start gap-2", compact ? "py-1" : "py-1.5")}>
+    <li
+      className={cn("group flex items-start gap-2", compact ? "py-1" : "py-1.5")}
+      draggable={draggable}
+      onDragStart={
+        draggable
+          ? (event) => {
+              event.dataTransfer.setData("text/diary-task-order", task.id);
+              event.dataTransfer.effectAllowed = "move";
+              onDragStart?.();
+            }
+          : undefined
+      }
+      onDragOver={
+        draggable
+          ? (event) => {
+              if (!event.dataTransfer.types.includes("text/diary-task-order")) return;
+              event.preventDefault();
+              onDragOver?.();
+            }
+          : undefined
+      }
+      onDrop={
+        draggable
+          ? (event) => {
+              if (!event.dataTransfer.types.includes("text/diary-task-order")) return;
+              event.preventDefault();
+              onDrop?.();
+            }
+          : undefined
+      }
+      title={draggable ? "같은 날짜 안에서 끌어 순서 바꾸기" : undefined}
+    >
       <button
         type="button"
         onClick={onToggle}

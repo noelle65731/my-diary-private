@@ -385,3 +385,52 @@ function messageOf(error: unknown): string {
 export function isNotionPageId(value: string): boolean {
   return /^[0-9a-f]{32}$|^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value);
 }
+
+/* ───────────────── A10: real photo storage (Notion File Upload) ───────────────── */
+
+/**
+ * Uploads one image to Notion and returns the `file_upload` id.
+ *
+ * The id — not a URL — is what a page keeps: when the record is read again Notion hands
+ * out a fresh signed URL, so the photo still shows after a reload. Notion's own limits
+ * apply (5 MB per file on a free workspace), and the integration needs the
+ * "Insert content" capability.
+ */
+export async function uploadFileToNotion(
+  filename: string,
+  contentType: string,
+  data: ArrayBuffer,
+): Promise<{ id: string; url: string | null }> {
+  const token = notionToken();
+  if (!token) throw new NotionError("NOTION_TOKEN 이 설정되지 않았습니다.", 503, "missing_token");
+
+  const created = await request<{ id?: string; upload_url?: string }>("/file_uploads", {
+    method: "POST",
+    body: JSON.stringify({ filename, content_type: contentType }),
+  });
+  const id = created.id;
+  if (!id) throw new NotionError("Notion 파일 업로드를 시작하지 못했습니다.", 502, "upload_not_started");
+
+  const form = new FormData();
+  form.append("file", new Blob([data], { type: contentType }), filename);
+  const sent = await fetch(`${API}/file_uploads/${id}/send`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Notion-Version": V_LEGACY },
+    body: form,
+    cache: "no-store",
+  });
+  if (!sent.ok) {
+    let message = `Notion 파일 전송에 실패했습니다 (${sent.status})`;
+    try {
+      const body = (await sent.json()) as { message?: string };
+      message = body.message ?? message;
+    } catch {
+      /* keep default */
+    }
+    if (sent.status === 401 || sent.status === 403) {
+      message = "Notion 통합에 파일 업로드 권한(콘텐츠 삽입)이 없습니다. 통합 설정을 확인해 주세요.";
+    }
+    throw new NotionError(message, sent.status, "upload_failed");
+  }
+  return { id, url: created.upload_url ?? null };
+}

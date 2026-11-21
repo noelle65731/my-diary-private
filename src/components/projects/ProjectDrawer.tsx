@@ -10,6 +10,7 @@ import { todayISO } from "@/lib/date";
 import type { ProjectTask } from "@/lib/types";
 import { TaskRow } from "@/components/projects/TaskRow";
 import { RichText } from "@/components/common/rich";
+import { reorderSameDate, sortProjectTaskList, taskSortDate } from "@/lib/order";
 
 type Filter = "all" | "ing" | "done";
 
@@ -30,9 +31,12 @@ export function ProjectDrawer({
   const [filter, setFilter] = useState<Filter>("all");
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
+  const [dragId, setDragId] = useState<string | null>(null);
 
   const project = projectId ? data.projects.find((item) => item.id === projectId && item.kind === "프로젝트") ?? null : null;
-  const tasks = project ? data.projects.filter((task) => task.kind === "할 일" && task.projectIds.includes(project.id) && !task.trash) : [];
+  const tasks = sortProjectTaskList(
+    project ? data.projects.filter((task) => task.kind === "할 일" && task.projectIds.includes(project.id) && !task.trash) : [],
+  );
   const done = tasks.filter((task) => task.status === "완료").length;
   const progress = tasks.length > 0 ? Math.round((done / tasks.length) * 100) : 0;
   const filtered = tasks.filter((task) => {
@@ -40,6 +44,20 @@ export function ProjectDrawer({
     if (filter === "done") return task.status === "완료";
     return true;
   });
+
+  /** A10: a drag may reorder only items that share a date, so the date order never breaks. */
+  const moveWithinDate = (movedId: string, targetId: string) => {
+    if (movedId === targetId) return;
+    const moved = tasks.find((task) => task.id === movedId);
+    const target = tasks.find((task) => task.id === targetId);
+    if (!moved || !target) return;
+    if (taskSortDate(moved) !== taskSortDate(target)) return;
+    const group = tasks.filter((task) => taskSortDate(task) === taskSortDate(moved));
+    for (const change of reorderSameDate(group, movedId, targetId)) {
+      const current = group.find((task) => task.id === change.id);
+      if (current && current.sort !== change.sort) void update("projects", change.id, { sort: change.sort });
+    }
+  };
 
   const toggle = (task: ProjectTask) =>
     void update("projects", task.id, {
@@ -140,7 +158,18 @@ export function ProjectDrawer({
           ) : (
             <ul className="divide-y divide-paper-300/40">
               {filtered.map((task) => (
-                <TaskRow key={task.id} task={task} onOpen={() => onOpenTask(task.id)} onToggle={() => toggle(task)} />
+                <TaskRow
+                  key={task.id}
+                  task={task}
+                  draggable
+                  onDragStart={() => setDragId(task.id)}
+                  onDrop={() => {
+                    if (dragId) moveWithinDate(dragId, task.id);
+                    setDragId(null);
+                  }}
+                  onOpen={() => onOpenTask(task.id)}
+                  onToggle={() => toggle(task)}
+                />
               ))}
             </ul>
           )}
@@ -150,25 +179,24 @@ export function ProjectDrawer({
               event.preventDefault();
               void addTask();
             }}
-            className="flex items-center gap-2 rounded-xl border border-paper-300 bg-paper-50/60 px-2 py-1"
+            className="flex items-center gap-2 rounded-xl border border-paper-300 bg-paper-50/60 px-2 py-0.5"
           >
-            <PlusIcon size={14} className="flex-none text-ink-400" />
+            <PlusIcon size={13} className="flex-none text-ink-400" />
             <input
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
               placeholder="할 일을 적고 Enter"
-              className="min-w-0 flex-1 border-none bg-transparent px-1 py-1.5 text-[0.84rem] outline-none placeholder:text-ink-400"
+              className="min-w-0 flex-1 border-none bg-transparent px-1 py-1 text-[0.78rem] outline-none placeholder:text-ink-400"
             />
-            <button type="submit" disabled={!draft.trim() || busy} className="btn-primary btn-xs flex-none">
+            <button type="submit" disabled={!draft.trim() || busy} className="btn-primary btn-xs flex-none whitespace-nowrap">
               추가
             </button>
           </form>
 
           <div className="flex flex-wrap gap-1.5 text-[0.64rem] text-ink-400">
             {project.due ? <span>마감 {project.due}</span> : null}
-            {project.important ? <span className="chip bg-amber-100 text-amber-700">중요</span> : null}
-            {project.urgent ? <span className="chip bg-rose-100 text-rose-600">긴급</span> : null}
             {project.hidden ? <span className="chip bg-paper-200 text-ink-500">숨김</span> : null}
+            {project.history ? <span className="chip bg-paper-200 text-ink-500">History</span> : null}
           </div>
 
           {tasks.length > 0 && tasks.every((task) => task.status === "완료") ? (

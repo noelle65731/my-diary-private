@@ -198,7 +198,7 @@ export function Timeline({
           {marks.map((minutes) => (
             <div
               key={minutes}
-              className="absolute right-2 -translate-y-1/2 text-[0.64rem] tabular-nums text-ink-400"
+              className="absolute right-1.5 -translate-y-1/2 whitespace-nowrap text-[0.6rem] tabular-nums text-ink-400 md:right-2 md:text-[0.64rem]"
               style={{ top: ((minutes - bounds.start) / 60) * hourHeight }}
             >
               {hourLabel(minutes)}
@@ -319,7 +319,7 @@ export function Timeline({
                       >
                         <span className={cn("flex-none", compactCard && "font-semibold")}>{timeLabel}</span>
                         {compactCard ? (
-                          <span className={cn("min-w-0 truncate text-[0.56rem] font-medium leading-[1.1]", event.canceled && "line-through")}>
+                          <span className={cn("line-clamp-2 min-w-0 break-words text-[0.56rem] font-medium leading-[1.1]", event.canceled && "line-through")}>
                             {event.title}
                           </span>
                         ) : null}
@@ -333,7 +333,7 @@ export function Timeline({
                     {compactCard ? null : (
                       <span
                         className={cn(
-                          "mt-0.5 block whitespace-normal break-words text-[0.6rem] font-medium leading-[1.2] md:text-[0.66rem]",
+                          "mt-0.5 line-clamp-2 block whitespace-normal break-words text-[0.6rem] font-medium leading-[1.2] md:text-[0.66rem]",
                           tone.text,
                           event.canceled && "line-through",
                         )}

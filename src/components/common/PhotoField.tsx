@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { Modal } from "@/components/common/primitives";
+import { useData } from "@/state/store";
 import { cn } from "@/lib/utils";
 import { PlusIcon } from "@/components/icons";
 import { FOLDER_EMOJIS, type ArchiveFolder } from "@/lib/folders";
@@ -107,34 +108,91 @@ export function FolderChips({
   );
 }
 
-/** A9: photos attach as URLs, show as thumbnails and open in a new tab. */
+/**
+ * A10: a freshly uploaded photo is held as `upload:<file_upload id>` until Notion answers
+ * with its own URL, so the picture is shown from this in-memory copy in the meantime.
+ */
+const sessionPreviews = new Map<string, string>();
+
+export function photoSrc(value: string): string {
+  if (value.startsWith("upload:")) return sessionPreviews.get(value) ?? "";
+  return value;
+}
+
+/** A9: photos open in a new tab; an upload that has no URL yet shows its local copy. */
 export function PhotoGallery({ photos, className }: { photos: string[]; className?: string }) {
   if (photos.length === 0) return null;
   return (
     <div className={cn("flex flex-wrap gap-2", className)}>
-      {photos.map((url) => (
-        <a
-          key={url}
-          href={url}
-          target="_blank"
-          rel="noreferrer"
-          className="group relative block h-20 w-20 overflow-hidden rounded-lg border border-paper-300 bg-paper-100"
-          title={url}
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={url} alt="" className="h-full w-full object-cover" loading="lazy" />
-          <span className="absolute inset-x-0 bottom-0 hidden bg-ink-900/60 px-1 py-0.5 text-center text-[0.55rem] text-white group-hover:block">
-            열기
+      {photos.map((value, index) => {
+        const src = photoSrc(value);
+        const linkable = /^https?:\/\//i.test(value);
+        const inner = src ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={src} alt="" className="h-full w-full object-cover" loading="lazy" />
+        ) : (
+          <span className="flex h-full w-full items-center justify-center bg-paper-200 text-[0.6rem] text-ink-400">사진</span>
+        );
+        return linkable ? (
+          <a
+            key={`${value}-${index}`}
+            href={value}
+            target="_blank"
+            rel="noreferrer"
+            className="group relative block h-20 w-20 overflow-hidden rounded-lg border border-paper-300 bg-paper-100"
+            title={value}
+          >
+            {inner}
+            <span className="absolute inset-x-0 bottom-0 hidden bg-ink-900/60 px-1 py-0.5 text-center text-[0.55rem] text-white group-hover:block">
+              열기
+            </span>
+          </a>
+        ) : (
+          <span
+            key={`${value}-${index}`}
+            className="block h-20 w-20 overflow-hidden rounded-lg border border-paper-300 bg-paper-100"
+            title="저장 중인 사진"
+          >
+            {inner}
           </span>
-        </a>
-      ))}
+        );
+      })}
     </div>
   );
 }
 
+/** Downscales a phone photo in the browser so only a small JPEG reaches Notion (5MB limit). */
+async function compressPhoto(file: File): Promise<{ blob: Blob; preview: string; name: string } | null> {
+  const name = `${(file.name || "photo").replace(/\.[^.]+$/, "").slice(0, 60)}.jpg`;
+  try {
+    const bitmap = await createImageBitmap(file);
+    const longest = Math.max(bitmap.width, bitmap.height);
+    const scale = Math.min(1, 1600 / longest);
+    const width = Math.max(1, Math.round(bitmap.width * scale));
+    const height = Math.max(1, Math.round(bitmap.height * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+    if (!context) return null;
+    context.drawImage(bitmap, 0, 0, width, height);
+    for (const quality of [0.82, 0.7, 0.55]) {
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
+      if (blob && blob.size <= 4_500_000) {
+        return { blob, preview: canvas.toDataURL("image/jpeg", 0.6), name };
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export function PhotoEditor({ photos, onChange }: { photos: string[]; onChange: (next: string[]) => void }) {
+  const { demo } = useData();
   const [url, setUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const addUrl = () => {
@@ -151,18 +209,43 @@ export function PhotoEditor({ photos, onChange }: { photos: string[]; onChange: 
     setUrl("");
   };
 
-  const addFile = (file: File | undefined) => {
+  const addFile = async (file: File | undefined) => {
     if (!file) return;
-    if (file.size > 1_500_000) {
-      setError("1.5MB 이하 사진만 이 방식으로 넣을 수 있습니다. 큰 사진은 주소를 붙여 주세요.");
+    if (!file.type.startsWith("image/")) {
+      setError("사진 파일(jpg · png · heic)을 골라 주세요.");
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") onChange([...photos, reader.result]);
-    };
-    reader.readAsDataURL(file);
-    if (fileRef.current) fileRef.current.value = "";
+    setError(null);
+    setBusy(true);
+    try {
+      const packed = await compressPhoto(file);
+      if (!packed) {
+        setError("사진을 줄이지 못했습니다. 다른 사진으로 시도하거나 주소를 붙여 주세요.");
+        return;
+      }
+      const preview = packed.preview;
+      if (demo) {
+        // 미리보기 모드: Notion이 연결되지 않아 이 브라우저 안에만 남습니다.
+        onChange([...photos, preview]);
+        setError("미리보기 모드입니다. Notion을 연결하면 이 사진이 기록에 함께 저장됩니다.");
+        return;
+      }
+      const form = new FormData();
+      form.append("file", new File([packed.blob], packed.name, { type: "image/jpeg" }), packed.name);
+      const response = await fetch("/api/upload", { method: "POST", body: form });
+      const payload = (await response.json().catch(() => null)) as
+        | { ok?: boolean; data?: { token?: string }; error?: { message?: string } }
+        | null;
+      if (!response.ok || !payload?.ok || !payload.data?.token) {
+        setError(payload?.error?.message ?? "사진을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+        return;
+      }
+      sessionPreviews.set(payload.data.token, preview);
+      onChange([...photos, payload.data.token]);
+    } finally {
+      setBusy(false);
+      if (fileRef.current) fileRef.current.value = "";
+    }
   };
 
   return (
@@ -184,20 +267,38 @@ export function PhotoEditor({ photos, onChange }: { photos: string[]; onChange: 
         <button type="button" onClick={addUrl} className="btn-outline btn-xs">
           주소 추가
         </button>
-        <button type="button" onClick={() => fileRef.current?.click()} className="btn-outline btn-xs">
-          파일 선택
+        <button type="button" onClick={() => fileRef.current?.click()} disabled={busy} className="btn-outline btn-xs">
+          {busy ? "올리는 중…" : "사진 올리기"}
         </button>
-        <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(event) => addFile(event.target.files?.[0])} />
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(event) => void addFile(event.target.files?.[0])}
+        />
       </div>
-      {error ? <p className="text-[0.68rem] text-rose-500">{error}</p> : null}
-      <p className="text-[0.64rem] text-ink-400">파일 선택은 이 화면의 미리보기용입니다. Notion에는 https:// 로 시작하는 사진 주소만 저장됩니다.</p>
+      {error ? <p className={cn("text-[0.68rem]", error.startsWith("미리보기") ? "text-ink-400" : "text-rose-500")}>{error}</p> : null}
+      <p className="text-[0.64rem] text-ink-400">
+        고른 사진은 화면에서 1600px·JPEG로 줄여 Notion에 업로드되고, 그 기록의 사진으로 남습니다. 다시 열어도 같은 사진이 보입니다.
+      </p>
       <PhotoGallery photos={photos} />
       {photos.length > 0 ? (
         <div className="space-y-1">
           {photos.map((photo, index) => (
             <div key={`${photo}-${index}`} className="flex items-center gap-1.5 text-[0.68rem] text-ink-400">
-              <span className="min-w-0 flex-1 truncate">{photo.startsWith("data:") ? "첨부한 사진" : photo}</span>
-              <button type="button" onClick={() => onChange(photos.filter((_, i) => i !== index))} className="text-rose-400 hover:text-rose-600">
+              <span className="min-w-0 flex-1 truncate">
+                {photo.startsWith("upload:")
+                  ? "방금 올린 사진 (Notion에 저장됨)"
+                  : photo.startsWith("data:")
+                    ? "첨부한 사진"
+                    : photo}
+              </span>
+              <button
+                type="button"
+                onClick={() => onChange(photos.filter((_, i) => i !== index))}
+                className="text-rose-400 hover:text-rose-600"
+              >
                 지우기
               </button>
             </div>

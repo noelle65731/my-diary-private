@@ -9,12 +9,7 @@ import { plainOfSpans, spansFromMarkdown } from "@/lib/richtext";
 import { CalendarIcon, StarIcon } from "@/components/icons";
 import { addDaysISO, memoTitle, startOfWeekISO, todayISO, weekKeyOf } from "@/lib/date";
 import { cn } from "@/lib/utils";
-import {
-  CALENDAR_CATEGORIES,
-  type CalendarCategory,
-  type CalendarEvent,
-  type CalendarKind,
-} from "@/lib/types";
+import { type CalendarCategory, type CalendarEvent, type CalendarKind } from "@/lib/types";
 
 export interface EventDraft {
   date?: string;
@@ -70,6 +65,8 @@ function formFromDraft(draft?: EventDraft): FormState {
     // A8/A9: a new 주간·월간 메모 is named after the day it is written.
     title: kind === "주간 메모" || kind === "월간 메모" ? memoTitle(todayISO(), kind) : "",
     kind,
+    // A10: the old 개인/외부일정/성과/휴먼네트워크 choice is gone from the form; new
+    // records keep the single current classification and old values stay untouched.
     category: "개인",
     date,
     allDay: !draft?.startTime,
@@ -224,27 +221,6 @@ function EventEditorInner({
               { value: "월간 메모", label: "월간 메모" },
             ]}
           />
-        </div>
-
-        <div>
-          <p className="label">분류</p>
-          <div className="flex flex-wrap gap-1.5">
-            {CALENDAR_CATEGORIES.map((category) => (
-              <button
-                key={category}
-                type="button"
-                onClick={() => patch("category", category)}
-                className={cn(
-                  "chip border transition",
-                  form.category === category
-                    ? "border-ink-900 bg-ink-900 text-paper-50"
-                    : "border-paper-400 bg-white/60 text-ink-600 hover:border-ink-400",
-                )}
-              >
-                {category}
-              </button>
-            ))}
-          </div>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
