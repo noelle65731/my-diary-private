@@ -237,17 +237,17 @@
     --yr-day: 13.5px;
     --yr-weekday: 11.5px;
     --yr-month: 15px;
+    /* day-to-day horizontal gap inside one month; the cluster is seven of these wide */
+    --yr-gap: 7px;
+    --yr-cluster: calc((var(--yr-cell) + var(--yr-gap)) * 7);
   }
 
   @media (min-width: 1280px) {
     .year-grid {
-      /* 3 rows x (6 day rows + month title + weekday row) fill the space above the
-         bottom bar and stop there, so the twelve months never need a scroll */
-      --yr-cell: clamp(
-        20px,
-        min(calc((100dvh - 282px) / 22), calc((100dvh - 342px) / 19.65)),
-        30px
-      );
+      /* three month rows: each is six day rows plus the month title and the weekday row
+         (~7.3 cells), and the two month-row gaps sit in between. 350px is the header,
+         the bottom bar and a little air; 22 cells is the rest of the screen. */
+      --yr-cell: clamp(18px, calc((100dvh - 350px) / 22), 30px);
       --yr-day: calc(var(--yr-cell) * 0.72);
       --yr-weekday: calc(var(--yr-cell) * 0.55);
       --yr-month: min(calc(var(--yr-cell) * 0.78), 20px);

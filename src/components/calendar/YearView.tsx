@@ -41,9 +41,11 @@ export function YearView({ year, events, tasks, hiddenIncluded, onPickDay, onPic
     return map;
   }, [events, tasks, hiddenIncluded]);
 
-  /* A12: all twelve months sit on one screen — four columns on a laptop, no page scroll. */
+  /* A12: all twelve months sit on one screen — four columns on a laptop, no page scroll.
+     The days of one month sit close together as a single block, and the months
+     themselves are held apart, so 3월 and 7월 (or 8월 and 12월) read as separate months. */
   return (
-    <div className="year-grid grid grid-cols-2 gap-x-5 gap-y-2 sm:grid-cols-3 xl:grid-cols-4 xl:gap-x-6">
+    <div className="year-grid grid grid-cols-2 gap-x-4 gap-y-7 sm:grid-cols-3 sm:gap-x-6 sm:gap-y-8 lg:gap-x-8 lg:gap-y-9 xl:grid-cols-4 xl:gap-x-10 xl:gap-y-10">
       {Array.from({ length: 12 }, (_, month0) => (
         <MonthMini key={month0} year={year} month0={month0} today={today} counts={counts} onPickDay={onPickDay} onPickMonth={onPickMonth} />
       ))}
@@ -70,21 +72,23 @@ function MonthMini({
   const monthKey = `${year}-${String(month0 + 1).padStart(2, "0")}`;
 
   return (
-    <div className="group/month min-w-0">
+    <div className="group/month flex min-w-0 flex-col md:items-center">
       <button
         type="button"
         data-year-month={monthKey}
         onClick={() => onPickMonth?.(monthKey)}
         title={`${MONTH_NAMES[month0]} 월간 보기`}
         aria-label={`${MONTH_NAMES[month0]} 월간 보기`}
-        className="-mx-1 mb-0.5 flex w-[calc(100%+0.5rem)] items-baseline gap-1 rounded px-1 text-left text-[length:var(--yr-month)] font-semibold leading-none text-ink-900 transition hover:bg-paper-200/70"
+        className="-mx-1 mb-0.5 flex w-[calc(100%+0.5rem)] items-baseline gap-1 rounded px-1 text-left text-[length:var(--yr-month)] font-semibold leading-none text-ink-900 transition hover:bg-paper-200/70 md:w-[calc(var(--yr-cluster)+0.5rem)]"
       >
         {MONTH_NAMES[month0]}
         <span aria-hidden className="text-[calc(11px*var(--fs))] font-normal text-ink-300 opacity-0 transition group-hover/month:opacity-100">
           월간 ›
         </span>
       </button>
-      <div className="grid grid-cols-7 gap-y-0.5 text-center">
+      {/* --yr-cluster keeps the seven day columns a hair apart instead of spreading
+          them across the whole month width */}
+      <div className="grid w-full grid-cols-7 gap-y-[2px] text-center md:w-[var(--yr-cluster)]">
         {["월", "화", "수", "목", "금", "토", "일"].map((label, index) => (
           <span
             key={label}
