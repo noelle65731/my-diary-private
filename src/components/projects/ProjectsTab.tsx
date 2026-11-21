@@ -21,7 +21,7 @@ import { TaskDetail } from "@/components/detail/TaskDetail";
 import { RoutineEditor } from "@/components/editors/RoutineEditor";
 import { routineCountForDay } from "@/components/calendar/calendar-utils";
 import { writeRoutineNow } from "@/lib/routine-now";
-import { sortProjectTaskList, sortTasksNewestFirst } from "@/lib/order";
+import { sortProjectTaskList, sortTasksByDate } from "@/lib/order";
 
 type ProjectView = "tracks" | "priority" | "history" | "journal";
 /** A card keeps five open tasks in view — fewer than four hid the work that was left. */
@@ -725,9 +725,13 @@ function ProjectCard({
   const categoryColor = useCategoryColors();
   const pastel = pastelOf(project.id);
   const tone = categoryColor.toneOf(project.category, taskTone(project.category));
-  const children = sortProjectTaskList(tasks.filter((task) => !task.trash && task.projectIds.includes(project.id)));
+  // A28: 남은 할 일은 설정에서 고른 날짜 방향(기본 가까운 날짜순)으로, 완료 기록은 늘 아래에 최근 것부터.
+  const children = sortProjectTaskList(
+    tasks.filter((task) => !task.trash && task.projectIds.includes(project.id)),
+    settings.projectTaskOrder,
+  );
   const open = children.filter((task) => task.status !== "완료" && task.status !== "취소");
-  const orderedOpen = sortTasksNewestFirst(open);
+  const orderedOpen = open;
   /** A19: 완료한 할 일 — 최근에 끝낸 순서. */
   const completed = children
     .filter((task) => task.status === "완료")
@@ -1061,8 +1065,13 @@ function PriorityView({
   onCreateTask: (category: TaskCategory, urgent: boolean, important: boolean) => void;
 }) {
   const { update } = useData();
+  const { settings } = useSettings();
   const categoryColor = useCategoryColors();
-  const open = sortTasksNewestFirst(tasks.filter((task) => task.status !== "완료" && task.status !== "취소"));
+  // A28: 사분면 안에서도 남은 할 일이 같은 날짜 방향을 따릅니다.
+  const open = sortTasksByDate(
+    tasks.filter((task) => task.status !== "완료" && task.status !== "취소"),
+    settings.projectTaskOrder,
+  );
 
   const { from, to } = range;
   /** 펼쳐 둔 사분면 key 목록 */

@@ -90,15 +90,43 @@ function taskCreatedKey(task: ProjectTask): string {
 }
 
 /**
- * Project content order: newest date on top, oldest at the bottom.
- * Undated items follow every dated item, newest created first; the manual
- * `sort` value only breaks ties inside the same date.
+ * A28: which way the date order runs in a project list.
+ * `near` — 가장 가까운 날짜가 위(오름차순), `far` — 먼 날짜가 위(내림차순).
+ * 날짜 없는 할 일은 어느 쪽이든 날짜가 있는 할 일 아래에 놓입니다.
  */
-export function compareTasksNewestFirst(a: ProjectTask, b: ProjectTask): number {
+export type TaskDateOrder = "near" | "far";
+
+export const TASK_DATE_ORDER_LABELS: Record<TaskDateOrder, string> = {
+  near: "가까운 날짜순",
+  far: "먼 날짜순",
+};
+
+function compareSameDate(a: ProjectTask, b: ProjectTask): number {
+  // 시간이 있는 할 일이 먼저, 그다음 시각이 빠른 순 — 같은 시각이면 수동 순서, 그다음 제목.
+  const aTime = a.startTime ?? "";
+  const bTime = b.startTime ?? "";
+  if (aTime !== bTime) {
+    if (aTime && !bTime) return -1;
+    if (!aTime && bTime) return 1;
+    return aTime.localeCompare(bTime);
+  }
+  const aSort = a.sort ?? Number.POSITIVE_INFINITY;
+  const bSort = b.sort ?? Number.POSITIVE_INFINITY;
+  if (aSort !== bSort) return aSort - bSort;
+  return a.title.localeCompare(b.title, "ko");
+}
+
+/**
+ * Project content order by date, in the chosen direction.
+ * Undated items follow every dated item, newest created first; the manual
+ * `sort` value only breaks ties inside the same date (and once a date is fixed,
+ * the time of day comes before it).
+ */
+export function compareTasksByDate(a: ProjectTask, b: ProjectTask, order: TaskDateOrder = "near"): number {
   const aDate = taskSortDate(a);
   const bDate = taskSortDate(b);
   if (aDate && bDate) {
-    if (aDate !== bDate) return bDate.localeCompare(aDate);
+    if (aDate !== bDate) return order === "near" ? aDate.localeCompare(bDate) : bDate.localeCompare(aDate);
   } else if (aDate) {
     return -1;
   } else if (bDate) {
@@ -107,14 +135,26 @@ export function compareTasksNewestFirst(a: ProjectTask, b: ProjectTask): number 
     const byCreated = taskCreatedKey(b).localeCompare(taskCreatedKey(a));
     if (byCreated !== 0) return byCreated;
   }
-  const aSort = a.sort ?? Number.POSITIVE_INFINITY;
-  const bSort = b.sort ?? Number.POSITIVE_INFINITY;
-  if (aSort !== bSort) return aSort - bSort;
-  return a.title.localeCompare(b.title, "ko");
+  return compareSameDate(a, b);
+}
+
+/** 먼 날짜가 위 — 완료·취소 기록의 기본 순서(A19). */
+export function compareTasksNewestFirst(a: ProjectTask, b: ProjectTask): number {
+  return compareTasksByDate(a, b, "far");
+}
+
+/** 가까운 날짜가 위 — 남은 할 일의 기본 순서(A28). */
+export function compareTasksNearestFirst(a: ProjectTask, b: ProjectTask): number {
+  return compareTasksByDate(a, b, "near");
 }
 
 export function sortTasksNewestFirst(tasks: ProjectTask[]): ProjectTask[] {
   return [...tasks].sort(compareTasksNewestFirst);
+}
+
+/** A28: 남은 할 일 — 고른 방향(가까운 날짜순/먼 날짜순)으로 정렬합니다. */
+export function sortTasksByDate(tasks: ProjectTask[], order: TaskDateOrder = "near"): ProjectTask[] {
+  return [...tasks].sort((a, b) => compareTasksByDate(a, b, order));
 }
 
 /** Open items above, completed/canceled below; inside a group the newest date comes first. */
@@ -124,15 +164,18 @@ export function isClosedTask(task: ProjectTask): boolean {
 
 /**
  * A10: the one order every project task list uses (card, drawer, detail list).
- * Open → closed, then newest date on top; the manual `sort` only reorders items
- * that sit on the same date, so a drag can never break the date order.
+ * Open → closed, so 남은 할 일 is always above 최근 기록; inside the open group the
+ * date runs the way the user picked (A28: 기본은 가까운 날짜순), and completed
+ * records always keep the newest date on top. The manual `sort` only reorders
+ * items that sit on the same date, so a drag can never break the date order.
  */
-export function sortProjectTaskList(tasks: ProjectTask[]): ProjectTask[] {
+export function sortProjectTaskList(tasks: ProjectTask[], order: TaskDateOrder = "near"): ProjectTask[] {
   return [...tasks].sort((a, b) => {
     const closedA = isClosedTask(a);
     const closedB = isClosedTask(b);
     if (closedA !== closedB) return closedA ? 1 : -1;
-    return compareTasksNewestFirst(a, b);
+    if (closedA) return compareTasksNewestFirst(a, b);
+    return compareTasksByDate(a, b, order);
   });
 }
 

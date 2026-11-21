@@ -10,6 +10,7 @@ import { ARCHIVE_KINDS } from "@/lib/types";
 import { CATEGORY_COLOR_CHOICES, useCategoryColors } from "@/state/category-colors";
 import { useCategoryOptions } from "@/state/categories";
 import { DB_ENV_KEYS, DB_LABELS, DB_ORDER, DB_PURPOSES, DB_SETUP_STEPS, KIT_VERSION } from "@/lib/db-meta";
+import { TASK_DATE_ORDER_LABELS, type TaskDateOrder } from "@/lib/order";
 
 const SECTIONS = [
   { key: "look", label: "모양" },
@@ -250,6 +251,22 @@ export function SettingsDialog() {
 
           {section === "projects" ? (
             <>
+              {/* A28: 남은 할 일의 날짜 정렬 방향 — 완료된 기록은 늘 최근 것이 위입니다. */}
+              <div data-project-task-order="true">
+                <p className="label">할 일 날짜 정렬</p>
+                <Segmented<TaskDateOrder>
+                  value={settings.projectTaskOrder}
+                  onChange={(value) => set("projectTaskOrder", value)}
+                  size="sm"
+                  options={[
+                    { value: "near", label: TASK_DATE_ORDER_LABELS.near },
+                    { value: "far", label: TASK_DATE_ORDER_LABELS.far },
+                  ]}
+                />
+                <p className="mt-1 text-[calc(14px*var(--fs))] leading-relaxed text-ink-400">
+                  ‘남은 할 일’이 이 순서로 놓입니다 — 가까운 날짜순(오름차순)이 기본이고 먼 날짜순(내림차순)도 고를 수 있습니다. 완료한 기록은 어느 쪽을 골라도 항상 아래에 최근 것부터 쌓입니다.
+                </p>
+              </div>
               {/* A19: 카드 한 장에 보여 줄 남은 할 일 수 (3~8). */}
               <div data-project-preview="true">
                 <div className="mb-1 flex items-baseline justify-between">

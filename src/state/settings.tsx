@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import type { ArchiveKind } from "@/lib/types";
+import type { TaskDateOrder } from "@/lib/order";
 
 export type CalendarViewKey = "year" | "month" | "week" | "three" | "day" | "habit";
 
@@ -28,6 +29,8 @@ export interface Settings {
   projectTaskPreview: number;
   /** A24: 우선순위 탭 사분면마다 기본으로 보여 줄 할 일 수 (3~10). */
   priorityTaskPreview: number;
+  /** A28: 프로젝트 목록의 날짜 정렬 방향 — 기본은 가까운 날짜순(오름차순). */
+  projectTaskOrder: TaskDateOrder;
   /** A6/A7: user-made categories shown next to 업무·개인·공부 in the filters. */
   customCategories: string[];
   /** A16: 분류 the user removed — hidden from filters and pickers (records keep their value). */
@@ -53,6 +56,7 @@ export const DEFAULT_SETTINGS: Settings = {
   calendarShowHidden: false,
   projectTaskPreview: 6,
   priorityTaskPreview: 5,
+  projectTaskOrder: "near",
   customCategories: [],
   hiddenCategories: [],
   nowOnly: false,
@@ -122,6 +126,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
           showCompletedTasks: completed,
           projectTaskPreview: Math.max(3, Math.min(8, Number(parsed.projectTaskPreview) || DEFAULT_SETTINGS.projectTaskPreview)),
           priorityTaskPreview: Math.max(3, Math.min(10, Number(parsed.priorityTaskPreview) || DEFAULT_SETTINGS.priorityTaskPreview)),
+          projectTaskOrder: (parsed.projectTaskOrder === "far" ? "far" : "near") as TaskDateOrder,
           projectViewVersion: 2,
         };
         setSettings(next);

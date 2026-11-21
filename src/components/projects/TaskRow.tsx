@@ -35,6 +35,7 @@ export function TaskRow({
   const overdue = task.due && task.due < todayISO() && !done && task.status !== "취소";
   return (
     <li
+      data-task-row={task.id}
       className={cn("group flex items-start gap-2", compact ? "py-1" : "py-1.5")}
       draggable={draggable}
       onDragStart={

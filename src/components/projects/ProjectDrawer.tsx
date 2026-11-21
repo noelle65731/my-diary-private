@@ -34,7 +34,7 @@ export function ProjectDrawer({
   showBackdrop?: boolean;
 }) {
   const { data, create, update, remove } = useData();
-  const { addCategory } = useSettings();
+  const { settings, addCategory } = useSettings();
   const { pastelOf, chosenOf, setColor } = useProjectColors();
   const categoryColor = useCategoryColors();
   /** A16: 이 화면에서 바로 분류를 바꾸거나 새로 만듭니다. */
@@ -47,8 +47,10 @@ export function ProjectDrawer({
   const [dragId, setDragId] = useState<string | null>(null);
 
   const project = projectId ? data.projects.find((item) => item.id === projectId && item.kind === "프로젝트") ?? null : null;
+  // A28: 서랍에서도 카드와 같은 날짜 방향을 씁니다 — 완료 기록은 늘 아래에 최근 것부터.
   const tasks = sortProjectTaskList(
     project ? data.projects.filter((task) => task.kind === "할 일" && task.projectIds.includes(project.id) && !task.trash) : [],
+    settings.projectTaskOrder,
   );
   const done = tasks.filter((task) => task.status === "완료").length;
   const progress = tasks.length > 0 ? Math.round((done / tasks.length) * 100) : 0;
