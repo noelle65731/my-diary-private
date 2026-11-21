@@ -188,7 +188,8 @@
   /* project cards: the person decides how many read across (3 or 4) */
   .cards-grid {
     @apply grid gap-3;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    /* a phone reads one card at a time — a half-width card squeezes every task line */
+    grid-template-columns: minmax(0, 1fr);
   }
 
   @media (min-width: 640px) {
@@ -200,6 +201,30 @@
   @media (min-width: 1024px) {
     .cards-grid {
       grid-template-columns: repeat(var(--proj-cols, 4), minmax(0, 1fr));
+    }
+  }
+
+  /* annual view: the twelve months fill the laptop screen, so the numbers can be read
+     at a glance; the cell grows with the window height and shrinks again on short screens */
+  .year-grid {
+    --yr-cell: 1.45rem;
+    --yr-day: 13.5px;
+    --yr-weekday: 11.5px;
+    --yr-month: 15px;
+  }
+
+  @media (min-width: 1280px) {
+    .year-grid {
+      /* 3 rows x (6 day rows + month title + weekday row) fill the space above the
+         bottom bar and stop there, so the twelve months never need a scroll */
+      --yr-cell: clamp(
+        20px,
+        min(calc((100dvh - 282px) / 22), calc((100dvh - 342px) / 19.65)),
+        30px
+      );
+      --yr-day: calc(var(--yr-cell) * 0.72);
+      --yr-weekday: calc(var(--yr-cell) * 0.55);
+      --yr-month: min(calc(var(--yr-cell) * 0.78), 20px);
     }
   }
 

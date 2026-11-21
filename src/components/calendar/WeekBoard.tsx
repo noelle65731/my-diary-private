@@ -116,7 +116,8 @@ export function WeekBoard({
     const delta = box.left - frame.left;
     scroller.current.scrollLeft += delta - (scroller.current.clientWidth - box.width) / 2;
   }, [narrow, dayKey]);
-  const gutter = narrow ? "3.2rem" : "7.6rem";
+  /* the frozen left column: wide enough on a phone to read a project or routine name */
+  const gutter = narrow ? "6rem" : "7.6rem";
   const grid = useMemo(
     () => ({ gridTemplateColumns: `${gutter} repeat(${days.length}, minmax(0, 1fr))` }),
     [days.length, gutter],
@@ -188,8 +189,8 @@ export function WeekBoard({
 
   /** 종일 줄은 시간표와 스크롤 창을 나눠 쓰므로, 데스크톱에서는 두 줄까지만 펼쳐 둡니다. */
   const allDayVisibleCap = narrow ? 3 : 2;
-  /** 종일 줄 아래로 보이는 시간표 높이 — 32px 한 줄 × 약 3시간. */
-  const timelineWindow = 132;
+  /** 종일 줄 아래로 보이는 시간표 높이 — 32px 한 줄 × 세 칸(3시간). */
+  const timelineWindow = 96;
   const laneCount = allDayBars.length > 0 ? Math.max(...allDayBars.map((bar) => bar.lane)) + 1 : 0;
   const visibleLanes = allDayExpanded ? laneCount : Math.min(allDayVisibleCap, laneCount);
   const hiddenBars = allDayExpanded ? 0 : allDayBars.filter((bar) => bar.lane >= allDayVisibleCap).length;
@@ -204,9 +205,12 @@ export function WeekBoard({
           so an 8–10 character title is never squeezed into two letters per line. */}
       <div
         ref={scroller}
-        className={cn("flex min-h-0 min-w-0 flex-1 flex-col", narrow && "-mx-1 overflow-x-auto overscroll-x-contain pb-1")}
+        className={cn(
+          "flex min-h-0 min-w-0 flex-1 flex-col",
+          narrow && "-mx-1 overflow-auto overscroll-contain pb-1",
+        )}
       >
-        <div className={cn("flex min-h-0 flex-col", narrow && "min-w-[42rem]")}>
+        <div className={cn("flex min-h-0 flex-col", narrow && "min-w-[44rem]")}>
       {mode === "custom" ? (
         <div className="mb-2 rounded-xl border border-paper-300 bg-paper-50/70 px-2.5 py-2">
           <button
@@ -272,7 +276,7 @@ export function WeekBoard({
       ) : null}
       {/* week day header */}
       <div className="grid flex-none items-end border-b border-paper-300 pb-1" style={grid} data-week-header="true">
-        <div className="sticky left-0 z-20 self-stretch bg-white pb-1 text-right text-[13px] text-ink-400">
+        <div className="sticky left-0 z-20 self-stretch border-r border-paper-300 bg-white pb-1 text-right text-[13px] text-ink-400">
           {allDayBars.length > 0 ? "" : ""}
         </div>
         {days.map((day) => {
@@ -348,7 +352,7 @@ export function WeekBoard({
         style={
           narrow
             ? undefined
-            : { height: timeExpanded ? "62dvh" : `${Math.min(allDayHeight + timelineWindow, 206)}px` }
+            : { height: timeExpanded ? "62dvh" : `${Math.min(allDayHeight + timelineWindow, 124)}px` }
         }
         className={cn(
           "relative flex-none border-b border-paper-300/60",
@@ -358,7 +362,7 @@ export function WeekBoard({
         {/* all-day — 스크롤 창 안, 시간표 바로 위. 접지 않고 같이 올라갑니다. */}
         {allDayBars.length === 0 ? null : (
           <div className="grid border-b border-paper-300/70" style={grid} data-all-day-block="true">
-            <div className="sticky left-0 z-20 flex items-start justify-end bg-white pr-2 pt-1 text-[13px] text-ink-400">종일</div>
+            <div className="sticky left-0 z-20 flex items-start justify-end border-r border-paper-300 bg-white pr-2 pt-1 text-[13px] text-ink-400">종일</div>
             <div className="relative" style={{ gridColumn: `2 / span ${days.length}`, height: allDayHeight }}>
               <div className="absolute inset-0 grid" style={{ gridTemplateColumns: `repeat(${days.length}, minmax(0, 1fr))` }}>
                 {days.map((day) => (
@@ -469,8 +473,9 @@ export function WeekBoard({
       </div>
       )}
 
-      {/* attached project rows — they share the rest of the screen and scroll together */}
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      {/* attached project rows — on a phone they scroll inside the board sheet, so the
+          frozen left column sticks to that one scrollport instead of this box */}
+      <div className={narrow ? "flex-none" : "min-h-0 flex-1 overflow-y-auto"}>
       <div className="border-t border-paper-300">
         <div className="flex items-center justify-between border-b border-paper-300/70 bg-paper-50/50 px-2 py-[3px]">
           <span className="text-[13.5px] text-ink-400">프로젝트</span>
@@ -492,7 +497,7 @@ export function WeekBoard({
           const tone = project ? taskTone(project.category) : null;
           return (
             <div key={key} className="grid border-b border-paper-300/80" style={grid}>
-              <div className="group/row sticky left-0 z-20 flex min-h-[2rem] items-center gap-1 bg-white py-0.5 pr-1">
+              <div className="group/row sticky left-0 z-20 flex min-h-[2rem] items-center gap-1 border-r border-paper-300 bg-white py-0.5 pr-1">
                 {project ? (
                   <span className={cn("h-2 w-2 flex-none rounded-full", tone ? tone.dot : "bg-paper-400")} aria-hidden="true" />
                 ) : null}
@@ -698,7 +703,7 @@ export function WeekBoard({
       {routinesCollapsed ? null : routineGroups.map((group) => (
         <div key={group.category} className="border-b border-paper-300/80">
           <div className="grid" style={grid}>
-            <div className="sticky left-0 z-20 flex items-center gap-1.5 bg-white py-1 pl-0.5 text-[13.5px] text-ink-500">
+            <div className="sticky left-0 z-20 flex items-center gap-1.5 border-r border-paper-300 bg-white py-1 pl-0.5 text-[13.5px] text-ink-500">
               <span className={cn("h-[5px] w-[5px] rounded-full", group.category === "개인" ? "bg-amber-400" : "bg-dusk-500")} />
               {group.category}
             </div>
@@ -712,7 +717,7 @@ export function WeekBoard({
                 <button
                   type="button"
                   onClick={() => onOpenRoutine(routine.id)}
-                  className="sticky left-0 z-20 flex min-w-0 items-center gap-1 bg-white py-[3px] pr-1 text-left text-[14px] text-ink-700 hover:text-ink-900 md:gap-1.5 md:pr-2 md:text-[14px]"
+                  className="sticky left-0 z-20 flex min-w-0 items-center gap-1 border-r border-paper-300 bg-white py-[3px] pr-1 text-left text-[14px] text-ink-700 hover:text-ink-900 md:gap-1.5 md:pr-2 md:text-[14px]"
                 >
                   <span className={cn("h-[5px] w-[5px] flex-none rounded-full", tone.dot)} />
                   <span className="truncate">{routine.title}</span>
@@ -752,7 +757,7 @@ export function WeekBoard({
             <button
               type="button"
               onClick={onCreateRoutine}
-              className="sticky left-0 z-20 bg-white py-1 pl-0.5 text-left text-[14px] text-ink-400 hover:text-ink-700"
+              className="sticky left-0 z-20 border-r border-paper-300 bg-white py-1 pl-0.5 text-left text-[14px] text-ink-400 hover:text-ink-700"
             >
               + 루틴
             </button>
@@ -763,11 +768,11 @@ export function WeekBoard({
 
       {routinesCollapsed ? null : routineGroups.length === 0 ? (
         <div className="grid border-b border-paper-300/80" style={grid}>
-          <div className="sticky left-0 z-20 bg-white py-1.5 text-[14px] text-ink-400">루틴</div>
+          <div className="sticky left-0 z-20 border-r border-paper-300 bg-white py-1.5 text-[14px] text-ink-400">루틴</div>
           <button
             type="button"
             onClick={onCreateRoutine}
-            className="sticky left-0 z-20 bg-white py-1.5 text-left text-[14px] text-ink-400 hover:text-ink-700"
+            className="py-1.5 text-left text-[14px] text-ink-400 hover:text-ink-700"
             style={{ gridColumn: `2 / span ${days.length}` }}
           >
             + 루틴 추가
@@ -780,7 +785,7 @@ export function WeekBoard({
       </div>
       <p className="px-1 pb-0.5 text-[12.5px] text-ink-400">
         {narrow
-          ? "요일을 옆으로 밀어도 왼쪽 시간은 그대로 보입니다. 할 일 제목을 한 번 누르면 완료, 다시 누르면 해제되고 오른쪽 › 를 누르면 상세가 열립니다."
+          ? "요일을 옆으로 밀어도 왼쪽 시간·프로젝트·루틴 이름은 그대로 붙어 있습니다. 할 일 제목을 한 번 누르면 완료, 다시 누르면 해제되고 오른쪽 › 를 누르면 상세가 열립니다."
           : "종일과 시간표는 한 칸에서 함께 스크롤되고 ‘전체 일정 보기’로 넓게 볼 수 있습니다. 빈 칸을 누르면 일정이 추가되고, 일정 블록은 끌어서 옮길 수 있습니다."}
       </p>
     </div>

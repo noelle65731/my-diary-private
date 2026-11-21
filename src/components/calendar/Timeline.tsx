@@ -131,6 +131,14 @@ export function Timeline({
   const dragRef = useRef(drag);
   dragRef.current = drag;
   const moved = useRef(false);
+  /**
+   * A new event opens only on a real tap. The pointer has to stay almost still (under 6px)
+   * and lift quickly: a touch that lands while scrolling, a sweep across the grid, or a
+   * hold never opens the editor.
+   */
+  const tap = useRef<{ x: number; y: number; at: number; day: string } | null>(null);
+  const TAP_SLOP = 6;
+  const TAP_MS = 600;
   /** B5: pointer drag on an event's top/bottom edge resizes it. */
   const [resize, setResize] = useState<{ id: string; edge: "top" | "bottom"; start: number; end: number; dayIndex: number } | null>(null);
   const resizeRef = useRef(resize);
@@ -147,7 +155,10 @@ export function Timeline({
     const onMove = (event: PointerEvent) => {
       if (dragRef.current && column) {
         const minutes = Math.max(0, Math.min(24 * 60, minutesAt(column, event.clientY)));
-        if (Math.abs(minutes - dragRef.current.anchor) > 4) moved.current = true;
+        const origin = tap.current;
+        if (origin && Math.hypot(event.clientX - origin.x, event.clientY - origin.y) > TAP_SLOP) {
+          moved.current = true;
+        }
         setDrag((current) => (current ? { ...current, current: snap(minutes) } : current));
       }
       if (resizeRef.current) {
@@ -163,6 +174,17 @@ export function Timeline({
           return { ...current, end: Math.max(minutes, current.start + 15) };
         });
       }
+    };
+    /**
+     * A pointer the browser takes away (a finger that started a page scroll, a lost touch)
+     * is not a gesture on the grid: nothing is created and nothing is resized.
+     */
+    const onCancel = () => {
+      setDrag(null);
+      setResize(null);
+      tap.current = null;
+      moved.current = false;
+      column = null;
     };
     const onUp = () => {
       const state = dragRef.current;
@@ -194,20 +216,21 @@ export function Timeline({
     };
     window.addEventListener("pointermove", onMoveWithColumn);
     window.addEventListener("pointerup", onUp);
-    window.addEventListener("pointercancel", onUp);
+    window.addEventListener("pointercancel", onCancel);
     return () => {
       window.removeEventListener("pointermove", onMoveWithColumn);
       window.removeEventListener("pointerup", onUp);
-      window.removeEventListener("pointercancel", onUp);
+      window.removeEventListener("pointercancel", onCancel);
     };
   }, [bounds.start, days, hourHeight, onCreate, onResizeEvent, drag, resize]);
 
   const beginDrag = (day: string, event: React.PointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0 || !onCreate) return;
+    if (event.button !== 0 || !onCreate || !event.isPrimary) return;
     if (event.target !== event.currentTarget) return;
     const rect = event.currentTarget.getBoundingClientRect();
     const minutes = snap(bounds.start + ((event.clientY - rect.top) / hourHeight) * 60);
     moved.current = false;
+    tap.current = { x: event.clientX, y: event.clientY, at: Date.now(), day };
     setDrag({ day, anchor: minutes, current: minutes });
   };
 
@@ -259,7 +282,12 @@ export function Timeline({
               onPointerDown={(event) => beginDrag(day, event)}
               onClick={(event) => {
                 if (event.target !== event.currentTarget) return;
+                const origin = tap.current;
+                tap.current = null;
                 if (moved.current) return;
+                if (!origin || origin.day !== day) return;
+                if (Math.hypot(event.clientX - origin.x, event.clientY - origin.y) >= TAP_SLOP) return;
+                if (Date.now() - origin.at > TAP_MS) return;
                 onCreate?.(day, toTime(dropTime(event as unknown as { clientY: number; currentTarget: HTMLDivElement }, bounds.start)));
               }}
               onDragOver={(event) => {
@@ -280,7 +308,7 @@ export function Timeline({
                   "repeating-linear-gradient(to bottom, #eef0f3 0, #eef0f3 1px, transparent 1px, transparent " + `${hourHeight}px)`,
               }}
             >
-              {drag && drag.day === day ? (
+              {drag && drag.day === day && moved.current ? (
                 <div
                   className="pointer-events-none absolute inset-x-1 z-10 rounded-md border border-accent-400 bg-accent-100/70 px-1 text-[12.5px] font-medium text-accent-600"
                   style={{

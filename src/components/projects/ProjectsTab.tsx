@@ -21,6 +21,8 @@ import { sortProjectTaskList, sortTasksNewestFirst } from "@/lib/order";
 type ProjectView = "tracks" | "priority" | "history";
 
 const BASE_CATEGORIES = ["업무", "개인", "공부"];
+/** A card keeps five open tasks in view — fewer than four hid the work that was left. */
+const CARD_OPEN_PREVIEW = 5;
 
 const WEEKDAY_LETTERS = ["월", "화", "수", "목", "금", "토", "일"];
 
@@ -284,10 +286,13 @@ export function ProjectsTab() {
                 </div>
               </header>
               <ul className="mt-2.5 space-y-1.5">
-                {inbox.slice(0, 4).map((task) => (
+                {inbox.slice(0, CARD_OPEN_PREVIEW).map((task) => (
                   <TaskLine key={task.id} task={task} onToggle={() => toggleTask(task)} onOpen={() => void openTask(task.id)} />
                 ))}
                 {inbox.length === 0 ? <li className="text-[14px] text-ink-300">비어 있습니다.</li> : null}
+                {inbox.length > CARD_OPEN_PREVIEW ? (
+                  <li className="pl-[1.375rem] text-[13.5px] text-ink-400">+{inbox.length - CARD_OPEN_PREVIEW}개 더</li>
+                ) : null}
               </ul>
               <form
                 onSubmit={(event) => {
@@ -367,7 +372,7 @@ export function ProjectsTab() {
 
                   <p className="mt-1.5 text-[14px] text-ink-500">남은 할 일 {open.length}</p>
                   <ul className="mt-1 space-y-1.5">
-                    {orderedOpen.slice(0, 4).map((task) => (
+                    {orderedOpen.slice(0, CARD_OPEN_PREVIEW).map((task) => (
                       <TaskLine
                         key={task.id}
                         task={task}
@@ -376,6 +381,17 @@ export function ProjectsTab() {
                       />
                     ))}
                     {open.length === 0 ? <li className="text-[14px] text-ink-300">남은 할 일이 없습니다.</li> : null}
+                    {open.length > CARD_OPEN_PREVIEW ? (
+                      <li>
+                        <button
+                          type="button"
+                          onClick={() => setProjectId(project.id)}
+                          className="pl-[1.375rem] text-[13.5px] text-ink-400 transition hover:text-ink-700"
+                        >
+                          +{open.length - CARD_OPEN_PREVIEW}개 더 보기
+                        </button>
+                      </li>
+                    ) : null}
                   </ul>
 
                   {recent.length > 0 ? (

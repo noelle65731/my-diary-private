@@ -41,7 +41,7 @@ export function YearView({ year, events, tasks, hiddenIncluded, onPickDay }: Yea
 
   /* A12: all twelve months sit on one screen — four columns on a laptop, no page scroll. */
   return (
-    <div className="grid grid-cols-2 gap-x-5 gap-y-2 sm:grid-cols-3 xl:grid-cols-4">
+    <div className="year-grid grid grid-cols-2 gap-x-5 gap-y-2 sm:grid-cols-3 xl:grid-cols-4 xl:gap-x-6">
       {Array.from({ length: 12 }, (_, month0) => (
         <MonthMini key={month0} year={year} month0={month0} today={today} counts={counts} onPickDay={onPickDay} />
       ))}
@@ -67,12 +67,15 @@ function MonthMini({
 
   return (
     <div className="min-w-0">
-      <p className="mb-0.5 text-[15px] font-semibold text-ink-900">{MONTH_NAMES[month0]}</p>
+      <p className="mb-0.5 text-[length:var(--yr-month)] font-semibold leading-none text-ink-900">{MONTH_NAMES[month0]}</p>
       <div className="grid grid-cols-7 gap-y-0.5 text-center">
         {["월", "화", "수", "목", "금", "토", "일"].map((label, index) => (
           <span
             key={label}
-            className={cn("pb-0.5 text-[11.5px] font-medium", index === 6 ? "text-red-500" : index === 5 ? "text-blue-600" : "text-ink-500")}
+            className={cn(
+              "pb-0.5 text-[length:var(--yr-weekday)] font-medium leading-none",
+              index === 6 ? "text-red-600" : index === 5 ? "text-blue-700" : "text-ink-600",
+            )}
           >
             {label}
           </span>
@@ -83,18 +86,18 @@ function MonthMini({
           const holiday = holidayName(day);
           const isToday = day === today;
           const dow = new Date(`${day}T12:00:00`).getDay();
-          if (!inMonth) return <span key={day} className="h-[1.45rem]" />;
+          if (!inMonth) return <span key={day} className="h-[var(--yr-cell)]" />;
           return (
             <button
               key={day}
               type="button"
               onClick={() => onPickDay(day)}
               className={cn(
-                "relative mx-auto flex h-[1.45rem] w-[1.45rem] items-center justify-center rounded-full text-[13.5px] tabular-nums transition hover:bg-paper-200",
+                "relative mx-auto flex h-[var(--yr-cell)] w-[var(--yr-cell)] items-center justify-center rounded-full text-[length:var(--yr-day)] font-medium leading-none tabular-nums transition hover:bg-paper-200",
                 isToday && "bg-ink-900 font-semibold text-white hover:bg-ink-800",
-                !isToday && (holiday || dow === 0) && "text-red-500",
-                !isToday && dow === 6 && "text-blue-600",
-                !isToday && !holiday && dow !== 0 && dow !== 6 && "text-ink-700",
+                !isToday && (holiday || dow === 0) && "text-red-600",
+                !isToday && dow === 6 && "text-blue-700",
+                !isToday && !holiday && dow !== 0 && dow !== 6 && "text-ink-800",
               )}
               title={holiday ? `${day} ${holiday}` : day}
             >
