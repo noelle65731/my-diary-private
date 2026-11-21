@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useData } from "@/state/store";
-import { useSettings, DEFAULT_SETTINGS, type CalendarViewKey } from "@/state/settings";
+import { useSettings, DEFAULT_SETTINGS, FONT_STEPS, fontSizeToPx, type CalendarViewKey } from "@/state/settings";
 import { useUi } from "@/state/ui";
 import { Modal, Segmented, Toggle } from "@/components/common/primitives";
 import { cn } from "@/lib/utils";
@@ -53,7 +53,7 @@ export function SettingsDialog() {
               type="button"
               onClick={() => setSection(item.key)}
               className={cn(
-                "flex-none rounded-lg px-2.5 py-1.5 text-left text-[15px] transition",
+                "flex-none rounded-lg px-2.5 py-1.5 text-left text-[calc(15px*var(--fs))] transition",
                 section === item.key ? "bg-ink-900 text-paper-50" : "text-ink-600 hover:bg-paper-100",
               )}
             >
@@ -67,26 +67,33 @@ export function SettingsDialog() {
             <>
               <div>
                 <div className="mb-2 flex items-baseline justify-between">
-                  <p className="text-[15.5px] font-medium text-ink-800">글자 크기</p>
-                  <span className="text-[14px] text-ink-400">{settings.fontSize} / 6</span>
+                  <p className="text-[calc(15.5px*var(--fs))] font-medium text-ink-800">글자 크기</p>
+                  <span className="text-[calc(14px*var(--fs))] text-ink-400">
+                    {settings.fontSize} / {FONT_STEPS} · {fontSizeToPx(settings.fontSize).toFixed(1)}px
+                  </span>
                 </div>
                 <input
                   type="range"
                   min={1}
-                  max={6}
+                  max={FONT_STEPS}
                   step={1}
                   value={settings.fontSize}
                   onChange={(event) => set("fontSize", Number(event.target.value))}
                   className="w-full accent-ink-900"
                 />
+                <div className="mt-1 flex justify-between text-[calc(12px*var(--fs))] text-ink-300">
+                  <span>더 작게</span>
+                  <span>{DEFAULT_SETTINGS.fontSize}단계가 기본</span>
+                  <span>더 크게</span>
+                </div>
                 <div className="mt-3 rounded-xl border border-paper-300 bg-paper-50 px-3 py-2.5">
-                  <p className="serif text-[16px] text-ink-900">오늘의 기록</p>
-                  <p className="mt-0.5 text-[15px] leading-relaxed text-ink-600">
+                  <p className="serif text-[calc(16px*var(--fs))] text-ink-900">오늘의 기록</p>
+                  <p className="mt-0.5 text-[calc(15px*var(--fs))] leading-relaxed text-ink-600">
                     이 크기로 일기와 목록이 보입니다. 눈이 편한 단계를 골라 주세요.
                   </p>
                 </div>
               </div>
-              <div className="rounded-xl border border-paper-300 bg-paper-50/60 px-3 py-2.5 text-[14.5px] leading-relaxed text-ink-500">
+              <div className="rounded-xl border border-paper-300 bg-paper-50/60 px-3 py-2.5 text-[calc(14.5px*var(--fs))] leading-relaxed text-ink-500">
                 설정은 브라우저(localStorage)에 저장되어 기기마다 따로 적용됩니다. 폰과 PC에서 각각 맞춰 쓰세요.
               </div>
               <button
@@ -173,7 +180,7 @@ export function SettingsDialog() {
                     { value: "5", label: "5개" },
                   ]}
                 />
-                <p className="mt-1 text-[14px] leading-relaxed text-ink-400">
+                <p className="mt-1 text-[calc(14px*var(--fs))] leading-relaxed text-ink-400">
                   월간 달력의 하루 칸에 제목을 보여 줄 항목 수입니다. 넘치는 항목은 ‘할 일 N’·‘+N 더’로 접히고, 누르면 그 날짜 전체
                   목록이 열립니다.
                 </p>
@@ -191,8 +198,8 @@ export function SettingsDialog() {
             <>
               <div>
                 <div className="mb-1 flex items-baseline justify-between">
-                  <p className="text-[15.5px] text-ink-800">카드에 보이는 할 일 수</p>
-                  <span className="text-[14px] text-ink-400">{settings.projectTaskPreview}개</span>
+                  <p className="text-[calc(15.5px*var(--fs))] text-ink-800">카드에 보이는 할 일 수</p>
+                  <span className="text-[calc(14px*var(--fs))] text-ink-400">{settings.projectTaskPreview}개</span>
                 </div>
                 <input
                   type="range"
@@ -225,7 +232,7 @@ export function SettingsDialog() {
                 <p className="label">내 분류</p>
                 <div className="flex flex-wrap items-center gap-1.5">
                   {settings.customCategories.length === 0 ? (
-                    <span className="text-[14px] text-ink-400">필터의 ‘+’로 분류를 더할 수 있습니다.</span>
+                    <span className="text-[calc(14px*var(--fs))] text-ink-400">필터의 ‘+’로 분류를 더할 수 있습니다.</span>
                   ) : (
                     settings.customCategories.map((category) => (
                       <span key={category} className="chip border border-paper-400 bg-white/60 text-ink-600">
@@ -242,7 +249,7 @@ export function SettingsDialog() {
                     ))
                   )}
                 </div>
-                <p className="mt-1 text-[14px] leading-relaxed text-ink-400">
+                <p className="mt-1 text-[calc(14px*var(--fs))] leading-relaxed text-ink-400">
                   추가한 분류는 프로젝트·주간 필터에 나타나고, Notion의 분류(select)에 그대로 저장됩니다.
                 </p>
               </div>
@@ -253,8 +260,8 @@ export function SettingsDialog() {
             <>
               <div>
                 <div className="mb-1 flex items-baseline justify-between">
-                  <p className="text-[15.5px] text-ink-800">주간 미리보기 줄 수</p>
-                  <span className="text-[14px] text-ink-400">{settings.binderPreviewLines}줄</span>
+                  <p className="text-[calc(15.5px*var(--fs))] text-ink-800">주간 미리보기 줄 수</p>
+                  <span className="text-[calc(14px*var(--fs))] text-ink-400">{settings.binderPreviewLines}줄</span>
                 </div>
                 <input
                   type="range"
@@ -315,8 +322,8 @@ export function SettingsDialog() {
 
               <div>
                 <div className="mb-1.5 flex items-baseline justify-between">
-                  <p className="text-[15.5px] font-medium text-ink-800">데이터베이스 5개</p>
-                  <span className="text-[14px] text-ink-400">각각 따로 연결·차단됩니다</span>
+                  <p className="text-[calc(15.5px*var(--fs))] font-medium text-ink-800">데이터베이스 5개</p>
+                  <span className="text-[calc(14px*var(--fs))] text-ink-400">각각 따로 연결·차단됩니다</span>
                 </div>
                 <ul className="space-y-1.5">
                   {DB_ORDER.map((resource) => {
@@ -337,10 +344,10 @@ export function SettingsDialog() {
                         )}
                       >
                         <div className="flex items-center justify-between gap-2">
-                          <span className="text-[15px] font-medium text-ink-900">{db?.label ?? DB_LABELS[resource]}</span>
+                          <span className="text-[calc(15px*var(--fs))] font-medium text-ink-900">{db?.label ?? DB_LABELS[resource]}</span>
                           <span
                             className={cn(
-                              "chip border text-[14px]",
+                              "chip border text-[calc(14px*var(--fs))]",
                               !configured
                                 ? "border-amber-300 bg-white text-amber-700"
                                 : ok
@@ -351,10 +358,10 @@ export function SettingsDialog() {
                             {state}
                           </span>
                         </div>
-                        <p className="mt-0.5 text-[14px] text-ink-400">{DB_PURPOSES[resource]}</p>
-                        <p className="mt-1 break-all font-mono text-[14px] text-ink-600">{db?.envKey ?? DB_ENV_KEYS[resource]}</p>
+                        <p className="mt-0.5 text-[calc(14px*var(--fs))] text-ink-400">{DB_PURPOSES[resource]}</p>
+                        <p className="mt-1 break-all font-mono text-[calc(14px*var(--fs))] text-ink-600">{db?.envKey ?? DB_ENV_KEYS[resource]}</p>
                         {!ok && db?.message ? (
-                          <p className="mt-1 text-[14px] leading-relaxed text-ink-600">{db.message}</p>
+                          <p className="mt-1 text-[calc(14px*var(--fs))] leading-relaxed text-ink-600">{db.message}</p>
                         ) : null}
                       </li>
                     );
@@ -363,8 +370,8 @@ export function SettingsDialog() {
               </div>
 
               <div>
-                <p className="mb-1.5 text-[15.5px] font-medium text-ink-800">설정 방법</p>
-                <ol className="space-y-1.5 text-[15px] leading-relaxed text-ink-600">
+                <p className="mb-1.5 text-[calc(15.5px*var(--fs))] font-medium text-ink-800">설정 방법</p>
+                <ol className="space-y-1.5 text-[calc(15px*var(--fs))] leading-relaxed text-ink-600">
                   {DB_SETUP_STEPS.map((step, index) => (
                     <li key={step} className="flex gap-1.5">
                       <span className="font-medium text-ink-900">{index + 1}.</span>
@@ -379,10 +386,10 @@ export function SettingsDialog() {
               </div>
 
               <div className="rounded-xl border border-paper-300 bg-paper-50/70 p-3">
-                <p className="mb-2 text-[14px] font-semibold uppercase tracking-[0.1em] text-ink-500">환경변수</p>
+                <p className="mb-2 text-[calc(14px*var(--fs))] font-semibold uppercase tracking-[0.1em] text-ink-500">환경변수</p>
                 <ul className="space-y-1.5">
                   {ENV_LIST.map((env) => (
-                    <li key={env.key} className="flex items-start justify-between gap-3 text-[15px]">
+                    <li key={env.key} className="flex items-start justify-between gap-3 text-[calc(15px*var(--fs))]">
                       <span className="font-mono text-ink-800">
                         {env.key}
                         {env.required ? <span className="ml-1 text-accent-500">*</span> : null}
@@ -391,14 +398,14 @@ export function SettingsDialog() {
                     </li>
                   ))}
                 </ul>
-                <p className="mt-2 text-[14px] leading-relaxed text-ink-400">
+                <p className="mt-2 text-[calc(14px*var(--fs))] leading-relaxed text-ink-400">
                   DB ID를 비워 두면 그 DB는 <b>미연결</b>로 표시되고, 해당 화면은 조회가 비어 있고 저장이 중단됩니다. 다른 사람의
                   DB를 가리키는 기본값은 없습니다.
                 </p>
               </div>
 
               {demo ? (
-                <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[14.5px] leading-relaxed text-amber-800">
+                <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[calc(14.5px*var(--fs))] leading-relaxed text-amber-800">
                   지금은 예시 데이터로 동작합니다. 토큰을 설정하면 이 화면이 실제 기록으로 바뀌고, 데모에서 만든 내용은 저장되지
                   않습니다.
                 </p>
@@ -427,8 +434,8 @@ export function SettingsDialog() {
               </div>
 
               <div className="rounded-xl border border-paper-300 bg-white p-3">
-                <p className="text-[15px] font-medium text-ink-900">내 다이어리 만들기 (공개 키트) {KIT_VERSION}</p>
-                <p className="mt-1 text-[14px] leading-relaxed text-ink-500">
+                <p className="text-[calc(15px*var(--fs))] font-medium text-ink-900">내 다이어리 만들기 (공개 키트) {KIT_VERSION}</p>
+                <p className="mt-1 text-[calc(14px*var(--fs))] leading-relaxed text-ink-500">
                   빈 노션 템플릿 구성표, 환경변수, 다른 AI에 붙여넣을 설치 지시문을 공개 페이지에서 내려받을 수 있습니다. 제작자
                   계정·비밀번호·DB ID·키는 들어 있지 않습니다.
                 </p>

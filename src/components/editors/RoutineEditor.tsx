@@ -8,6 +8,7 @@ import { Modal, TextInput, Toggle } from "@/components/common/primitives";
 import { EditorFooter, ErrorNote } from "@/components/editors/shared";
 import { cn } from "@/lib/utils";
 import { ROUTINE_DAYS, type Routine } from "@/lib/types";
+import { writeRoutineNow } from "@/lib/routine-now";
 
 interface FormState {
   title: string;
@@ -125,12 +126,15 @@ function RoutineEditorInner({ routineId, onClose }: { routineId: string | null; 
         setError("저장하지 못했습니다. 잠시 후 다시 시도해 주세요.");
         return false;
       }
+      // A18: 노션에 NOW 숨김 속성이 없는 데이터베이스에서도 값이 남도록 이 브라우저에도 적습니다.
+      writeRoutineNow(existing.id, form.hidden);
     } else {
       const created = await create("routines", payload);
       if (!created) {
         setError("저장하지 못했습니다. 잠시 후 다시 시도해 주세요.");
         return false;
       }
+      if (created.id) writeRoutineNow(created.id, form.hidden);
     }
     return true;
   };
@@ -172,7 +176,7 @@ function RoutineEditorInner({ routineId, onClose }: { routineId: string | null; 
           value={form.title}
           onChange={(event) => patch("title", event.target.value)}
           placeholder="예: 물 마시기, 스트레칭"
-          className="border-0 border-b border-paper-300 bg-transparent px-0 text-[18px] font-medium focus:ring-0"
+          className="border-0 border-b border-paper-300 bg-transparent px-0 text-[calc(18px*var(--fs))] font-medium focus:ring-0"
         />
 
         <div>
@@ -198,9 +202,9 @@ function RoutineEditorInner({ routineId, onClose }: { routineId: string | null; 
                 type="button"
                 onClick={() => setNewCategory("")}
                 aria-label="분류 새로 추가"
-                className="inline-flex h-7 items-center gap-0.5 rounded-full border border-dashed border-paper-400 px-2 text-[14px] text-ink-500 transition hover:border-ink-500 hover:text-ink-900"
+                className="inline-flex h-7 items-center gap-0.5 rounded-full border border-dashed border-paper-400 px-2 text-[calc(14px*var(--fs))] text-ink-500 transition hover:border-ink-500 hover:text-ink-900"
               >
-                <span className="text-[15px] leading-none">+</span> 분류
+                <span className="text-[calc(15px*var(--fs))] leading-none">+</span> 분류
               </button>
             ) : (
               <input
@@ -217,7 +221,7 @@ function RoutineEditorInner({ routineId, onClose }: { routineId: string | null; 
                 onBlur={addNewCategory}
                 placeholder="새 분류 이름"
                 aria-label="새 분류 이름"
-                className="input h-7 w-[7.5rem] py-0 text-[14px]"
+                className="input h-7 w-[7.5rem] py-0 text-[calc(14px*var(--fs))]"
               />
             )}
           </div>
@@ -232,7 +236,7 @@ function RoutineEditorInner({ routineId, onClose }: { routineId: string | null; 
                 type="button"
                 onClick={() => toggleDay(day)}
                 className={cn(
-                  "h-8 w-8 rounded-full text-[15px] font-medium transition",
+                  "h-8 w-8 rounded-full text-[calc(15px*var(--fs))] font-medium transition",
                   form.repeatDays.includes(day) ? "bg-ink-900 text-paper-50" : "bg-paper-200 text-ink-500 hover:bg-paper-300",
                 )}
               >
@@ -240,7 +244,7 @@ function RoutineEditorInner({ routineId, onClose }: { routineId: string | null; 
               </button>
             ))}
           </div>
-          <p className="mt-1 text-[14px] text-ink-400">요일을 모두 끄면 '언제든' 루틴이 됩니다.</p>
+          <p className="mt-1 text-[calc(14px*var(--fs))] text-ink-400">요일을 모두 끄면 '언제든' 루틴이 됩니다.</p>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
@@ -271,9 +275,12 @@ function RoutineEditorInner({ routineId, onClose }: { routineId: string | null; 
         </label>
 
         <div className="rounded-xl border border-paper-300/80 bg-paper-50/60 px-3 py-1">
-          <Toggle checked={form.hidden} onChange={(value) => patch("hidden", value)} label="기본 보기에서 숨김" />
+          <Toggle checked={form.hidden} onChange={(value) => patch("hidden", value)} label="NOW 숨김" />
           <Toggle checked={form.history} onChange={(value) => patch("history", value)} label="지난 루틴으로 보내기" />
         </div>
+        <p className="text-[calc(13px*var(--fs))] leading-[1.5] text-ink-400">
+          NOW 숨김을 켜면 프로젝트 탭의 NOW 스위치를 켰을 때 이 루틴이 프로젝트처럼 가려집니다.
+        </p>
 
         <ErrorNote message={error} />
       </div>

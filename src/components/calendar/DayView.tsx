@@ -87,22 +87,22 @@ export function DayView({
     <div className="grid h-full min-h-0 grid-cols-2 gap-3 lg:gap-5 xl:grid-cols-[minmax(0,1fr)_22rem]">
       <div className="flex min-h-0 min-w-0 flex-col">
         <div className="mb-2 border-b border-paper-300 pb-2">
-          <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[13.5px] text-ink-400">
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[calc(13.5px*var(--fs))] text-ink-400">
             <span>일정 <b className="font-semibold text-ink-700">{scheduleCount}</b></span>
             <span className="text-paper-400">·</span>
             <span>할 일 <b className="font-semibold text-ink-700">{dayTasks.length}</b></span>
             <span className="text-paper-400">·</span>
             <span>기록 <b className="font-semibold text-ink-700">{recordCount}</b></span>
           </p>
-          <p className="mt-1 text-[15px] font-medium text-ink-800">
+          <p className="mt-1 text-[calc(15px*var(--fs))] font-medium text-ink-800">
             {formatFullKo(day)}
-            {holiday ? <span className="ml-1 text-[14px] font-normal text-red-500">{holiday}</span> : null}
+            {holiday ? <span className="ml-1 text-[calc(14px*var(--fs))] font-normal text-red-500">{holiday}</span> : null}
           </p>
         </div>
 
         {allDay.length > 0 ? (
           <div className="mb-2 flex flex-wrap items-center gap-1.5 border-b border-paper-300 pb-2">
-            <span className="text-[13.5px] text-ink-400">종일</span>
+            <span className="text-[calc(13.5px*var(--fs))] text-ink-400">종일</span>
             {allDay.map((event) => {
               const tone = toneFor(event);
               return (
@@ -135,7 +135,7 @@ export function DayView({
                     );
                   }}
                   title="끌어서 시간표에 놓으면 그 시간 일정이 됩니다"
-                  className={cn("rounded-md border px-2 py-0.5 text-[14px]", tone.bg, tone.border, tone.text, event.canceled && "line-through opacity-50")}
+                  className={cn("rounded-md border px-2 py-0.5 text-[calc(14px*var(--fs))]", tone.bg, tone.border, tone.text, event.canceled && "line-through opacity-50")}
                 >
                   {event.title}
                 </button>
@@ -159,7 +159,7 @@ export function DayView({
         />
         </div>
 
-        <div className="mt-1 flex flex-none items-center justify-end border-t border-paper-300 pt-1 text-[14px] text-ink-400">
+        <div className="mt-1 flex flex-none items-center justify-end border-t border-paper-300 pt-1 text-[calc(14px*var(--fs))] text-ink-400">
           <button type="button" onClick={() => onCreate(day, "09:00")} className="text-ink-500 hover:text-ink-900">
             + 일정
           </button>
@@ -167,10 +167,10 @@ export function DayView({
       </div>
 
       <aside className="min-h-0 min-w-0 space-y-2 overflow-y-auto pb-1">
-        <h3 className="text-[15px] text-ink-500">오늘 할 일</h3>
+        <h3 className="text-[calc(15px*var(--fs))] text-ink-500">오늘 할 일</h3>
 
         {groups.length === 0 ? (
-          <div className="rounded-2xl bg-paper-200/50 px-3 py-5 text-center text-[14px] text-ink-400">오늘 예정된 할 일이 없습니다.</div>
+          <div className="rounded-2xl bg-paper-200/50 px-3 py-5 text-center text-[calc(14px*var(--fs))] text-ink-400">오늘 예정된 할 일이 없습니다.</div>
         ) : null}
 
         {groups.map(({ project, tasks: items }) => {
@@ -178,7 +178,7 @@ export function DayView({
           return (
             <section key={project?.id ?? "inbox"} className="rounded-2xl bg-paper-200/50 px-3 py-2.5">
               <header className="flex items-center gap-2">
-                <span className={cn("flex h-7 w-7 flex-none items-center justify-center overflow-hidden rounded-lg bg-white text-[16px]")}>
+                <span className={cn("flex h-7 w-7 flex-none items-center justify-center overflow-hidden rounded-lg bg-white text-[calc(16px*var(--fs))]")}>
                   {project ? (
                     <ProjectIcon icon={project.icon} seed={project.id} category={project.category} className="h-full w-full" />
                   ) : (
@@ -188,7 +188,7 @@ export function DayView({
                 <button
                   type="button"
                   onClick={() => (project ? onOpenTask(project.id) : undefined)}
-                  className="line-clamp-2 min-w-0 flex-1 text-left text-[15.5px] font-semibold leading-snug text-ink-900 md:line-clamp-1 md:text-[16px]"
+                  className="line-clamp-2 min-w-0 flex-1 text-left text-[calc(15.5px*var(--fs))] font-semibold leading-snug text-ink-900 md:line-clamp-1 md:text-[calc(16px*var(--fs))]"
                 >
                   {project?.title ?? "index"}
                 </button>
@@ -210,13 +210,13 @@ export function DayView({
                         {done ? <CheckIcon size={10} /> : null}
                       </button>
                       <button type="button" onClick={() => onOpenTask(task.id)} className="min-w-0 flex-1 text-left">
-                        <span className={cn("block text-[15px] leading-snug text-ink-800", (done || task.status === "취소") && "text-ink-400 line-through")}>
+                        <span className={cn("block text-[calc(15px*var(--fs))] leading-snug text-ink-800", (done || task.status === "취소") && "text-ink-400 line-through")}>
                           {task.title}
                           {task.status === "취소" ? (
-                            <span className="ml-1 rounded bg-paper-200 px-1 text-[12px] not-italic text-ink-500">취소</span>
+                            <span className="ml-1 rounded bg-paper-200 px-1 text-[calc(12px*var(--fs))] not-italic text-ink-500">취소</span>
                           ) : null}
                         </span>
-                        {task.memo ? <span className="mt-0.5 block text-[14px] leading-snug text-ink-400">{task.memo}</span> : null}
+                        {task.memo ? <span className="mt-0.5 block text-[calc(14px*var(--fs))] leading-snug text-ink-400">{task.memo}</span> : null}
                       </button>
                     </li>
                   );
@@ -226,7 +226,7 @@ export function DayView({
                 <button
                   type="button"
                   onClick={() => onCreateTaskForProject(project.id)}
-                  className="mt-1.5 text-[14px] text-ink-400 transition hover:text-ink-700"
+                  className="mt-1.5 text-[calc(14px*var(--fs))] text-ink-400 transition hover:text-ink-700"
                 >
                   + 추가
                 </button>
@@ -237,11 +237,11 @@ export function DayView({
 
         <section className="rounded-2xl bg-paper-200/50 px-3 py-2.5">
           <header className="flex items-center gap-2">
-            <span className="flex h-7 w-7 flex-none items-center justify-center rounded-lg bg-white text-[15px]">🔁</span>
-            <h4 className="min-w-0 flex-1 text-[16px] font-semibold text-ink-900">루틴</h4>
+            <span className="flex h-7 w-7 flex-none items-center justify-center rounded-lg bg-white text-[calc(15px*var(--fs))]">🔁</span>
+            <h4 className="min-w-0 flex-1 text-[calc(16px*var(--fs))] font-semibold text-ink-900">루틴</h4>
           </header>
           {dueRoutines.length === 0 ? (
-            <p className="mt-1 text-[14px] text-ink-400">오늘 예정된 루틴이 없습니다.</p>
+            <p className="mt-1 text-[calc(14px*var(--fs))] text-ink-400">오늘 예정된 루틴이 없습니다.</p>
           ) : (
             <ul className="mt-1 space-y-1.5">
               {dueRoutines.map((routine, index) => {
@@ -262,8 +262,8 @@ export function DayView({
                     >
                       {done ? <CheckIcon size={10} /> : null}
                     </button>
-                    <span className={cn("min-w-0 flex-1 truncate text-[15px] text-ink-700", done && "text-ink-400")}>{routine.title}</span>
-                    <span className="flex-none text-[13.5px] tabular-nums text-ink-400">
+                    <span className={cn("min-w-0 flex-1 truncate text-[calc(15px*var(--fs))] text-ink-700", done && "text-ink-400")}>{routine.title}</span>
+                    <span className="flex-none text-[calc(13.5px*var(--fs))] tabular-nums text-ink-400">
                       {count}/{target}
                     </span>
                   </li>
@@ -276,7 +276,7 @@ export function DayView({
         <button
           type="button"
           onClick={() => onWriteDiary(day)}
-          className="flex w-full items-center justify-center gap-1.5 rounded-2xl border border-paper-300 px-3 py-2 text-[15px] text-ink-600 transition hover:bg-paper-200/60"
+          className="flex w-full items-center justify-center gap-1.5 rounded-2xl border border-paper-300 px-3 py-2 text-[calc(15px*var(--fs))] text-ink-600 transition hover:bg-paper-200/60"
         >
           <PencilIcon size={13} /> 이 날 일기 쓰기
         </button>
@@ -284,7 +284,7 @@ export function DayView({
         <button
           type="button"
           onClick={() => onCreate(day, null)}
-          className="flex w-full items-center justify-center gap-1.5 rounded-2xl border border-dashed border-paper-300 px-3 py-2 text-[14px] text-ink-400 transition hover:border-ink-300 hover:text-ink-600"
+          className="flex w-full items-center justify-center gap-1.5 rounded-2xl border border-dashed border-paper-300 px-3 py-2 text-[calc(14px*var(--fs))] text-ink-400 transition hover:border-ink-300 hover:text-ink-600"
         >
           <PlusIcon size={12} /> 종일 일정 추가
         </button>

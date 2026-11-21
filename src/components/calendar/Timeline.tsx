@@ -28,6 +28,8 @@ export interface TimelineProps {
   /** B5: an empty-slot drag fills start and end; a plain tap still creates a 1-hour slot. */
   onCreate?: (date: string, time?: string | null, endTime?: string | null) => void;
   onMoveEvent?: (id: string, date: string, time: string | null) => void;
+  /** A18: 시간표의 일정을 종일 칸에 놓으면 그 날의 종일 일정이 됩니다. */
+  onMoveAllDayDate?: (id: string, date: string) => void;
   /** B5: dragging the top/bottom edge of an event resizes it (13–15 → 13–17). */
   onResizeEvent?: (id: string, startTime: string, endTime: string) => void;
   compact?: boolean;
@@ -83,6 +85,7 @@ export function Timeline({
   onOpenEvent,
   onCreate,
   onMoveEvent,
+  onMoveAllDayDate,
   onResizeEvent,
   compact = false,
 }: TimelineProps) {
@@ -253,7 +256,7 @@ export function Timeline({
           {marks.map((minutes) => (
             <div
               key={minutes}
-              className="absolute right-1.5 -translate-y-1/2 whitespace-nowrap text-[13px] tabular-nums text-ink-400 md:right-2 md:text-[13.5px]"
+              className="absolute right-1.5 -translate-y-1/2 whitespace-nowrap text-[calc(13px*var(--fs))] tabular-nums text-ink-400 md:right-2 md:text-[calc(13.5px*var(--fs))]"
               style={{ top: Math.max(9, ((minutes - bounds.start) / 60) * hourHeight) }}
             >
               {hourLabel(minutes)}
@@ -261,7 +264,7 @@ export function Timeline({
           ))}
           {showNow ? (
             <span
-              className="absolute left-0 z-20 flex -translate-y-1/2 items-center rounded-full border border-red-300 bg-white px-1.5 py-0.5 text-[12.5px] font-medium text-red-500"
+              className="absolute left-0 z-20 flex -translate-y-1/2 items-center rounded-full border border-red-300 bg-white px-1.5 py-0.5 text-[calc(12.5px*var(--fs))] font-medium text-red-500"
               style={{ top: Math.max(6, ((nowMinutes - bounds.start) / 60) * hourHeight) }}
             >
               <span className="mr-0.5 inline-block h-1.5 w-1.5 flex-none rounded-full bg-red-500" />
@@ -317,7 +320,7 @@ export function Timeline({
             >
               {drag && drag.day === day && moved.current ? (
                 <div
-                  className="pointer-events-none absolute inset-x-1 z-10 rounded-md border border-accent-400 bg-accent-100/70 px-1 text-[12.5px] font-medium text-accent-600"
+                  className="pointer-events-none absolute inset-x-1 z-10 rounded-md border border-accent-400 bg-accent-100/70 px-1 text-[calc(12.5px*var(--fs))] font-medium text-accent-600"
                   style={{
                     top: ((Math.min(drag.anchor, drag.current) - bounds.start) / 60) * hourHeight,
                     height: Math.max(14, (Math.abs(drag.current - drag.anchor) / 60) * hourHeight),
@@ -344,11 +347,9 @@ export function Timeline({
                   <button
                     key={`${event.id}-${day}`}
                     type="button"
-                    draggable={!!onMoveEvent && !live}
-                    onDragStart={(dragEvent) => {
-                      dragEvent.dataTransfer.setData("text/diary-event", event.id);
-                      dragEvent.dataTransfer.effectAllowed = "move";
-                    }}
+                    data-timeline-event={event.id}
+                    /* A18: HTML5 draggable을 끕니다 — 마우스에서 브라우저 기본 드래그가
+                       포인터 드래그를 가로채, 시간표 일정을 다른 칸으로 못 옮겼습니다. */
                     onPointerDown={(pointerEvent) => {
                       // Edge handles resize; the middle of the card drags it to another day/time.
                       const box = pointerEvent.currentTarget.getBoundingClientRect();
@@ -369,16 +370,26 @@ export function Timeline({
                           if (!target) return;
                           const nextDay = target.data.day;
                           if (!nextDay) return;
+                          // A18: 종일 줄에 다시 놓으면 그 날의 종일 일정으로 돌아갑니다.
+                          if (target.zone === "allday-day" || target.zone === "allday-bar") {
+                            onMoveAllDayDate?.(event.id, nextDay);
+                            return;
+                          }
                           const minutes = minutesAtPoint(target, point, bounds.start, hourHeight);
-                          onMoveEvent(event.id, nextDay, minutes === null ? event.startTime ?? null : toTime(snap(minutes)));
+                          onMoveEvent?.(event.id, nextDay, minutes === null ? event.startTime ?? null : toTime(snap(minutes)));
                         },
                         {
+                          skipZones: ["allday-bar"],
                           getHint: (target, point) => {
                             const nextDay = target.data.day;
                             if (!nextDay) return null;
+                            const stamp = nextDay.slice(5).replace("-", "/");
+                            if (target.zone === "allday-day" || target.zone === "allday-bar") {
+                              return onMoveAllDayDate ? `${stamp} 종일로 돌리기` : null;
+                            }
                             const minutes = minutesAtPoint(target, point, bounds.start, hourHeight);
                             const time = minutes === null ? event.startTime : toTime(snap(minutes));
-                            return `${nextDay.slice(5).replace("-", "/")}${time ? ` ${time}` : ""}`;
+                            return `${stamp}${time ? ` ${time}` : ""}`;
                           },
                         },
                       );
@@ -402,27 +413,27 @@ export function Timeline({
                       <span
                         className={cn(
                           "flex items-center gap-1 tabular-nums opacity-85",
-                          compactCard ? "text-[12px] leading-[1.1]" : "text-[12.5px] leading-[1.15]",
+                          compactCard ? "text-[calc(12px*var(--fs))] leading-[1.1]" : "text-[calc(12.5px*var(--fs))] leading-[1.15]",
                           tone.text,
                         )}
                       >
                         <span className={cn("flex-none", compactCard && "font-semibold")}>{timeLabel}</span>
                         {compactCard ? (
-                          <span className={cn("line-clamp-2 min-w-0 break-words text-[12px] font-medium leading-[1.1]", event.canceled && "line-through")}>
+                          <span className={cn("line-clamp-2 min-w-0 break-words text-[calc(12px*var(--fs))] font-medium leading-[1.1]", event.canceled && "line-through")}>
                             {event.title}
                           </span>
                         ) : null}
                       </span>
                     ) : null}
                     {compactCard && !timeLabel ? (
-                      <span className={cn("block truncate text-[12px] font-medium leading-[1.1]", tone.text, event.canceled && "line-through")}>
+                      <span className={cn("block truncate text-[calc(12px*var(--fs))] font-medium leading-[1.1]", tone.text, event.canceled && "line-through")}>
                         {event.title}
                       </span>
                     ) : null}
                     {compactCard ? null : (
                       <span
                         className={cn(
-                          "mt-0.5 line-clamp-2 block whitespace-normal break-words text-[13px] font-medium leading-[1.2] md:text-[13.5px]",
+                          "mt-0.5 line-clamp-2 block whitespace-normal break-words text-[calc(13px*var(--fs))] font-medium leading-[1.2] md:text-[calc(13.5px*var(--fs))]",
                           tone.text,
                           event.canceled && "line-through",
                         )}
@@ -441,7 +452,7 @@ export function Timeline({
                     event.stopPropagation();
                     onCreate?.(day, null);
                   }}
-                  className="absolute inset-x-0 bottom-0 hidden items-center justify-center py-0.5 text-[13px] text-ink-300 hover:text-ink-500 lg:flex"
+                  className="absolute inset-x-0 bottom-0 hidden items-center justify-center py-0.5 text-[calc(13px*var(--fs))] text-ink-300 hover:text-ink-500 lg:flex"
                   aria-label="일정 추가"
                 >
                   +

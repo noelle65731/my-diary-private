@@ -27,7 +27,7 @@ export function MiniMonth({ cursor, weekStart, marks, onPick, onMonth }: MiniMon
         <button type="button" onClick={() => onMonth(-1)} className="icon-btn h-5 w-5" aria-label="이전 달">
           <ChevronLeftIcon size={15} />
         </button>
-        <p className="text-[15px] font-semibold text-ink-900">{formatMonthKo(cursor)}</p>
+        <p className="text-[calc(15px*var(--fs))] font-semibold text-ink-900">{formatMonthKo(cursor)}</p>
         <button type="button" onClick={() => onMonth(1)} className="icon-btn h-5 w-5" aria-label="다음 달">
           <ChevronRightIcon size={15} />
         </button>
@@ -35,7 +35,7 @@ export function MiniMonth({ cursor, weekStart, marks, onPick, onMonth }: MiniMon
 
       <div className="mt-1 grid grid-cols-7 text-center">
         {["월", "화", "수", "목", "금", "토", "일"].map((label) => (
-          <span key={label} className={cn("pb-0.5 text-[13px]", label === "토" ? "text-blue-500" : label === "일" ? "text-red-400" : "text-ink-400")}>
+          <span key={label} className={cn("pb-0.5 text-[calc(13px*var(--fs))]", label === "토" ? "text-blue-500" : label === "일" ? "text-red-400" : "text-ink-400")}>
             {label}
           </span>
         ))}
@@ -55,7 +55,7 @@ export function MiniMonth({ cursor, weekStart, marks, onPick, onMonth }: MiniMon
                 type="button"
                 onClick={() => onPick(day)}
                 className={cn(
-                  "relative flex h-[1.35rem] flex-col items-center justify-center text-[14px] tabular-nums transition",
+                  "relative flex h-[1.35rem] flex-col items-center justify-center text-[calc(14px*var(--fs))] tabular-nums transition",
                   inWeek && "bg-paper-200/80",
                   inWeek && day === weekStart && "rounded-l-lg",
                   inWeek && day === weekEnd && "rounded-r-lg",

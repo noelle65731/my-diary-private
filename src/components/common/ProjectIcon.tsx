@@ -145,13 +145,13 @@ export function ProjectIconPicker({
           onClick={() => setOpen((current) => !current)}
           aria-label="프로젝트 아이콘 바꾸기"
           aria-expanded={open}
-          className="flex h-12 w-12 flex-none items-center justify-center overflow-hidden rounded-xl border border-paper-300 bg-white text-[26px] leading-none transition hover:border-ink-400"
+          className="flex h-12 w-12 flex-none items-center justify-center overflow-hidden rounded-xl border border-paper-300 bg-white text-[calc(26px*var(--fs))] leading-none transition hover:border-ink-400"
         >
           <ProjectIcon icon={value} seed={seed} category={category} className="h-full w-full" />
         </button>
         <div className="min-w-0 flex-1">
-          <p className="text-[14px] font-medium text-ink-800">아이콘</p>
-          <p className="text-[13px] text-ink-500">이모지·그림을 눌러 바꾸거나 지울 수 있어요.</p>
+          <p className="text-[calc(14px*var(--fs))] font-medium text-ink-800">아이콘</p>
+          <p className="text-[calc(13px*var(--fs))] text-ink-500">이모지·그림을 눌러 바꾸거나 지울 수 있어요.</p>
         </div>
         <button type="button" onClick={() => setOpen((current) => !current)} className="btn-outline btn-xs flex-none">
           {open ? "닫기" : "바꾸기"}
@@ -161,14 +161,14 @@ export function ProjectIconPicker({
       {open ? (
         <div className="mt-2 space-y-2 rounded-xl border border-paper-300 bg-white p-2.5">
           <div>
-            <p className="mb-1 text-[13px] text-ink-500">이모지</p>
+            <p className="mb-1 text-[calc(13px*var(--fs))] text-ink-500">이모지</p>
             <div className="grid grid-cols-8 gap-1">
               {ICON_PALETTE.map((item) => (
                 <button
                   key={item}
                   type="button"
                   onClick={() => applyEmoji(item)}
-                  className="flex h-8 items-center justify-center rounded-lg border border-transparent text-[19px] leading-none transition hover:border-paper-400 hover:bg-paper-200"
+                  className="flex h-8 items-center justify-center rounded-lg border border-transparent text-[calc(19px*var(--fs))] leading-none transition hover:border-paper-400 hover:bg-paper-200"
                   aria-label={`이모지 ${item}`}
                 >
                   {item}
@@ -189,7 +189,7 @@ export function ProjectIconPicker({
               }}
               placeholder="직접 입력 (예: 🌿)"
               aria-label="이모지 직접 입력"
-              className="input h-8 w-[7.5rem] py-0 text-[14px]"
+              className="input h-8 w-[7.5rem] py-0 text-[calc(14px*var(--fs))]"
             />
             <button type="button" onClick={() => applyEmoji(emoji)} className="btn-outline btn-xs">
               적용
@@ -211,7 +211,7 @@ export function ProjectIconPicker({
               }}
               placeholder="이미지 주소 https://…"
               aria-label="아이콘 이미지 주소"
-              className="input h-8 min-w-0 flex-1 py-0 text-[14px]"
+              className="input h-8 min-w-0 flex-1 py-0 text-[calc(14px*var(--fs))]"
             />
             <button type="button" onClick={applyUrl} className="btn-outline btn-xs flex-none">
               이미지 넣기
@@ -229,10 +229,10 @@ export function ProjectIconPicker({
             <button type="button" onClick={() => fileRef.current?.click()} disabled={busy} className="btn-outline btn-xs">
               {busy ? "올리는 중…" : "파일 올리기"}
             </button>
-            <span className="text-[12.5px] text-ink-500">정사각형으로 잘려 칸을 채웁니다.</span>
+            <span className="text-[calc(12.5px*var(--fs))] text-ink-500">정사각형으로 잘려 칸을 채웁니다.</span>
           </div>
 
-          {note ? <p className="text-[13px] text-ink-600">{note}</p> : null}
+          {note ? <p className="text-[calc(13px*var(--fs))] text-ink-600">{note}</p> : null}
         </div>
       ) : null}
     </div>

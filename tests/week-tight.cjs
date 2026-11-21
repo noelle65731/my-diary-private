@@ -215,11 +215,11 @@ const shot = async (page, name) => {
     console.log("PC-WEEK", JSON.stringify(m, null, 1));
     check("PC: 세 구역 프레임 존재", !!m.frame);
     check("PC: 프레임 테두리 2px", !!m.frame && m.frame.border.startsWith("2px"), m.frame && m.frame.border);
-    check("PC: 프레임 테두리 진한 검정(#111827)", !!m.frame && m.frame.border.includes("rgb(17, 24, 39)"), m.frame && m.frame.border);
+    check("PC: 프레임 테두리 진회색(#6b7280)", !!m.frame && m.frame.border.includes("rgb(107, 114, 128)"), m.frame && m.frame.border);
     check("PC: 일정↔프로젝트 여백 0", m.gaps[0] === 0, String(m.gaps[0]));
     check("PC: 프로젝트↔루틴 여백 0", m.gaps[1] === 0, String(m.gaps[1]));
-    check("PC: 일정 구역 아래 구분선 2px 검정", /^2px rgb\(17, 24, 39\)/.test(m.sections[0].borderBottom || ""), m.sections[0].borderBottom);
-    check("PC: 프로젝트 구역 아래 구분선 2px 검정", /^2px rgb\(17, 24, 39\)/.test(m.sections[1].borderBottom || ""), m.sections[1].borderBottom);
+    check("PC: 일정 구역 아래 구분선 2px 진회색", /^2px rgb\(107, 114, 128\)/.test(m.sections[0].borderBottom || ""), m.sections[0].borderBottom);
+    check("PC: 프로젝트 구역 아래 구분선 2px 진회색", /^2px rgb\(107, 114, 128\)/.test(m.sections[1].borderBottom || ""), m.sections[1].borderBottom);
     check("PC: 바깥 테두리만 있고 안쪽 구역엔 좌우 테두리 없음", /^0px/.test(m.sections[1].borderLeft || ""), m.sections[1].borderLeft);
     check("PC: 프로젝트·루틴 구역이 화면 안", m.sections[2].box.bottom <= 900 && m.sections[1].box.top < 900, JSON.stringify(m.sections.map((s) => s.box && s.box.bottom)));
     check(
@@ -235,7 +235,7 @@ const shot = async (page, name) => {
     const m3 = await page.evaluate(MEASURE);
     check("PC 3일: 일정↔프로젝트 여백 0", m3.gaps[0] === 0, String(m3.gaps[0]));
     check("PC 3일: 프로젝트↔루틴 여백 0", m3.gaps[1] === 0, String(m3.gaps[1]));
-    check("PC 3일: 프레임 2px 검정", !!m3.frame && m3.frame.border.startsWith("2px") && m3.frame.border.includes("rgb(17, 24, 39)"), m3.frame && m3.frame.border);
+    check("PC 3일: 프레임 2px 진회색", !!m3.frame && m3.frame.border.startsWith("2px") && m3.frame.border.includes("rgb(107, 114, 128)"), m3.frame && m3.frame.border);
     await ctx.close();
   }
 
@@ -249,7 +249,7 @@ const shot = async (page, name) => {
     console.log("MOBILE-WEEK", JSON.stringify(m, null, 1));
     check("모바일: 일정↔프로젝트 여백 0", m.gaps[0] === 0, String(m.gaps[0]));
     check("모바일: 프로젝트↔루틴 여백 0", m.gaps[1] === 0, String(m.gaps[1]));
-    check("모바일: 프레임 2px 검정", !!m.frame && m.frame.border.startsWith("2px") && m.frame.border.includes("rgb(17, 24, 39)"), m.frame && m.frame.border);
+    check("모바일: 프레임 2px 진회색", !!m.frame && m.frame.border.startsWith("2px") && m.frame.border.includes("rgb(107, 114, 128)"), m.frame && m.frame.border);
     // 네 칸 = 종일 1 + 시간 3 (한 칸 32px)
     const ROW = 32;
     check("모바일: 종일 줄 한 줄만 보임", m.visibleAllDayBars <= 1, `visible lanes ${m.visibleAllDayBars} (h ${m.allDayH})`);

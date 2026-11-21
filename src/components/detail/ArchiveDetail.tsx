@@ -155,7 +155,7 @@ function ArchiveDetailInner({
               </button>
             )}
           </div>
-          <span className="text-[13.5px] text-ink-400">
+          <span className="text-[calc(13.5px*var(--fs))] text-ink-400">
             {invalidField ? <span className="text-rose-500">필수값을 입력해 주세요</span> : isDirty ? "바뀐 값은 자동으로 저장됩니다" : "변경 없음"}
           </span>
         </>
@@ -172,8 +172,8 @@ function ArchiveDetailInner({
           onActivate={() => setField("title")}
           onDone={() => setField(null)}
           placeholder="제목 없음"
-          valueClassName="border-none px-0 text-[20px] font-semibold tracking-tight text-ink-900"
-          inputClassName="text-[16px] font-medium"
+          valueClassName="border-none px-0 text-[calc(20px*var(--fs))] font-semibold tracking-tight text-ink-900"
+          inputClassName="text-[calc(16px*var(--fs))] font-medium"
         />
 
         <div className="flex flex-wrap items-center gap-2 pt-1">
@@ -222,7 +222,7 @@ function ArchiveDetailInner({
               </div>
             ) : null}
             <div>
-              <p className="text-[13.5px] text-ink-400">별점</p>
+              <p className="text-[calc(13.5px*var(--fs))] text-ink-400">별점</p>
               <div className="pt-0.5">
                 <StarRating value={draft.rating} onChange={(value) => set("rating", value)} size={20} />
               </div>
@@ -256,7 +256,7 @@ function ArchiveDetailInner({
           title="메모"
           action={
             field === "body" ? (
-              <button type="button" onClick={() => setField(null)} aria-label="메모 입력 마침" className="text-[13.5px] text-ink-500 hover:text-ink-800">
+              <button type="button" onClick={() => setField(null)} aria-label="메모 입력 마침" className="text-[calc(13.5px*var(--fs))] text-ink-500 hover:text-ink-800">
                 입력 마침
               </button>
             ) : null
@@ -280,9 +280,9 @@ function ArchiveDetailInner({
               className="w-full rounded-lg border-b border-dashed border-paper-300 px-1 py-1.5 text-left transition hover:border-ink-400 hover:bg-paper-100/50"
             >
               {draft.body.trim() ? (
-                <span className="doc-body block text-[15.5px] text-ink-700">{renderMarkdown(draft.body)}</span>
+                <span className="doc-body block text-[calc(15.5px*var(--fs))] text-ink-700">{renderMarkdown(draft.body)}</span>
               ) : (
-                <span className="text-[15px] text-ink-300">눌러서 메모 쓰기</span>
+                <span className="text-[calc(15px*var(--fs))] text-ink-300">눌러서 메모 쓰기</span>
               )}
             </button>
           )}

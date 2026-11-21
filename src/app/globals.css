@@ -5,6 +5,8 @@
 :root {
   --canvas: #ffffff;
   --ink: #111827;
+  /* A18: 설정의 글자 크기 배율 — 글자 크기를 준 모든 클래스가 이 값을 곱해 씁니다. */
+  --fs: 1;
   color-scheme: light;
 }
 
@@ -70,36 +72,36 @@
   }
 
   .btn {
-    @apply inline-flex select-none items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-[15px] font-medium leading-none transition duration-150 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40;
+    @apply inline-flex select-none items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-[calc(15px*var(--fs))] font-medium leading-none transition duration-150 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40;
   }
 
   .btn-primary {
-    @apply inline-flex select-none items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-[15px] font-medium leading-none transition duration-150 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40;
+    @apply inline-flex select-none items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-[calc(15px*var(--fs))] font-medium leading-none transition duration-150 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40;
     @apply bg-ink-900 text-white hover:bg-ink-800;
   }
 
   .btn-accent {
-    @apply inline-flex select-none items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-[15px] font-medium leading-none transition duration-150 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40;
+    @apply inline-flex select-none items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-[calc(15px*var(--fs))] font-medium leading-none transition duration-150 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40;
     @apply bg-accent-500 text-white hover:bg-accent-600;
   }
 
   .btn-outline {
-    @apply inline-flex select-none items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-[15px] font-medium leading-none transition duration-150 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40;
+    @apply inline-flex select-none items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-[calc(15px*var(--fs))] font-medium leading-none transition duration-150 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40;
     @apply border border-paper-300 bg-white text-ink-700 hover:border-paper-400 hover:bg-paper-200/60;
   }
 
   .btn-ghost {
-    @apply inline-flex select-none items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-[15px] font-medium leading-none transition duration-150 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40;
+    @apply inline-flex select-none items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-[calc(15px*var(--fs))] font-medium leading-none transition duration-150 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40;
     @apply text-ink-500 hover:bg-paper-200 hover:text-ink-900;
   }
 
   .btn-danger {
-    @apply inline-flex select-none items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-[15px] font-medium leading-none transition duration-150 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40;
+    @apply inline-flex select-none items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-[calc(15px*var(--fs))] font-medium leading-none transition duration-150 active:scale-[0.98] disabled:pointer-events-none disabled:opacity-40;
     @apply border border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-100;
   }
 
   .btn-xs {
-    @apply px-2.5 py-1 text-[14px];
+    @apply px-2.5 py-1 text-[calc(14px*var(--fs))];
   }
 
   .icon-btn {
@@ -107,19 +109,19 @@
   }
 
   .input {
-    @apply w-full rounded-lg border border-transparent bg-paper-200 px-3 py-2 text-[15px] text-ink-900 placeholder:text-ink-300 focus:border-paper-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-paper-200;
+    @apply w-full rounded-lg border border-transparent bg-paper-200 px-3 py-2 text-[calc(15px*var(--fs))] text-ink-900 placeholder:text-ink-300 focus:border-paper-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-paper-200;
   }
 
   .input-flat {
-    @apply w-full rounded-lg border border-transparent bg-transparent px-2 py-1.5 text-[15px] text-ink-900 placeholder:text-ink-300 hover:border-paper-300 focus:border-paper-400 focus:bg-white focus:outline-none;
+    @apply w-full rounded-lg border border-transparent bg-transparent px-2 py-1.5 text-[calc(15px*var(--fs))] text-ink-900 placeholder:text-ink-300 hover:border-paper-300 focus:border-paper-400 focus:bg-white focus:outline-none;
   }
 
   .label {
-    @apply mb-1.5 block text-[14px] font-medium text-ink-600;
+    @apply mb-1.5 block text-[calc(14px*var(--fs))] font-medium text-ink-600;
   }
 
   .chip {
-    @apply inline-flex items-center gap-1 rounded-full bg-paper-200 px-2 py-0.5 text-[13px] font-medium leading-5 text-ink-600;
+    @apply inline-flex items-center gap-1 rounded-full bg-paper-200 px-2 py-0.5 text-[calc(13px*var(--fs))] font-medium leading-5 text-ink-600;
   }
 
   .chip-button {
@@ -135,7 +137,7 @@
   }
 
   .section-title {
-    @apply text-[14px] font-medium text-ink-600;
+    @apply text-[calc(14px*var(--fs))] font-medium text-ink-600;
   }
 
   .display {
@@ -166,7 +168,7 @@
   }
 
   .seg-item {
-    @apply rounded-full px-2.5 py-1 text-[14px] font-medium text-ink-600 transition hover:text-ink-900;
+    @apply rounded-full px-2.5 py-1 text-[calc(14px*var(--fs))] font-medium text-ink-600 transition hover:text-ink-900;
   }
 
   .seg-item-active {
@@ -174,7 +176,7 @@
   }
 
   .nav-pill {
-    @apply inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[15px] font-medium text-ink-500 transition hover:text-ink-900;
+    @apply inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-[calc(15px*var(--fs))] font-medium text-ink-500 transition hover:text-ink-900;
   }
 
   .nav-pill-active {
@@ -241,7 +243,7 @@
 
   /* binder: click a day and type — no ruled lines, just a caret */
   .binder-input {
-    @apply w-full resize-none border-none bg-transparent p-0 text-[15px] leading-[1.6] text-ink-900 outline-none placeholder:text-ink-300;
+    @apply w-full resize-none border-none bg-transparent p-0 text-[calc(15px*var(--fs))] leading-[1.6] text-ink-900 outline-none placeholder:text-ink-300;
   }
 }
 
@@ -307,13 +309,13 @@
   @apply mt-4 mb-1.5 font-semibold text-ink-900;
 }
 .doc-body h1 {
-  @apply text-[20px];
+  @apply text-[calc(20px*var(--fs))];
 }
 .doc-body h2 {
-  @apply text-[18px];
+  @apply text-[calc(18px*var(--fs))];
 }
 .doc-body h3 {
-  @apply text-[16px];
+  @apply text-[calc(16px*var(--fs))];
 }
 .doc-body p {
   @apply my-2 leading-[1.75];

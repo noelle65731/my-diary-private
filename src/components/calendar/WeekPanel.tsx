@@ -82,7 +82,7 @@ function InlineTitle({
           }
         }}
         aria-label={editLabel}
-        className="min-w-0 flex-1 rounded-md border border-paper-400 bg-white px-1.5 py-0.5 text-[15px] text-ink-800 outline-none"
+        className="min-w-0 flex-1 rounded-md border border-paper-400 bg-white px-1.5 py-0.5 text-[calc(15px*var(--fs))] text-ink-800 outline-none"
       />
     );
   }
@@ -94,7 +94,7 @@ function InlineTitle({
       aria-label={editLabel}
       title="눌러서 바로 고치기"
       className={cn(
-        "group/title flex min-w-0 flex-1 items-center gap-1 text-left text-[15px] text-ink-700",
+        "group/title flex min-w-0 flex-1 items-center gap-1 text-left text-[calc(15px*var(--fs))] text-ink-700",
         done && "text-ink-400 line-through",
         className,
       )}
@@ -139,7 +139,7 @@ function MemoBox({
       }}
       placeholder={placeholder}
       aria-label="이번 주 메모"
-      className="mt-1.5 min-h-[4.5rem] w-full flex-1 resize-none rounded-xl border border-transparent bg-paper-200/70 px-2.5 py-1.5 text-[14.5px] leading-snug text-ink-700 outline-none transition focus:border-paper-400 focus:bg-white"
+      className="mt-1.5 min-h-[4.5rem] w-full flex-1 resize-none rounded-xl border border-transparent bg-paper-200/70 px-2.5 py-1.5 text-[calc(14.5px*var(--fs))] leading-snug text-ink-700 outline-none transition focus:border-paper-400 focus:bg-white"
     />
   );
 }
@@ -261,14 +261,14 @@ export function WeekPanel({
 
       <section className="border-t border-paper-300 pt-2.5">
         <header className="flex items-center justify-between">
-          <h3 className="text-[15px] font-semibold text-ink-900">이번 주 꼭</h3>
+          <h3 className="text-[calc(15px*var(--fs))] font-semibold text-ink-900">이번 주 꼭</h3>
         </header>
-        <p className="mt-0.5 text-[13px] leading-snug text-ink-400">
+        <p className="mt-0.5 text-[calc(13px*var(--fs))] leading-snug text-ink-400">
           이번 주에 놓치면 안 되는 일
         </p>
 
         {favorites.length === 0 ? (
-          <p className="mt-1 text-[13.5px] leading-snug text-ink-300">아직 없습니다.</p>
+          <p className="mt-1 text-[calc(13.5px*var(--fs))] leading-snug text-ink-300">아직 없습니다.</p>
         ) : (
           <ul className="mt-1.5 divide-y divide-paper-300/60">
             {favorites.slice(0, 8).map(({ kind, item }) => {
@@ -291,18 +291,18 @@ export function WeekPanel({
                     type="button"
                     onClick={() => (kind === "event" ? onOpenEvent(item.id) : onOpenTask(item.id))}
                     className={cn(
-                      "min-w-0 flex-1 truncate text-left text-[14.5px] leading-[1.3] text-ink-700",
+                      "min-w-0 flex-1 truncate text-left text-[calc(14.5px*var(--fs))] leading-[1.3] text-ink-700",
                       done && "text-ink-400 line-through",
                     )}
                   >
                     {item.title}
                   </button>
                   {date ? (
-                    <span className="flex-none text-[13px] tabular-nums text-ink-400">
+                    <span className="flex-none text-[calc(13px*var(--fs))] tabular-nums text-ink-400">
                       {formatShort(date)} {["일", "월", "화", "수", "목", "금", "토"][new Date(`${date}T12:00:00`).getDay()]}
                     </span>
                   ) : (
-                    <span className="flex-none text-[13px] text-ink-300">index</span>
+                    <span className="flex-none text-[calc(13px*var(--fs))] text-ink-300">index</span>
                   )}
                 </li>
               );
@@ -321,15 +321,15 @@ export function WeekPanel({
             value={favoriteDraft}
             onChange={(event) => setFavoriteDraft(event.target.value)}
             placeholder="+ 이번 주 꼭 (Enter)"
-            className="w-full rounded-lg border border-transparent bg-paper-200/70 px-2.5 py-1 text-[14.5px] text-ink-900 placeholder:text-ink-400 focus:border-paper-400 focus:bg-white focus:outline-none"
+            className="w-full rounded-lg border border-transparent bg-paper-200/70 px-2.5 py-1 text-[calc(14.5px*var(--fs))] text-ink-900 placeholder:text-ink-400 focus:border-paper-400 focus:bg-white focus:outline-none"
           />
         </form>
       </section>
 
       <section className="border-t border-paper-300 pt-2.5">
         <header className="flex items-center justify-between">
-          <h3 className="text-[15px] font-semibold text-ink-900">이번 주 목표</h3>
-          <span className="text-[13.5px] text-ink-400">
+          <h3 className="text-[calc(15px*var(--fs))] font-semibold text-ink-900">이번 주 목표</h3>
+          <span className="text-[calc(13.5px*var(--fs))] text-ink-400">
             {goals.filter((goal) => goal.done).length}/{goals.length}
           </span>
         </header>
@@ -355,7 +355,7 @@ export function WeekPanel({
               />
             </li>
           ))}
-          {goals.length === 0 ? <li className="text-[14px] text-ink-400">아직 없습니다.</li> : null}
+          {goals.length === 0 ? <li className="text-[calc(14px*var(--fs))] text-ink-400">아직 없습니다.</li> : null}
         </ul>
         <form
           onSubmit={(event) => {
@@ -373,15 +373,15 @@ export function WeekPanel({
             placeholder="+ 목표 추가 (Enter)"
             aria-label="주간 목표 추가"
             disabled={goalBusy}
-            className="w-full rounded-lg border border-transparent bg-paper-200/70 px-2.5 py-1 text-[14.5px] text-ink-900 placeholder:text-ink-400 focus:border-paper-400 focus:bg-white focus:outline-none disabled:opacity-60"
+            className="w-full rounded-lg border border-transparent bg-paper-200/70 px-2.5 py-1 text-[calc(14.5px*var(--fs))] text-ink-900 placeholder:text-ink-400 focus:border-paper-400 focus:bg-white focus:outline-none disabled:opacity-60"
           />
         </form>
       </section>
 
       <section className="flex min-h-0 flex-1 flex-col border-t border-paper-300 pt-2.5">
         <header className="flex items-center justify-between gap-2">
-          <h3 className="text-[15px] font-semibold text-ink-900">주간 메모</h3>
-          {memos.length > 0 ? <span className="text-[13.5px] text-ink-400">이전 메모 {memos.length}개</span> : null}
+          <h3 className="text-[calc(15px*var(--fs))] font-semibold text-ink-900">주간 메모</h3>
+          {memos.length > 0 ? <span className="text-[calc(13.5px*var(--fs))] text-ink-400">이전 메모 {memos.length}개</span> : null}
         </header>
 
         {memos.length > 0 ? (
@@ -389,7 +389,7 @@ export function WeekPanel({
             value={activeMemo?.id ?? ""}
             onChange={(event) => setSelectedMemoId(event.target.value || null)}
             aria-label="주간 메모 기록 선택"
-            className="mt-1.5 w-full rounded-lg border border-paper-300 bg-white px-2 py-1 text-[14px] text-ink-700 focus:border-paper-400 focus:outline-none"
+            className="mt-1.5 w-full rounded-lg border border-paper-300 bg-white px-2 py-1 text-[calc(14px*var(--fs))] text-ink-700 focus:border-paper-400 focus:outline-none"
           >
             {!currentMemo ? <option value="">이번 주 메모 없음</option> : null}
             {memos.map((memo) => (

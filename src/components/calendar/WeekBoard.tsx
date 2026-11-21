@@ -258,27 +258,30 @@ export function WeekBoard({
           so an 8–10 character title is never squeezed into two letters per line. */}
       <div
         ref={scroller}
+        data-week-board-scroll="true"
         className={cn(
-          "flex min-h-0 min-w-0 flex-1 flex-col",
-          narrow && "-mx-1 overflow-auto overscroll-contain pb-1",
+          "flex min-h-0 min-w-0 flex-1 flex-col overscroll-contain",
+          /* A18: 프로젝트를 다 펼치면 게시판이 화면보다 길어질 수 있습니다. 그때는
+             프로젝트 칸이 아니라 이 게시판 전체가 세로로 움직입니다(날짜 머리글은 위에 붙음). */
+          narrow ? "-mx-1 overflow-auto pb-1" : "overflow-y-auto overflow-x-clip pb-1",
         )}
       >
-        <div className={cn("flex min-h-0 flex-col pb-1", narrow && "min-w-[44rem]")}>
+        <div className={cn("flex min-h-full flex-col pb-1", narrow && "min-w-[44rem]")}>
       {mode === "custom" ? (
         <div className="mb-2 rounded-xl border border-paper-300 bg-paper-50/70 px-2.5 py-2">
           <button
             type="button"
             onClick={() => setCustomOpen((open) => !open)}
             aria-expanded={customOpen}
-            className="flex w-full items-center justify-between text-left text-[14px] font-medium text-ink-700"
+            className="flex w-full items-center justify-between text-left text-[calc(14px*var(--fs))] font-medium text-ink-700"
           >
             <span>맞춤 · 프로젝트 {projects.length}개 · 루틴 {routines.filter((item) => item.kind === "루틴" && !item.history && !item.trash).length}개</span>
-            <span className="text-[13.5px] font-normal text-ink-400">{customOpen ? "접기" : "숨길 항목 고르기"}</span>
+            <span className="text-[calc(13.5px*var(--fs))] font-normal text-ink-400">{customOpen ? "접기" : "숨길 항목 고르기"}</span>
           </button>
           {customOpen ? (
             <div className="mt-2 grid gap-2 sm:grid-cols-2">
               <div>
-                <p className="mb-1 text-[13px] text-ink-400">프로젝트</p>
+                <p className="mb-1 text-[calc(13px*var(--fs))] text-ink-400">프로젝트</p>
                 <div className="flex flex-wrap gap-1">
                   {projects.map((project) => {
                     const shown = !hiddenProjectIds.includes(project.id);
@@ -289,7 +292,7 @@ export function WeekBoard({
                         aria-pressed={shown}
                         onClick={() => onToggleProjectHidden?.(project.id)}
                         className={cn(
-                          "rounded-full border px-2 py-0.5 text-[13.5px]",
+                          "rounded-full border px-2 py-0.5 text-[calc(13.5px*var(--fs))]",
                           shown ? "border-ink-900 bg-ink-900 text-white" : "border-paper-400 bg-white text-ink-400",
                         )}
                       >
@@ -300,7 +303,7 @@ export function WeekBoard({
                 </div>
               </div>
               <div>
-                <p className="mb-1 text-[13px] text-ink-400">루틴</p>
+                <p className="mb-1 text-[calc(13px*var(--fs))] text-ink-400">루틴</p>
                 <div className="flex flex-wrap gap-1">
                   {routines
                     .filter((item) => item.kind === "루틴" && !item.history && !item.trash)
@@ -313,7 +316,7 @@ export function WeekBoard({
                           aria-pressed={shown}
                           onClick={() => onToggleRoutineHidden?.(routine.id)}
                           className={cn(
-                            "rounded-full border px-2 py-0.5 text-[13.5px]",
+                            "rounded-full border px-2 py-0.5 text-[calc(13.5px*var(--fs))]",
                             shown ? "border-ink-900 bg-ink-900 text-white" : "border-paper-400 bg-white text-ink-400",
                           )}
                         >
@@ -333,7 +336,7 @@ export function WeekBoard({
         style={grid}
         data-week-header="true"
       >
-        <div className="sticky left-0 z-40 self-stretch border-r border-paper-300 bg-white pb-1 text-right text-[13px] text-ink-400">
+        <div className="sticky left-0 z-40 self-stretch border-r border-paper-300 bg-white pb-1 text-right text-[calc(13px*var(--fs))] text-ink-400">
           {allDayBars.length > 0 ? "" : ""}
         </div>
         {days.map((day) => {
@@ -348,12 +351,12 @@ export function WeekBoard({
               onClick={() => onSelectDay(day)}
               className="flex flex-col items-center gap-0.5 pb-0.5 pt-1.5 transition hover:bg-paper-200/40"
             >
-              <span className={cn("text-[14px]", dow === 6 ? "text-blue-500" : dow === 0 ? "text-red-400" : "text-ink-400")}>
+              <span className={cn("text-[calc(14px*var(--fs))]", dow === 6 ? "text-blue-500" : dow === 0 ? "text-red-400" : "text-ink-400")}>
                 {weekdayKo(day)}
               </span>
               <span
                 className={cn(
-                  "flex h-8 min-w-8 items-center justify-center rounded-full px-1 text-[18px] font-semibold leading-none tabular-nums md:h-9 md:min-w-9 md:text-[20px]",
+                  "flex h-8 min-w-8 items-center justify-center rounded-full px-1 text-[calc(18px*var(--fs))] font-semibold leading-none tabular-nums md:h-9 md:min-w-9 md:text-[calc(20px*var(--fs))]",
                   isToday
                     ? "bg-ink-900 text-white"
                     : holiday || dow === 0
@@ -365,23 +368,25 @@ export function WeekBoard({
               >
                 {String(Number(day.slice(8, 10)))}
               </span>
-              {holiday ? <span className="max-w-full truncate text-[12.5px] text-red-500">{holiday}</span> : null}
+              {holiday ? <span className="max-w-full truncate text-[calc(12.5px*var(--fs))] text-red-500">{holiday}</span> : null}
             </button>
           );
         })}
       </div>
 
-      {/* 일정·프로젝트·루틴은 한 틀 안에 여백 없이 붙고, 구역 사이는 2px 검정 실선이 나눕니다. */}
+      {/* 일정·프로젝트·루틴은 한 틀 안에 여백 없이 붙고, 구역 사이는 2px 진회색 실선이 나눕니다.
+          A18: 검정(#111827)은 너무 무겁다는 요청에 절반 농도의 진회색으로 낮췄습니다. */}
       <div
         data-week-frame="true"
         className={cn(
-          "flex min-h-0 min-w-0 flex-col overflow-clip rounded-xl border-2 border-ink-900 bg-white",
-          narrow ? "flex-none" : "flex-1",
+          "flex min-w-0 flex-col overflow-clip rounded-xl border-2 border-[#6b7280] bg-white",
+          /* A18: 내용이 짧으면 남는 높이를 채우고, 길면 잘리지 않고 게시판과 함께 자랍니다. */
+          narrow ? "min-h-0 flex-none" : "min-h-fit flex-1",
         )}
       >
-      <section data-week-section="schedule" className="flex-none overflow-clip border-b-2 border-ink-900">
+      <section data-week-section="schedule" className="flex-none overflow-clip border-b-2 border-[#6b7280]">
       <div className="flex flex-none items-center justify-between gap-2 border-b border-paper-300/70 bg-paper-50/60 py-[3px] pl-2 pr-1.5">
-        <span className="truncate text-[13.5px] font-medium text-ink-500">일정</span>
+        <span className="truncate text-[calc(13.5px*var(--fs))] font-medium text-ink-500">일정</span>
         <div className="seg-track flex-none p-[2px]">
           {([
             { key: "base", label: "기본" },
@@ -402,7 +407,7 @@ export function WeekBoard({
                   setScheduleCollapsed(false);
                   setTimeExpanded(option.key === "full");
                 }}
-                className={cn("seg-item px-2 py-[2px] text-[12.5px]", active && "seg-item-active")}
+                className={cn("seg-item px-2 py-[2px] text-[calc(12.5px*var(--fs))]", active && "seg-item-active")}
               >
                 {option.label}
               </button>
@@ -426,7 +431,7 @@ export function WeekBoard({
         {/* all-day — 스크롤 창 안, 시간표 바로 위. 접지 않고 같이 올라갑니다. */}
         {allDayBars.length === 0 ? null : (
           <div className="grid border-b border-paper-300/70" style={grid} data-all-day-block="true">
-            <div className="sticky left-0 z-20 flex items-start justify-end border-r border-paper-300 bg-white pr-2 pt-1 text-[13px] text-ink-400">종일</div>
+            <div className="sticky left-0 z-20 flex items-start justify-end border-r border-paper-300 bg-white pr-2 pt-1 text-[calc(13px*var(--fs))] text-ink-400">종일</div>
             <div className="relative" style={{ gridColumn: `2 / span ${days.length}`, height: allDayHeight }}>
               <div className="absolute inset-0 grid" style={{ gridTemplateColumns: `repeat(${days.length}, minmax(0, 1fr))` }}>
                 {days.map((day) => (
@@ -491,7 +496,7 @@ export function WeekBoard({
                     onClick={() => onOpenEvent(event.id)}
                     title={allDayExpanded ? undefined : "끌어서 종일 일정 순서 바꾸기"}
                     className={cn(
-                      "absolute h-[19px] overflow-hidden rounded-md border px-1.5 text-left text-[13px] font-medium leading-[17px] md:px-2 md:text-[13.5px]",
+                      "absolute h-[19px] overflow-hidden rounded-md border px-1.5 text-left text-[calc(13px*var(--fs))] font-medium leading-[17px] md:px-2 md:text-[calc(13.5px*var(--fs))]",
                       tone.bg,
                       tone.border,
                       tone.text,
@@ -514,7 +519,7 @@ export function WeekBoard({
                   <button
                     type="button"
                     onClick={() => setAllDayExpanded(false)}
-                    className="absolute right-1 rounded px-1 text-[12px] font-medium text-ink-400 hover:text-ink-700"
+                    className="absolute right-1 rounded px-1 text-[calc(12px*var(--fs))] font-medium text-ink-400 hover:text-ink-700"
                     style={{ top: laneCount * allDayLane + 1 }}
                   >
                     접기
@@ -529,7 +534,7 @@ export function WeekBoard({
                       data-allday-more={days[index]}
                       onClick={() => setAllDayExpanded(true)}
                       aria-label={`${weekdayKo(days[index] ?? "")}요일 종일 일정 ${count}개 더 보기`}
-                      className="absolute rounded bg-paper-200/90 text-center text-[11.5px] font-medium leading-[15px] text-ink-500 transition hover:bg-paper-300/80 hover:text-ink-800"
+                      className="absolute rounded bg-paper-200/90 text-center text-[calc(11.5px*var(--fs))] font-medium leading-[15px] text-ink-500 transition hover:bg-paper-300/80 hover:text-ink-800"
                       style={{
                         left: `calc(${(index * 100) / days.length}% + 2px)`,
                         width: `calc(${100 / days.length}% - 4px)`,
@@ -557,33 +562,35 @@ export function WeekBoard({
           onOpenEvent={onOpenEvent}
           onCreate={onCreate}
           onMoveEvent={onMoveEvent}
+          onMoveAllDayDate={onMoveAllDayDate}
           onResizeEvent={onResizeEvent}
         />
       </div>
       )}
       </section>
 
-      {/* attached project rows — on a phone they scroll inside the board sheet, so the
-          frozen left column sticks to that one scrollport instead of this box */}
+      {/* attached project rows — A18: 프로젝트는 몇 개든 접기 전까지 전부 펼쳐 둡니다.
+          안쪽에 세로 스크롤 창을 만들지 않고, 내용이 길면 게시판 전체가 길어집니다. */}
       <section
         data-week-section="projects"
-        className={cn("border-b-2 border-ink-900", narrow ? "flex-none overflow-clip" : "min-h-0 flex-1 overflow-y-auto")}
+        data-week-projects="true"
+        className={cn("overflow-clip border-b-2 border-[#6b7280]", narrow ? "flex-none" : "min-h-fit flex-1")}
       >
       <div>
         <div className="flex items-center justify-between border-b border-paper-300/70 bg-paper-50/60 py-[3px] pl-2 pr-1.5">
-          <span className="text-[13.5px] font-medium text-ink-500">프로젝트</span>
+          <span className="text-[calc(13.5px*var(--fs))] font-medium text-ink-500">프로젝트</span>
           <button
             type="button"
             onClick={() => setProjectsCollapsed((open) => !open)}
             aria-expanded={!projectsCollapsed}
-            className="inline-flex items-center gap-1 rounded-full bg-paper-200 px-2 py-[2px] text-[13px] font-medium text-ink-600 transition hover:bg-paper-300/70 hover:text-ink-900"
+            className="inline-flex items-center gap-1 rounded-full bg-paper-200 px-2 py-[2px] text-[calc(13px*var(--fs))] font-medium text-ink-600 transition hover:bg-paper-300/70 hover:text-ink-900"
           >
             {projectsCollapsed ? "프로젝트 영역 펴기" : "프로젝트 영역 접기"}
             <ChevronDownIcon size={10} className={cn("transition", projectsCollapsed && "rotate-180")} />
           </button>
         </div>
         {projectsCollapsed ? null : rows.length === 0 ? (
-          <div className="flex items-center justify-center py-4 text-[14px] text-ink-400">이번 주에 예정된 할 일이 없습니다.</div>
+          <div className="flex items-center justify-center py-4 text-[calc(14px*var(--fs))] text-ink-400">이번 주에 예정된 할 일이 없습니다.</div>
         ) : null}
         {projectsCollapsed ? null : rows.map(([key, row]) => {
           const project = row.project;
@@ -602,7 +609,7 @@ export function WeekBoard({
                 <button
                   type="button"
                   onClick={() => (project ? onOpenTask(project.id) : onCreateTaskForProject(""))}
-                  className="line-clamp-2 min-w-0 flex-1 break-keep text-left text-[14px] font-semibold leading-[1.15] text-ink-900 hover:text-ink-900"
+                  className="line-clamp-2 min-w-0 flex-1 break-keep text-left text-[calc(14px*var(--fs))] font-semibold leading-[1.15] text-ink-900 hover:text-ink-900"
                   title={project?.title ?? "index"}
                   aria-label={project?.title ?? "index"}
                 >
@@ -612,7 +619,7 @@ export function WeekBoard({
                   <button
                     type="button"
                     onClick={() => onCreateTaskForProject(project.id)}
-                    className="flex-none rounded px-1 text-[16px] leading-none text-ink-400 opacity-0 transition hover:text-ink-800 group-hover/row:opacity-100"
+                    className="flex-none rounded px-1 text-[calc(16px*var(--fs))] leading-none text-ink-400 opacity-0 transition hover:text-ink-800 group-hover/row:opacity-100"
                     aria-label="할 일 추가"
                   >
                     +
@@ -721,14 +728,14 @@ export function WeekBoard({
                                   className={cn(
                                     "min-w-0 text-ink-800",
                                     /* 두 줄까지는 그대로 보여 주고, 그 뒤에야 …으로 줄입니다. */
-                                    "line-clamp-2 break-keep text-[14px] leading-[1.2]",
+                                    "line-clamp-2 break-keep text-[calc(14px*var(--fs))] leading-[1.2]",
                                     (done || canceled) && "text-ink-400 line-through",
                                   )}
                                 >
                                   {task.title}
                                 </span>
                                 {canceled ? (
-                                  <span className="flex-none rounded bg-paper-200 px-1 text-[11px] font-medium leading-[1.4] text-ink-500">취소</span>
+                                  <span className="flex-none rounded bg-paper-200 px-1 text-[calc(11px*var(--fs))] font-medium leading-[1.4] text-ink-500">취소</span>
                                 ) : null}
                                 {!narrow && priority !== "기타" ? (
                                   <span
@@ -739,7 +746,7 @@ export function WeekBoard({
                                   />
                                 ) : null}
                                 {!narrow && waiting ? (
-                                  <span className="flex-none rounded bg-paper-200 px-1 text-[12px] font-medium leading-[1.4] text-ink-500">대기</span>
+                                  <span className="flex-none rounded bg-paper-200 px-1 text-[calc(12px*var(--fs))] font-medium leading-[1.4] text-ink-500">대기</span>
                                 ) : null}
                               </span>
                               {narrow && (priority !== "기타" || waiting) ? (
@@ -753,12 +760,12 @@ export function WeekBoard({
                                     />
                                   ) : null}
                                   {waiting ? (
-                                    <span className="rounded bg-paper-200 px-[3px] text-[11.5px] font-medium leading-[1.35] text-ink-500">대기</span>
+                                    <span className="rounded bg-paper-200 px-[3px] text-[calc(11.5px*var(--fs))] font-medium leading-[1.35] text-ink-500">대기</span>
                                   ) : null}
                                 </span>
                               ) : null}
                               {memoLine ? (
-                                <span className="mt-0.5 block truncate text-[13px] leading-tight text-ink-400">{memoLine}</span>
+                                <span className="mt-0.5 block truncate text-[calc(13px*var(--fs))] leading-tight text-ink-400">{memoLine}</span>
                               ) : null}
                             </button>
                             {narrow ? (
@@ -788,14 +795,14 @@ export function WeekBoard({
       {/* routine rows — 분류 shows as a small badge in each row, so no extra header lines */}
       <section data-week-section="routines" className="flex-none overflow-clip">
         <div className="flex items-center justify-between gap-2 border-b border-paper-300/70 bg-paper-50/60 py-[3px] pl-2 pr-1.5">
-          <span className="text-[13.5px] font-medium text-ink-500">
+          <span className="text-[calc(13.5px*var(--fs))] font-medium text-ink-500">
             루틴{routineTotal > 0 ? ` · ${routineTotal}개` : ""}
           </span>
           <div className="flex flex-none items-center gap-1">
             <button
               type="button"
               onClick={onCreateRoutine}
-              className="rounded-full bg-paper-200 px-2 py-[2px] text-[13px] font-medium text-ink-600 transition hover:bg-paper-300/70 hover:text-ink-900"
+              className="rounded-full bg-paper-200 px-2 py-[2px] text-[calc(13px*var(--fs))] font-medium text-ink-600 transition hover:bg-paper-300/70 hover:text-ink-900"
             >
               + 루틴
             </button>
@@ -803,7 +810,7 @@ export function WeekBoard({
               type="button"
               onClick={() => setRoutinesCollapsed((open) => !open)}
               aria-expanded={!routinesCollapsed}
-              className="inline-flex items-center gap-1 rounded-full bg-paper-200 px-2 py-[2px] text-[13px] font-medium text-ink-600 transition hover:bg-paper-300/70 hover:text-ink-900"
+              className="inline-flex items-center gap-1 rounded-full bg-paper-200 px-2 py-[2px] text-[calc(13px*var(--fs))] font-medium text-ink-600 transition hover:bg-paper-300/70 hover:text-ink-900"
             >
               {routinesCollapsed ? "루틴 영역 펴기" : "루틴 영역 접기"}
               <ChevronDownIcon size={10} className={cn("transition", routinesCollapsed && "rotate-180")} />
@@ -812,7 +819,7 @@ export function WeekBoard({
         </div>
 
         {routinesCollapsed ? null : routineRows.length === 0 ? (
-          <div className="px-2 py-2 text-[14px] text-ink-400">이번 주에 보이는 루틴이 없습니다.</div>
+          <div className="px-2 py-2 text-[calc(14px*var(--fs))] text-ink-400">이번 주에 보이는 루틴이 없습니다.</div>
         ) : (
           routineRows.map(({ routine, category }, index) => {
             const target = routine.targetCount ?? 1;
@@ -828,14 +835,14 @@ export function WeekBoard({
                 >
                   <span
                     className={cn(
-                      "flex-none rounded px-1 text-[11.5px] font-medium leading-[1.5]",
+                      "flex-none rounded px-1 text-[calc(11.5px*var(--fs))] font-medium leading-[1.5]",
                       categoryTone.soft,
                       categoryTone.text,
                     )}
                   >
                     {category}
                   </span>
-                  <span className="truncate text-[14px] text-ink-700">{routine.title}</span>
+                  <span className="truncate text-[calc(14px*var(--fs))] text-ink-700">{routine.title}</span>
                 </button>
                 {days.map((day) => {
                   const scheduled = routine.repeatDays.length === 0 || routine.repeatDays.includes(weekdayKo(day));
@@ -856,7 +863,7 @@ export function WeekBoard({
                           onClick={() => onRoutineCount(routine, day, done ? 0 : count + 1)}
                           title={`${routine.title} · ${count}/${target}`}
                           className={cn(
-                            "flex h-[16px] w-[16px] items-center justify-center rounded-[4px] border text-[11.5px] font-semibold transition",
+                            "flex h-[16px] w-[16px] items-center justify-center rounded-[4px] border text-[calc(11.5px*var(--fs))] font-semibold transition",
                             done
                               ? cn(tone.solid, "text-white")
                               : count > 0

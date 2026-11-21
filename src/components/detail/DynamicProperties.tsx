@@ -37,13 +37,13 @@ export function DynamicProperties({
         const type = prop.type.split(":")[0] ?? prop.type;
         return (
           <div key={prop.name} className="grid grid-cols-[7rem_minmax(0,1fr)] items-start gap-2 rounded-lg px-1 py-1 hover:bg-paper-100/60">
-            <p className="truncate pt-1 text-[13.5px] text-ink-400" title={prop.name}>
+            <p className="truncate pt-1 text-[calc(13.5px*var(--fs))] text-ink-400" title={prop.name}>
               {prop.name}
             </p>
             {prop.readOnly || type === "formula" ? (
-              <p className={cn("min-h-[1.7rem] break-words rounded bg-paper-100/70 px-2 py-1 text-[15px] text-ink-500", typeof prop.value === "boolean" && "font-medium")}>
+              <p className={cn("min-h-[1.7rem] break-words rounded bg-paper-100/70 px-2 py-1 text-[calc(15px*var(--fs))] text-ink-500", typeof prop.value === "boolean" && "font-medium")}>
                 {pretty(prop.value)}
-                <span className="ml-1 text-[13px] text-ink-300">수식 · 읽기 전용</span>
+                <span className="ml-1 text-[calc(13px*var(--fs))] text-ink-300">수식 · 읽기 전용</span>
               </p>
             ) : type === "checkbox" ? (
               <button
@@ -51,7 +51,7 @@ export function DynamicProperties({
                 aria-pressed={prop.value === true}
                 onClick={() => update(prop.name, !(prop.value === true))}
                 className={cn(
-                  "justify-self-start rounded-full border px-2.5 py-1 text-[14px]",
+                  "justify-self-start rounded-full border px-2.5 py-1 text-[calc(14px*var(--fs))]",
                   prop.value === true ? "border-ink-900 bg-ink-900 text-white" : "border-paper-400 bg-white text-ink-500",
                 )}
               >
@@ -65,7 +65,7 @@ export function DynamicProperties({
                     type="button"
                     onClick={() => update(prop.name, option)}
                     className={cn(
-                      "rounded-full border px-2 py-0.5 text-[14px]",
+                      "rounded-full border px-2 py-0.5 text-[calc(14px*var(--fs))]",
                       prop.value === option ? "border-ink-900 bg-ink-900 text-white" : "border-paper-400 bg-white text-ink-500",
                     )}
                   >
@@ -78,7 +78,7 @@ export function DynamicProperties({
                     onBlur={(event) => update(prop.name, event.target.value.trim() || null)}
                     placeholder="값 입력"
                     aria-label={`${prop.name} 값`}
-                    className="input h-7 w-[9rem] py-0 text-[14.5px]"
+                    className="input h-7 w-[9rem] py-0 text-[calc(14.5px*var(--fs))]"
                   />
                 ) : null}
               </div>
@@ -93,7 +93,7 @@ export function DynamicProperties({
                       type="button"
                       onClick={() => update(prop.name, on ? list.filter((item) => item !== option) : [...list, option])}
                       className={cn(
-                        "rounded-full border px-2 py-0.5 text-[14px]",
+                        "rounded-full border px-2 py-0.5 text-[calc(14px*var(--fs))]",
                         on ? "border-ink-900 bg-ink-900 text-white" : "border-paper-400 bg-white text-ink-500",
                       )}
                     >
@@ -101,7 +101,7 @@ export function DynamicProperties({
                     </button>
                   );
                 })}
-                {options.length === 0 ? <span className="text-[14.5px] text-ink-400">{pretty(prop.value)}</span> : null}
+                {options.length === 0 ? <span className="text-[calc(14.5px*var(--fs))] text-ink-400">{pretty(prop.value)}</span> : null}
               </div>
             ) : type === "date" ? (
               <input
@@ -109,7 +109,7 @@ export function DynamicProperties({
                 value={typeof prop.value === "string" ? prop.value.slice(0, 10) : ""}
                 onChange={(event) => update(prop.name, event.target.value || null)}
                 aria-label={`${prop.name} 날짜`}
-                className="input h-7 w-[10rem] py-0 text-[14.5px]"
+                className="input h-7 w-[10rem] py-0 text-[calc(14.5px*var(--fs))]"
               />
             ) : type === "number" ? (
               <input
@@ -117,7 +117,7 @@ export function DynamicProperties({
                 value={typeof prop.value === "number" ? prop.value : ""}
                 onChange={(event) => update(prop.name, event.target.value === "" ? null : Number(event.target.value))}
                 aria-label={`${prop.name} 숫자`}
-                className="input h-7 w-[7rem] py-0 text-[14.5px]"
+                className="input h-7 w-[7rem] py-0 text-[calc(14.5px*var(--fs))]"
               />
             ) : type === "url" ? (
               <div className="flex min-w-0 items-center gap-1">
@@ -126,10 +126,10 @@ export function DynamicProperties({
                   onBlur={(event) => update(prop.name, event.target.value.trim() || null)}
                   placeholder="https://"
                   aria-label={`${prop.name} 주소`}
-                  className="input h-7 min-w-0 flex-1 py-0 text-[14.5px]"
+                  className="input h-7 min-w-0 flex-1 py-0 text-[calc(14.5px*var(--fs))]"
                 />
                 {typeof prop.value === "string" && prop.value ? (
-                  <a href={prop.value} target="_blank" rel="noreferrer" className="flex-none text-[13.5px] text-accent-600 hover:underline">
+                  <a href={prop.value} target="_blank" rel="noreferrer" className="flex-none text-[calc(13.5px*var(--fs))] text-accent-600 hover:underline">
                     열기
                   </a>
                 ) : null}
@@ -139,13 +139,13 @@ export function DynamicProperties({
                 defaultValue={typeof prop.value === "string" ? prop.value : ""}
                 onBlur={(event) => update(prop.name, event.target.value)}
                 aria-label={`${prop.name} 값`}
-                className="input h-7 py-0 text-[14.5px]"
+                className="input h-7 py-0 text-[calc(14.5px*var(--fs))]"
               />
             )}
           </div>
         );
       })}
-      <p className="px-1 text-[13px] text-ink-300">
+      <p className="px-1 text-[calc(13px*var(--fs))] text-ink-300">
         Notion에 나중에 추가한 속성입니다. 이름·수식 정의는 Notion에서 관리되고, 여기서는 값만 바뀝니다.
       </p>
     </div>

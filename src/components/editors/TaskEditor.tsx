@@ -244,7 +244,7 @@ function TaskEditorInner({
           value={form.title}
           onChange={(event) => patch("title", event.target.value)}
           placeholder={form.kind === "프로젝트" ? "프로젝트 이름" : "무엇을 해야 하나요?"}
-          className="border-0 border-b border-paper-300 bg-transparent px-0 text-[18px] font-medium focus:ring-0"
+          className="border-0 border-b border-paper-300 bg-transparent px-0 text-[calc(18px*var(--fs))] font-medium focus:ring-0"
         />
 
         <div className="flex flex-wrap items-center gap-3">
@@ -268,9 +268,9 @@ function TaskEditorInner({
               type="button"
               onClick={() => setNewCategory("")}
               aria-label="분류 새로 추가"
-              className="inline-flex h-7 items-center gap-0.5 rounded-full border border-dashed border-paper-400 px-2 text-[14px] text-ink-500 transition hover:border-ink-500 hover:text-ink-900"
+              className="inline-flex h-7 items-center gap-0.5 rounded-full border border-dashed border-paper-400 px-2 text-[calc(14px*var(--fs))] text-ink-500 transition hover:border-ink-500 hover:text-ink-900"
             >
-              <span className="text-[15px] leading-none">+</span> 분류
+              <span className="text-[calc(15px*var(--fs))] leading-none">+</span> 분류
             </button>
           ) : (
             <input
@@ -287,7 +287,7 @@ function TaskEditorInner({
               onBlur={addNewCategory}
               placeholder="새 분류 이름"
               aria-label="새 분류 이름"
-              className="input h-7 w-[7.5rem] py-0 text-[14px]"
+              className="input h-7 w-[7.5rem] py-0 text-[calc(14px*var(--fs))]"
             />
           )}
         </div>

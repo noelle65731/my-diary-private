@@ -25,17 +25,19 @@ export interface Pastel {
   dot: string;
 }
 
+/* A18: 카드·행 배경이 너무 진하다는 요청에 채도를 절반으로 낮춘 톤만 남깁니다.
+ * 흰 바탕에 아주 은은하게 비치는 정도라, 열 가지가 서로 구분되면서도 무겁지 않습니다. */
 export const PASTELS: Pastel[] = [
-  { key: "rose", label: "로즈", bg: "bg-[#fdf1f3]", border: "border-[#f7dfe4]", dot: "bg-[#e8a3b3]" },
-  { key: "peach", label: "피치", bg: "bg-[#fdf4ec]", border: "border-[#f7e4d1]", dot: "bg-[#eab185]" },
-  { key: "lemon", label: "레몬", bg: "bg-[#fdfae9]", border: "border-[#f3ecc4]", dot: "bg-[#dcc464]" },
-  { key: "mint", label: "민트", bg: "bg-[#eefaf4]", border: "border-[#d8efe5]", dot: "bg-[#7cc9a8]" },
-  { key: "sky", label: "스카이", bg: "bg-[#eef6fd]", border: "border-[#dbeafa]", dot: "bg-[#86b7e4]" },
-  { key: "lavender", label: "라벤더", bg: "bg-[#f4f1fd]", border: "border-[#e6dffa]", dot: "bg-[#a897e0]" },
-  { key: "sage", label: "세이지", bg: "bg-[#f3f8ef]", border: "border-[#e4eedb]", dot: "bg-[#a3bf8c]" },
-  { key: "cream", label: "크림", bg: "bg-[#fdf8f0]", border: "border-[#f2e7d6]", dot: "bg-[#d8bd93]" },
-  { key: "aqua", label: "아쿠아", bg: "bg-[#eefaf9]", border: "border-[#d8efed]", dot: "bg-[#7fcbc6]" },
-  { key: "lilac", label: "라일락", bg: "bg-[#fbf0fa]", border: "border-[#f4ddf1]", dot: "bg-[#cf9ccb]" },
+  { key: "rose", label: "로즈", bg: "bg-[#faf4f5]", border: "border-[#f1e5e8]", dot: "bg-[#e8a3b3]" },
+  { key: "peach", label: "피치", bg: "bg-[#f9f4f0]", border: "border-[#eee4da]", dot: "bg-[#eab185]" },
+  { key: "lemon", label: "레몬", bg: "bg-[#f8f7ee]", border: "border-[#e7e4d0]", dot: "bg-[#dcc464]" },
+  { key: "mint", label: "민트", bg: "bg-[#f1f7f4]", border: "border-[#dee9e4]", dot: "bg-[#7cc9a8]" },
+  { key: "sky", label: "스카이", bg: "bg-[#f2f6f9]", border: "border-[#e3eaf2]", dot: "bg-[#86b7e4]" },
+  { key: "lavender", label: "라벤더", bg: "bg-[#f6f4fa]", border: "border-[#e9e6f3]", dot: "bg-[#a897e0]" },
+  { key: "sage", label: "세이지", bg: "bg-[#f3f6f1]", border: "border-[#e4e9e0]", dot: "bg-[#a3bf8c]" },
+  { key: "cream", label: "크림", bg: "bg-[#faf7f3]", border: "border-[#ebe5dd]", dot: "bg-[#d8bd93]" },
+  { key: "aqua", label: "아쿠아", bg: "bg-[#f1f7f7]", border: "border-[#dee9e8]", dot: "bg-[#7fcbc6]" },
+  { key: "lilac", label: "라일락", bg: "bg-[#f8f3f8]", border: "border-[#eee3ed]", dot: "bg-[#cf9ccb]" },
 ];
 
 const BY_KEY = new Map(PASTELS.map((pastel) => [pastel.key, pastel]));

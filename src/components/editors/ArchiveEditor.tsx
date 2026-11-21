@@ -205,7 +205,7 @@ function ArchiveEditorInner({
           value={form.title}
           onChange={(event) => patch("title", event.target.value)}
           placeholder="제목"
-          className="border-0 border-b border-paper-300 bg-transparent px-0 text-[18px] font-medium focus:ring-0"
+          className="border-0 border-b border-paper-300 bg-transparent px-0 text-[calc(18px*var(--fs))] font-medium focus:ring-0"
         />
 
         <div className="flex flex-wrap gap-1.5">
@@ -227,7 +227,7 @@ function ArchiveEditorInner({
         </div>
 
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-[14px] text-ink-400">폴더</span>
+          <span className="text-[calc(14px*var(--fs))] text-ink-400">폴더</span>
           <FolderChips folders={folders} selected={folder} onSelect={setFolder} onCreate={(name, emoji) => addFolder(name, emoji)} compact />
         </div>
 
@@ -281,13 +281,13 @@ function ArchiveEditorInner({
             <button
               type="button"
               onClick={() => setPreview((current) => !current)}
-              className={cn("text-[14px]", preview ? "text-accent-600" : "text-ink-400 hover:text-ink-600")}
+              className={cn("text-[calc(14px*var(--fs))]", preview ? "text-accent-600" : "text-ink-400 hover:text-ink-600")}
             >
               {preview ? "편집으로" : "미리보기"}
             </button>
           </div>
           {preview ? (
-            <div className="doc-body card-quiet max-h-[32vh] overflow-y-auto px-4 py-3 text-[15.5px] text-ink-700">
+            <div className="doc-body card-quiet max-h-[32vh] overflow-y-auto px-4 py-3 text-[calc(15.5px*var(--fs))] text-ink-700">
               {renderMarkdown(form.body)}
             </div>
           ) : (

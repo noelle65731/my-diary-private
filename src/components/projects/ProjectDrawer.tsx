@@ -101,7 +101,7 @@ export function ProjectDrawer({
             <button
               type="button"
               onClick={() => setIconOpen((open) => !open)}
-              className="flex h-7 w-7 flex-none items-center justify-center overflow-hidden rounded-lg bg-paper-200 text-[16px] transition hover:bg-paper-300"
+              className="flex h-7 w-7 flex-none items-center justify-center overflow-hidden rounded-lg bg-paper-200 text-[calc(16px*var(--fs))] transition hover:bg-paper-300"
               aria-label="프로젝트 아이콘 바꾸기"
               title="아이콘 바꾸기"
             >
@@ -153,7 +153,7 @@ export function ProjectDrawer({
         <div className="space-y-4">
           {/* 프로젝트 색 — 자동 배정된 파스텔을 직접 바꿀 수 있습니다. */}
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="mr-1 text-[13.5px] text-ink-400">색</span>
+            <span className="mr-1 text-[calc(13.5px*var(--fs))] text-ink-400">색</span>
             {PASTELS.map((pastel) => {
               const active = chosenOf(project.id) === pastel.key;
               return (
@@ -176,21 +176,21 @@ export function ProjectDrawer({
             <button
               type="button"
               onClick={() => setColor(project.id, null)}
-              className="ml-1 rounded-full bg-paper-200 px-2 py-[2px] text-[12.5px] text-ink-500 transition hover:bg-paper-300"
+              className="ml-1 rounded-full bg-paper-200 px-2 py-[2px] text-[calc(12.5px*var(--fs))] text-ink-500 transition hover:bg-paper-300"
             >
               자동
             </button>
-            <span className="text-[12.5px] text-ink-400">{pastelOf(project.id).label}</span>
+            <span className="text-[calc(12.5px*var(--fs))] text-ink-400">{pastelOf(project.id).label}</span>
           </div>
 
           {project.memo ? (
-            <p className="rounded-xl bg-paper-100/70 px-3 py-2 text-[15px] leading-relaxed text-ink-600">
+            <p className="rounded-xl bg-paper-100/70 px-3 py-2 text-[calc(15px*var(--fs))] leading-relaxed text-ink-600">
               <RichText spans={project.memoRich} value={project.memo} />
             </p>
           ) : null}
 
           <div>
-            <div className="mb-1 flex items-center justify-between text-[14px] text-ink-500">
+            <div className="mb-1 flex items-center justify-between text-[calc(14px*var(--fs))] text-ink-500">
               <span>
                 완료 {done} / 전체 {tasks.length}
               </span>
@@ -225,7 +225,7 @@ export function ProjectDrawer({
                 type="button"
                 onClick={() => void update("projects", project.id, { category })}
                 className={cn(
-                  "rounded-full px-2 py-[2px] text-[13.5px] font-medium transition",
+                  "rounded-full px-2 py-[2px] text-[calc(13.5px*var(--fs))] font-medium transition",
                   project.category === category ? "bg-ink-900 text-white" : "bg-paper-200 text-ink-500 hover:bg-paper-300/80 hover:text-ink-800",
                 )}
                 aria-pressed={project.category === category}
@@ -238,9 +238,9 @@ export function ProjectDrawer({
                 type="button"
                 onClick={() => setNewCategory("")}
                 aria-label="분류 새로 추가"
-                className="inline-flex h-6 items-center gap-0.5 rounded-full border border-dashed border-paper-400 px-2 text-[13px] text-ink-500 transition hover:border-ink-500 hover:text-ink-900"
+                className="inline-flex h-6 items-center gap-0.5 rounded-full border border-dashed border-paper-400 px-2 text-[calc(13px*var(--fs))] text-ink-500 transition hover:border-ink-500 hover:text-ink-900"
               >
-                <span className="text-[14px] leading-none">+</span> 분류
+                <span className="text-[calc(14px*var(--fs))] leading-none">+</span> 분류
               </button>
             ) : (
               <input
@@ -261,7 +261,7 @@ export function ProjectDrawer({
                 onBlur={() => setNewCategory(null)}
                 placeholder="새 분류 이름"
                 aria-label="새 분류 이름"
-                className="input h-6 w-[7rem] py-0 text-[13.5px]"
+                className="input h-6 w-[7rem] py-0 text-[calc(13.5px*var(--fs))]"
               />
             )}
           </div>
@@ -280,7 +280,7 @@ export function ProjectDrawer({
           {/* A16: 프로젝트 수정 창에 들어가지 않고 바로 바꾸는 속성들 */}
           <div className="space-y-1.5 rounded-xl border border-paper-300/80 bg-paper-50/60 px-2.5 py-2">
             <div className="flex flex-wrap items-center gap-1">
-              <span className="mr-1 text-[13px] text-ink-400">상태</span>
+              <span className="mr-1 text-[calc(13px*var(--fs))] text-ink-400">상태</span>
               {(["미완료", "대기 중", "완료", "취소"] as const).map((status) => (
                 <button
                   key={status}
@@ -292,7 +292,7 @@ export function ProjectDrawer({
                     })
                   }
                   className={cn(
-                    "rounded-full px-2 py-[2px] text-[13px] font-medium transition",
+                    "rounded-full px-2 py-[2px] text-[calc(13px*var(--fs))] font-medium transition",
                     project.status === status ? "bg-ink-900 text-white" : "bg-white text-ink-500 ring-1 ring-paper-300 hover:text-ink-800",
                   )}
                   aria-pressed={project.status === status}
@@ -302,7 +302,7 @@ export function ProjectDrawer({
               ))}
             </div>
             <div className="flex flex-wrap items-center gap-1">
-              <span className="mr-1 text-[13px] text-ink-400">표시</span>
+              <span className="mr-1 text-[calc(13px*var(--fs))] text-ink-400">표시</span>
               {([
                 { key: "urgent", label: "긴급", on: project.urgent },
                 { key: "important", label: "중요", on: project.important },
@@ -314,7 +314,7 @@ export function ProjectDrawer({
                   type="button"
                   onClick={() => void update("projects", project.id, { [flag.key]: !flag.on })}
                   className={cn(
-                    "rounded-full px-2 py-[2px] text-[13px] font-medium transition",
+                    "rounded-full px-2 py-[2px] text-[calc(13px*var(--fs))] font-medium transition",
                     flag.on ? "bg-ink-900 text-white" : "bg-white text-ink-500 ring-1 ring-paper-300 hover:text-ink-800",
                   )}
                   aria-pressed={flag.on}
@@ -324,20 +324,20 @@ export function ProjectDrawer({
               ))}
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
-              <span className="text-[13px] text-ink-400">날짜</span>
+              <span className="text-[calc(13px*var(--fs))] text-ink-400">날짜</span>
               <input
                 type="date"
                 value={project.date ?? ""}
                 onChange={(event) => void update("projects", project.id, { date: event.target.value || null })}
-                className="input h-7 w-[8.4rem] py-0 text-[13px]"
+                className="input h-7 w-[8.4rem] py-0 text-[calc(13px*var(--fs))]"
                 aria-label="프로젝트 날짜"
               />
-              <span className="text-[13px] text-ink-400">마감</span>
+              <span className="text-[calc(13px*var(--fs))] text-ink-400">마감</span>
               <input
                 type="date"
                 value={project.due ?? ""}
                 onChange={(event) => void update("projects", project.id, { due: event.target.value || null })}
-                className="input h-7 w-[8.4rem] py-0 text-[13px]"
+                className="input h-7 w-[8.4rem] py-0 text-[calc(13px*var(--fs))]"
                 aria-label="프로젝트 마감일"
               />
             </div>
@@ -380,21 +380,21 @@ export function ProjectDrawer({
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
               placeholder="할 일을 적고 Enter"
-              className="min-w-0 flex-1 border-none bg-transparent px-1 py-1 text-[15px] outline-none placeholder:text-ink-400"
+              className="min-w-0 flex-1 border-none bg-transparent px-1 py-1 text-[calc(15px*var(--fs))] outline-none placeholder:text-ink-400"
             />
             <button type="submit" disabled={!draft.trim() || busy} className="btn-primary btn-xs flex-none whitespace-nowrap">
               추가
             </button>
           </form>
 
-          <div className="flex flex-wrap gap-1.5 text-[13.5px] text-ink-400">
+          <div className="flex flex-wrap gap-1.5 text-[calc(13.5px*var(--fs))] text-ink-400">
             {project.due ? <span>마감 {project.due}</span> : null}
             {project.hidden ? <span className="chip bg-paper-200 text-ink-500">숨김</span> : null}
             {project.history ? <span className="chip bg-paper-200 text-ink-500">History</span> : null}
           </div>
 
           {tasks.length > 0 && tasks.every((task) => task.status === "완료") ? (
-            <p className="flex items-center gap-1 text-[14px] text-sage-500">
+            <p className="flex items-center gap-1 text-[calc(14px*var(--fs))] text-sage-500">
               <CheckIcon size={12} /> 모든 할 일을 마쳤습니다.
             </p>
           ) : null}

@@ -28,6 +28,7 @@ import {
 } from "@/lib/types";
 import { coerceSpans } from "@/lib/richtext";
 import { differingKeys } from "@/lib/diff";
+import { applyRoutineNow } from "@/lib/routine-now";
 
 type Patch = Record<string, unknown>;
 
@@ -331,7 +332,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       setData({
         calendar: normalizeList(result.data?.calendar ?? []),
         projects: normalizeList(result.data?.projects ?? []),
-        routines: normalizeList(result.data?.routines ?? []),
+        routines: applyRoutineNow(normalizeList(result.data?.routines ?? [])),
         binder: normalizeList(result.data?.binder ?? []),
         archive: normalizeList(result.data?.archive ?? []),
       });

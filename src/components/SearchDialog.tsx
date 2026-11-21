@@ -136,7 +136,7 @@ export function SearchDialog() {
           />
         </div>
         <div className="mt-2 flex items-center justify-between gap-2">
-          <label className="flex items-center gap-1.5 text-[14px] text-ink-500">
+          <label className="flex items-center gap-1.5 text-[calc(14px*var(--fs))] text-ink-500">
             <input
               type="checkbox"
               checked={includeHidden}
@@ -145,13 +145,13 @@ export function SearchDialog() {
             />
             숨긴 항목까지 검색
           </label>
-          <span className="text-[14px] text-ink-400">↑↓ 이동 · Enter 열기</span>
+          <span className="text-[calc(14px*var(--fs))] text-ink-400">↑↓ 이동 · Enter 열기</span>
         </div>
       </div>
 
       <div className="max-h-[52vh] overflow-y-auto py-1">
         {results.length === 0 ? (
-          <p className="px-4 py-10 text-center text-[15px] text-ink-500">
+          <p className="px-4 py-10 text-center text-[calc(15px*var(--fs))] text-ink-500">
             {query.trim() ? "찾는 기록이 없습니다." : "최근 기록이 없습니다."}
           </p>
         ) : (
@@ -166,15 +166,15 @@ export function SearchDialog() {
                 index === cursor ? "bg-paper-200/70" : "hover:bg-paper-100",
               )}
             >
-              <span className="mt-0.5 flex-none rounded-md border border-paper-300 bg-white/80 px-1.5 py-0.5 text-[13px] font-medium text-ink-500">
+              <span className="mt-0.5 flex-none rounded-md border border-paper-300 bg-white/80 px-1.5 py-0.5 text-[calc(13px*var(--fs))] font-medium text-ink-500">
                 {result.badge}
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-[15.5px] font-medium text-ink-900">{result.item.title}</span>
-                {result.snippet ? <span className="mt-0.5 block truncate text-[14px] text-ink-500">{result.snippet}</span> : null}
+                <span className="block truncate text-[calc(15.5px*var(--fs))] font-medium text-ink-900">{result.item.title}</span>
+                {result.snippet ? <span className="mt-0.5 block truncate text-[calc(14px*var(--fs))] text-ink-500">{result.snippet}</span> : null}
               </span>
               {result.date ? (
-                <span className="flex-none text-[14px] text-ink-400">
+                <span className="flex-none text-[calc(14px*var(--fs))] text-ink-400">
                   {formatShort(result.date)} {weekdayKo(result.date)}
                 </span>
               ) : null}

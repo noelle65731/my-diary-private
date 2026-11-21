@@ -119,21 +119,21 @@ export function BinderTab() {
     <div>
       <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
         <div className="min-w-0">
-          <p className="text-[13.5px] text-ink-400">
+          <p className="text-[calc(13.5px*var(--fs))] text-ink-400">
             {view === "notes"
               ? `노트 ${notes.length}개 · ${formatMonthKo(cursor)}`
               : view === "weekly"
                 ? `${weekStart.slice(0, 4)}년 ${isoWeekNumber(weekStart)}주차`
                 : `${formatFullKo(cursor)}`}
           </p>
-          <h1 className="mt-1.5 text-[20px] font-semibold leading-none tracking-[-0.02em] text-ink-900 md:text-[21px]">
+          <h1 className="mt-1.5 text-[calc(20px*var(--fs))] font-semibold leading-none tracking-[-0.02em] text-ink-900 md:text-[calc(21px*var(--fs))]">
             {view === "notes"
               ? "Notes"
               : view === "weekly"
                 ? `${weekStart.slice(0, 4)}년 ${isoWeekNumber(weekStart)}주차`
                 : `Daily`}
           </h1>
-          {view === "weekly" ? <p className="mt-1 text-[14px] text-ink-400">일기 {diaries.length}편</p> : null}
+          {view === "weekly" ? <p className="mt-1 text-[calc(14px*var(--fs))] text-ink-400">일기 {diaries.length}편</p> : null}
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -165,7 +165,7 @@ export function BinderTab() {
             >
               <ChevronLeftIcon size={14} />
             </button>
-            <button type="button" onClick={() => setCursor(todayISO())} className="px-2 py-1 text-[15px] font-medium text-ink-700 hover:text-ink-900">
+            <button type="button" onClick={() => setCursor(todayISO())} className="px-2 py-1 text-[calc(15px*var(--fs))] font-medium text-ink-700 hover:text-ink-900">
               오늘
             </button>
             <button
@@ -187,8 +187,8 @@ export function BinderTab() {
         </div>
       </div>
 
-      {view === "daily" ? <div className="mt-2 text-[14px] text-ink-400">{formatFullKo(cursor)}</div> : null}
-      {view === "notes" ? <div className="mt-2 text-[14px] text-ink-400">{formatMonthKo(cursor)}</div> : null}
+      {view === "daily" ? <div className="mt-2 text-[calc(14px*var(--fs))] text-ink-400">{formatFullKo(cursor)}</div> : null}
+      {view === "notes" ? <div className="mt-2 text-[calc(14px*var(--fs))] text-ink-400">{formatMonthKo(cursor)}</div> : null}
 
       {view === "weekly" ? (
         <div className="relative mt-3 grid gap-6 lg:grid-cols-2 lg:gap-0">
@@ -269,8 +269,8 @@ function SpreadHeader({ label, start }: { label: string; start: string }) {
   return (
     <div className="flex items-center gap-2 border-b border-paper-400 pb-2">
       <span className="h-[7px] w-[7px] rounded-full border border-ink-400" />
-      <span className="text-[15px] font-semibold text-ink-900">{label}</span>
-      <span className="ml-auto text-[13px] tabular-nums text-ink-400">
+      <span className="text-[calc(15px*var(--fs))] font-semibold text-ink-900">{label}</span>
+      <span className="ml-auto text-[calc(13px*var(--fs))] tabular-nums text-ink-400">
         {formatShort(start)} – {formatShort(addDaysISO(start, 6))}
       </span>
     </div>
@@ -421,7 +421,7 @@ function DiaryRow({
       >
         <span
           className={cn(
-            "flex h-9 min-w-9 items-center justify-center rounded-full px-1 text-[26px] font-semibold leading-none tabular-nums tracking-tight",
+            "flex h-9 min-w-9 items-center justify-center rounded-full px-1 text-[calc(26px*var(--fs))] font-semibold leading-none tabular-nums tracking-tight",
             isToday ? "bg-ink-900 text-white" : holiday || dow === 0 ? "text-red-500" : dow === 6 ? "text-blue-600" : "text-ink-900",
           )}
         >
@@ -429,14 +429,14 @@ function DiaryRow({
         </span>
         <span
           className={cn(
-            "mt-0.5 text-[15px] font-medium",
+            "mt-0.5 text-[calc(15px*var(--fs))] font-medium",
             holiday ? "text-red-500" : dow === 6 ? "text-blue-500" : dow === 0 ? "text-red-400" : "text-ink-500",
           )}
         >
           {weekdayKo(day)}
         </span>
         {holiday ? (
-          <span className="max-w-[3.4rem] break-keep text-center text-[12px] leading-[1.2] text-red-500" title={holiday}>
+          <span className="max-w-[3.4rem] break-keep text-center text-[calc(12px*var(--fs))] leading-[1.2] text-red-500" title={holiday}>
             {holiday}
           </span>
         ) : null}
@@ -478,7 +478,7 @@ function DiaryRow({
             placeholder="바로 적어 보세요"
             className="binder-input min-h-[4.4rem]"
           />
-          <div className="mt-1 flex items-center justify-between text-[12px] text-ink-400">
+          <div className="mt-1 flex items-center justify-between text-[calc(12px*var(--fs))] text-ink-400">
             <span>{saved === "saving" ? "저장 중…" : saved === "saved" ? "저장됨" : "자동 저장 (잠시 멈추면)"}</span>
             <button
               type="button"
@@ -507,11 +507,11 @@ function DiaryRow({
           {entry ? (
             <>
               {preview.map((line, index) => (
-                <p key={index} className="mt-0.5 line-clamp-1 text-[14px] leading-[1.6] text-ink-600">
+                <p key={index} className="mt-0.5 line-clamp-1 text-[calc(14px*var(--fs))] leading-[1.6] text-ink-600">
                   {truncate(line, 90)}
                 </p>
               ))}
-              <span className="mt-1 hidden items-center gap-2 text-[12px] text-ink-400 group-hover:flex">
+              <span className="mt-1 hidden items-center gap-2 text-[calc(12px*var(--fs))] text-ink-400 group-hover:flex">
                 <span>이어 쓰기</span>
                 <button
                   type="button"
@@ -527,7 +527,7 @@ function DiaryRow({
               </span>
             </>
           ) : (
-            <span className="flex h-full min-h-[3.8rem] items-center text-[13.5px] text-ink-400 opacity-0 transition group-hover:opacity-100">
+            <span className="flex h-full min-h-[3.8rem] items-center text-[calc(13.5px*var(--fs))] text-ink-400 opacity-0 transition group-hover:opacity-100">
               + 눌러서 바로 쓰기
             </span>
           )}
@@ -625,8 +625,8 @@ function DailyView({
       <div className="grid gap-3 lg:grid-cols-[1.6fr_1fr]">
         <div className="flex flex-col items-center justify-center rounded-2xl border border-paper-300 px-6 py-14 text-center">
           <BookIcon size={26} className="text-ink-300" />
-          <p className="mt-3 text-[16px] font-medium text-ink-900">{formatFullKo(day)}</p>
-          <p className="mt-1 text-[15px] text-ink-500">{holiday ? `${holiday} · ` : ""}아직 기록이 없습니다.</p>
+          <p className="mt-3 text-[calc(16px*var(--fs))] font-medium text-ink-900">{formatFullKo(day)}</p>
+          <p className="mt-1 text-[calc(15px*var(--fs))] text-ink-500">{holiday ? `${holiday} · ` : ""}아직 기록이 없습니다.</p>
           <div className="mt-3 flex gap-2">
             <button type="button" onClick={() => onCreate(day, "일기")} className="btn-primary btn-xs">
               이 날 일기 쓰기
@@ -636,7 +636,7 @@ function DailyView({
             </button>
           </div>
           {prevEntry ? (
-            <button type="button" onClick={() => onOpenEntry(prevEntry.id)} className="mt-5 max-w-sm text-left text-[14px] text-ink-400 hover:text-ink-700">
+            <button type="button" onClick={() => onOpenEntry(prevEntry.id)} className="mt-5 max-w-sm text-left text-[calc(14px*var(--fs))] text-ink-400 hover:text-ink-700">
               지난 기록 · {formatShort(prevEntry.date ?? "")} {prevEntry.title}
             </button>
           ) : null}
@@ -651,8 +651,8 @@ function DailyView({
       <div className="overflow-hidden rounded-2xl border border-paper-300">
         <div className="flex items-center justify-between gap-2 border-b border-paper-300 px-4 py-2">
           <div className="flex items-center gap-1.5">
-            <span className="rounded-full bg-paper-200 px-2 py-0.5 text-[14px] text-ink-600">{entry.kind}</span>
-            <span className="text-[13.5px] text-ink-400">
+            <span className="rounded-full bg-paper-200 px-2 py-0.5 text-[calc(14px*var(--fs))] text-ink-600">{entry.kind}</span>
+            <span className="text-[calc(13.5px*var(--fs))] text-ink-400">
               {formatFullKo(day)}
               {holiday ? ` · ${holiday}` : ""}
             </span>
@@ -669,11 +669,11 @@ function DailyView({
             <button
               type="button"
               onClick={() => setPreview((current) => !current)}
-              className={cn("rounded px-1.5 py-0.5 text-[14px]", preview ? "text-ink-900" : "text-ink-400 hover:text-ink-600")}
+              className={cn("rounded px-1.5 py-0.5 text-[calc(14px*var(--fs))]", preview ? "text-ink-900" : "text-ink-400 hover:text-ink-600")}
             >
               {preview ? "편집" : "미리보기"}
             </button>
-            <button type="button" onClick={() => setShowMeta((current) => !current)} className="rounded px-1.5 py-0.5 text-[14px] text-ink-400 hover:text-ink-600">
+            <button type="button" onClick={() => setShowMeta((current) => !current)} className="rounded px-1.5 py-0.5 text-[calc(14px*var(--fs))] text-ink-400 hover:text-ink-600">
               태그
             </button>
           </div>
@@ -688,7 +688,7 @@ function DailyView({
             }}
             onBlur={flush}
             placeholder="오늘의 제목"
-            className="w-full border-none bg-transparent px-0 text-[22px] font-semibold tracking-tight text-ink-900 outline-none placeholder:text-ink-300"
+            className="w-full border-none bg-transparent px-0 text-[calc(22px*var(--fs))] font-semibold tracking-tight text-ink-900 outline-none placeholder:text-ink-300"
           />
 
           {showMeta ? (
@@ -700,7 +700,7 @@ function DailyView({
                   schedule();
                 }}
               />
-              <div className="flex flex-wrap gap-1.5 text-[13.5px] text-ink-400">
+              <div className="flex flex-wrap gap-1.5 text-[calc(13.5px*var(--fs))] text-ink-400">
                 <button type="button" onClick={() => void onUpdateField({ archiveFlag: !entry.archiveFlag })} className="chip border border-paper-300">
                   {entry.archiveFlag ? "아카이브 표시 켜짐" : "아카이브에 표시"}
                 </button>
@@ -711,7 +711,7 @@ function DailyView({
 
           <div className="mt-2">
             {preview ? (
-              <div className="doc-body min-h-[320px] text-[16px] text-ink-700">{renderMarkdown(body)}</div>
+              <div className="doc-body min-h-[320px] text-[calc(16px*var(--fs))] text-ink-700">{renderMarkdown(body)}</div>
             ) : (
               <textarea
                 value={body}
@@ -730,12 +730,12 @@ function DailyView({
                   backgroundAttachment: "local",
                   backgroundPosition: "0 1px",
                 }}
-                className="min-h-[360px] w-full resize-y border-none bg-transparent px-0 py-0 text-[16px] text-ink-800 outline-none placeholder:text-ink-300"
+                className="min-h-[360px] w-full resize-y border-none bg-transparent px-0 py-0 text-[calc(16px*var(--fs))] text-ink-800 outline-none placeholder:text-ink-300"
               />
             )}
           </div>
 
-          <div className="flex items-center justify-between border-t border-paper-300 pt-2 text-[13.5px] text-ink-400">
+          <div className="flex items-center justify-between border-t border-paper-300 pt-2 text-[calc(13.5px*var(--fs))] text-ink-400">
             <span>{body.length.toLocaleString()}자</span>
             <span>
               {savedAt && Date.now() - savedAt < 60_000 ? (
@@ -753,17 +753,17 @@ function DailyView({
       <div className="space-y-3">
         {showSchedule ? <DaySchedule events={dayEvents} tasks={dayTasks} /> : null}
         <div className="rounded-2xl border border-paper-300 px-4 py-3">
-          <h3 className="mb-1.5 text-[14.5px] text-ink-500">이 날의 다른 기록</h3>
+          <h3 className="mb-1.5 text-[calc(14.5px*var(--fs))] text-ink-500">이 날의 다른 기록</h3>
           <div className="space-y-1">
             {diaries
               .filter((item) => item.id !== entry.id && item.date === day)
               .map((item) => (
-                <button key={item.id} type="button" onClick={() => onOpenEntry(item.id)} className="block w-full truncate text-left text-[15px] text-ink-600 hover:text-ink-900">
+                <button key={item.id} type="button" onClick={() => onOpenEntry(item.id)} className="block w-full truncate text-left text-[calc(15px*var(--fs))] text-ink-600 hover:text-ink-900">
                   {item.title}
                 </button>
               ))}
             {diaries.filter((item) => item.id !== entry.id && item.date === day).length === 0 ? (
-              <p className="text-[14px] text-ink-400">이 날은 이 일기 한 편만 있습니다.</p>
+              <p className="text-[calc(14px*var(--fs))] text-ink-400">이 날은 이 일기 한 편만 있습니다.</p>
             ) : null}
           </div>
           <button type="button" onClick={() => onWriteNote(day)} className="btn-outline btn-xs mt-2 w-full">
@@ -783,28 +783,28 @@ function DaySchedule({ events, tasks }: { events: CalendarEvent[]; tasks: Projec
   return (
     <div className="flex min-h-0 flex-1 flex-col rounded-2xl border border-paper-300 px-3.5 py-3">
       <div className="flex flex-none items-baseline justify-between gap-2">
-        <h3 className="text-[15px] font-semibold text-ink-900">이 날의 일정 · 할 일</h3>
-        <span className="text-[13px] tabular-nums text-ink-500">
+        <h3 className="text-[calc(15px*var(--fs))] font-semibold text-ink-900">이 날의 일정 · 할 일</h3>
+        <span className="text-[calc(13px*var(--fs))] tabular-nums text-ink-500">
           일정 {events.length} · 할 일 {tasks.length}
         </span>
       </div>
 
-      {total === 0 ? <p className="mt-1 text-[14px] text-ink-500">예정된 일이 없습니다.</p> : null}
+      {total === 0 ? <p className="mt-1 text-[calc(14px*var(--fs))] text-ink-500">예정된 일이 없습니다.</p> : null}
 
       <div className="mt-1.5 min-h-0 flex-1 space-y-2 overflow-y-auto pr-0.5">
         {events.length > 0 ? (
           <section>
-            <p className="mb-1 text-[12.5px] font-medium uppercase tracking-wide text-ink-500">일정</p>
+            <p className="mb-1 text-[calc(12.5px*var(--fs))] font-medium uppercase tracking-wide text-ink-500">일정</p>
             <ul className="space-y-1">
               {events.map((event) => (
-                <li key={event.id} className="flex items-start gap-1.5 text-[14.5px] leading-snug text-ink-700">
+                <li key={event.id} className="flex items-start gap-1.5 text-[calc(14.5px*var(--fs))] leading-snug text-ink-700">
                   <span
                     className={cn(
                       "mt-1.5 h-1.5 w-1.5 flex-none rounded-full",
                       event.allDay ? "bg-sky-500" : "bg-accent-400",
                     )}
                   />
-                  <span className="w-[4.6rem] flex-none text-[13.5px] tabular-nums text-ink-600">
+                  <span className="w-[4.6rem] flex-none text-[calc(13.5px*var(--fs))] tabular-nums text-ink-600">
                     {event.allDay ? "종일" : event.startTime ?? "시간 없음"}
                   </span>
                   <span className={cn("min-w-0 flex-1 break-words", (event.canceled || event.done) && "text-ink-400 line-through")}>
@@ -818,10 +818,10 @@ function DaySchedule({ events, tasks }: { events: CalendarEvent[]; tasks: Projec
 
         {rest.length + done.length > 0 ? (
           <section>
-            <p className="mb-1 text-[12.5px] font-medium uppercase tracking-wide text-ink-500">할 일</p>
+            <p className="mb-1 text-[calc(12.5px*var(--fs))] font-medium uppercase tracking-wide text-ink-500">할 일</p>
             <ul className="space-y-1">
               {[...rest, ...done].map((task) => (
-                <li key={task.id} className="flex items-start gap-1.5 text-[14.5px] leading-snug">
+                <li key={task.id} className="flex items-start gap-1.5 text-[calc(14.5px*var(--fs))] leading-snug">
                   <span
                     className={cn(
                       "mt-1.5 h-1.5 w-1.5 flex-none rounded-full",
@@ -837,16 +837,16 @@ function DaySchedule({ events, tasks }: { events: CalendarEvent[]; tasks: Projec
                     {task.title}
                   </span>
                   {task.status === "대기 중" ? (
-                    <span className="flex-none rounded bg-amber-100 px-1 text-[12px] text-amber-800">대기</span>
+                    <span className="flex-none rounded bg-amber-100 px-1 text-[calc(12px*var(--fs))] text-amber-800">대기</span>
                   ) : null}
                   {task.due && task.due !== task.date ? (
-                    <span className="flex-none text-[12.5px] tabular-nums text-ink-500">마감 {formatShort(task.due)}</span>
+                    <span className="flex-none text-[calc(12.5px*var(--fs))] tabular-nums text-ink-500">마감 {formatShort(task.due)}</span>
                   ) : null}
                 </li>
               ))}
             </ul>
             {done.length > 0 ? (
-              <p className="mt-1 flex items-center gap-1 text-[12.5px] text-sage-500">
+              <p className="mt-1 flex items-center gap-1 text-[calc(12.5px*var(--fs))] text-sage-500">
                 <CheckIcon size={11} /> 완료 {done.length} · 대기 {waiting.length}
               </p>
             ) : null}
@@ -880,7 +880,7 @@ function NotesView({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <select value={month} onChange={(event) => onMonth(event.target.value)} className="input w-auto py-1.5 text-[15px]">
+        <select value={month} onChange={(event) => onMonth(event.target.value)} className="input w-auto py-1.5 text-[calc(15px*var(--fs))]">
           <option value="all">전체 기간</option>
           {monthOptions().map((option) => (
             <option key={option.value} value={option.value}>
@@ -892,9 +892,9 @@ function NotesView({
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="노트 검색"
-          className="input w-auto min-w-[9rem] flex-1 py-1.5 text-[15px] sm:max-w-[16rem]"
+          className="input w-auto min-w-[9rem] flex-1 py-1.5 text-[calc(15px*var(--fs))] sm:max-w-[16rem]"
         />
-        <span className="ml-auto text-[13.5px] text-ink-400">{filtered.length}개</span>
+        <span className="ml-auto text-[calc(13.5px*var(--fs))] text-ink-400">{filtered.length}개</span>
       </div>
 
       {filtered.length === 0 ? (
@@ -920,19 +920,19 @@ function NotesView({
                 className="flex flex-col rounded-2xl border border-paper-300 px-3.5 py-3 text-left transition hover:border-paper-400"
               >
                 <div className="flex items-start justify-between gap-2">
-                  <p className="line-clamp-1 text-[15.5px] font-medium text-ink-900">{note.title}</p>
+                  <p className="line-clamp-1 text-[calc(15.5px*var(--fs))] font-medium text-ink-900">{note.title}</p>
                   {note.favorite ? <StarIcon size={13} filled className="flex-none text-amber-400" /> : null}
                 </div>
-                <p className="mt-0.5 text-[13.5px] text-ink-400">
+                <p className="mt-0.5 text-[calc(13.5px*var(--fs))] text-ink-400">
                   {note.date ? `${formatShort(note.date)} ${weekdayKo(note.date)}` : "날짜 없음"}
                   {note.tags.length > 0 ? ` · ${note.tags.map((tag) => `#${tag}`).join(" ")}` : ""}
                 </p>
                 <div className="mt-1.5 space-y-0.5">
                   {lines.length === 0 ? (
-                    <p className="text-[14px] text-ink-300">내용 없음</p>
+                    <p className="text-[calc(14px*var(--fs))] text-ink-300">내용 없음</p>
                   ) : (
                     lines.map((line, index) => (
-                      <p key={index} className="line-clamp-1 text-[14px] leading-relaxed text-ink-500">
+                      <p key={index} className="line-clamp-1 text-[calc(14px*var(--fs))] leading-relaxed text-ink-500">
                         {line}
                       </p>
                     ))

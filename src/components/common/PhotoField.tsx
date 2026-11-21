@@ -35,7 +35,7 @@ export function FolderChips({
 
   return (
     <>
-      <div className={cn("flex flex-wrap items-center gap-1.5", compact && "text-[14px]")}>
+      <div className={cn("flex flex-wrap items-center gap-1.5", compact && "text-[calc(14px*var(--fs))]")}>
         {folders.map((folder) => (
           <button
             key={folder.id}
@@ -43,7 +43,7 @@ export function FolderChips({
             onClick={() => onSelect?.(selected === folder.name ? null : folder.name)}
             aria-pressed={selected === folder.name}
             className={cn(
-              "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[14px] transition",
+              "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[calc(14px*var(--fs))] transition",
               selected === folder.name ? "bg-ink-900 text-white" : "bg-paper-200/80 text-ink-600 hover:bg-paper-300/60",
             )}
           >
@@ -54,7 +54,7 @@ export function FolderChips({
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="inline-flex items-center gap-1 rounded-full border border-dashed border-paper-400 px-2.5 py-1 text-[14px] text-ink-400 transition hover:border-ink-300 hover:text-ink-700"
+          className="inline-flex items-center gap-1 rounded-full border border-dashed border-paper-400 px-2.5 py-1 text-[calc(14px*var(--fs))] text-ink-400 transition hover:border-ink-300 hover:text-ink-700"
         >
           <PlusIcon size={11} /> 폴더
         </button>
@@ -85,7 +85,7 @@ export function FolderChips({
                   onClick={() => setEmoji(item)}
                   aria-pressed={emoji === item}
                   className={cn(
-                    "flex h-8 w-8 items-center justify-center rounded-lg text-[16px] transition",
+                    "flex h-8 w-8 items-center justify-center rounded-lg text-[calc(16px*var(--fs))] transition",
                     emoji === item ? "bg-ink-900" : "bg-paper-200/70 hover:bg-paper-300/70",
                   )}
                 >
@@ -136,7 +136,7 @@ export function PhotoGallery({ photos, className }: { photos: string[]; classNam
           // eslint-disable-next-line @next/next/no-img-element
           <img src={src} alt="" className="h-full w-full object-cover" loading="lazy" />
         ) : (
-          <span className="flex h-full w-full items-center justify-center bg-paper-200 text-[13px] text-ink-400">사진</span>
+          <span className="flex h-full w-full items-center justify-center bg-paper-200 text-[calc(13px*var(--fs))] text-ink-400">사진</span>
         );
         return linkable ? (
           <a
@@ -148,7 +148,7 @@ export function PhotoGallery({ photos, className }: { photos: string[]; classNam
             title={value}
           >
             {inner}
-            <span className="absolute inset-x-0 bottom-0 hidden bg-ink-900/60 px-1 py-0.5 text-center text-[11.5px] text-white group-hover:block">
+            <span className="absolute inset-x-0 bottom-0 hidden bg-ink-900/60 px-1 py-0.5 text-center text-[calc(11.5px*var(--fs))] text-white group-hover:block">
               열기
             </span>
           </a>
@@ -267,7 +267,7 @@ export function PhotoEditor({ photos, onChange }: { photos: string[]; onChange: 
           }}
           placeholder="사진 주소 (https://…)"
           aria-label="사진 주소"
-          className="input h-8 min-w-[10rem] flex-1 py-1 text-[15px]"
+          className="input h-8 min-w-[10rem] flex-1 py-1 text-[calc(15px*var(--fs))]"
         />
         <button type="button" onClick={addUrl} className="btn-outline btn-xs">
           주소 추가
@@ -283,15 +283,15 @@ export function PhotoEditor({ photos, onChange }: { photos: string[]; onChange: 
           onChange={(event) => void addFile(event.target.files?.[0])}
         />
       </div>
-      {error ? <p className={cn("text-[14px]", error.startsWith("미리보기") ? "text-ink-400" : "text-rose-500")}>{error}</p> : null}
-      <p className="text-[13.5px] text-ink-400">
+      {error ? <p className={cn("text-[calc(14px*var(--fs))]", error.startsWith("미리보기") ? "text-ink-400" : "text-rose-500")}>{error}</p> : null}
+      <p className="text-[calc(13.5px*var(--fs))] text-ink-400">
         고른 사진은 화면에서 1600px·JPEG로 줄여 Notion에 업로드되고, 그 기록의 사진으로 남습니다. 다시 열어도 같은 사진이 보입니다.
       </p>
       <PhotoGallery photos={photos} />
       {photos.length > 0 ? (
         <div className="space-y-1">
           {photos.map((photo, index) => (
-            <div key={`${photo}-${index}`} className="flex items-center gap-1.5 text-[14px] text-ink-400">
+            <div key={`${photo}-${index}`} className="flex items-center gap-1.5 text-[calc(14px*var(--fs))] text-ink-400">
               <span className="min-w-0 flex-1 truncate">
                 {photo.startsWith("upload:")
                   ? "방금 올린 사진 (Notion에 저장됨)"

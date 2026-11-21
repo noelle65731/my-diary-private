@@ -60,7 +60,7 @@ export function ModeChips({ mode, onChange, categories, showCustom, onAddCategor
           onClick={() => onChange(item.value)}
           aria-label={item.label}
           className={cn(
-            "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[15px] font-medium transition",
+            "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[calc(15px*var(--fs))] font-medium transition",
             mode === item.value ? "bg-ink-900 text-white" : "bg-paper-200 text-ink-500 hover:bg-paper-300/70 hover:text-ink-800",
           )}
         >
@@ -73,7 +73,7 @@ export function ModeChips({ mode, onChange, categories, showCustom, onAddCategor
         const active = mode === value;
         if (removeTarget === category) {
           return (
-            <span key={category} className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-1 text-[14.5px] font-medium text-rose-600 ring-1 ring-rose-200">
+            <span key={category} className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-1 text-[calc(14.5px*var(--fs))] font-medium text-rose-600 ring-1 ring-rose-200">
               {category} 지우기
               <button
                 type="button"
@@ -86,7 +86,7 @@ export function ModeChips({ mode, onChange, categories, showCustom, onAddCategor
               >
                 ×
               </button>
-              <button type="button" onClick={() => setRemoveTarget(null)} className="text-[13px] text-ink-400 hover:text-ink-700" aria-label="지우기 취소">
+              <button type="button" onClick={() => setRemoveTarget(null)} className="text-[calc(13px*var(--fs))] text-ink-400 hover:text-ink-700" aria-label="지우기 취소">
                 취소
               </button>
             </span>
@@ -108,7 +108,7 @@ export function ModeChips({ mode, onChange, categories, showCustom, onAddCategor
             }}
             title={onRemoveCategory ? "길게 누르면 이 분류를 지울 수 있어요" : undefined}
             className={cn(
-              "rounded-full px-3 py-1 text-[15px] font-medium transition",
+              "rounded-full px-3 py-1 text-[calc(15px*var(--fs))] font-medium transition",
               active ? "bg-ink-900 text-white" : "bg-paper-200 text-ink-500 hover:bg-paper-300/70 hover:text-ink-800",
             )}
           >
@@ -121,7 +121,7 @@ export function ModeChips({ mode, onChange, categories, showCustom, onAddCategor
           type="button"
           onClick={() => onChange("custom")}
           className={cn(
-            "rounded-full px-3 py-1 text-[15px] font-medium transition",
+            "rounded-full px-3 py-1 text-[calc(15px*var(--fs))] font-medium transition",
             mode === "custom" ? "bg-ink-900 text-white" : "bg-paper-200 text-ink-500 hover:bg-paper-300/70 hover:text-ink-800",
           )}
         >
@@ -142,7 +142,7 @@ export function ModeChips({ mode, onChange, categories, showCustom, onAddCategor
               onBlur={submit}
               placeholder="분류 이름"
               aria-label="새 분류 이름"
-              className="w-[6.5rem] bg-transparent text-[14.5px] outline-none"
+              className="w-[6.5rem] bg-transparent text-[calc(14.5px*var(--fs))] outline-none"
             />
           </span>
         ) : (

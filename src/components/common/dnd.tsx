@@ -56,6 +56,11 @@ export interface DragSourceOptions {
   /** Badge text for the drop target under the pointer, recalculated while moving. */
   getHint?: (target: DropTarget, point: DragPoint) => string | null;
   onStart?: () => void;
+  /**
+   * A18: zones this drag should look through. A timed event dropped on the 종일 줄
+   * lands on the day cell under the bars rather than on the bar that covers it.
+   */
+  skipZones?: string[];
 }
 
 type DragFinish = (target: DropTarget | null, point: DragPoint) => void;
@@ -91,6 +96,23 @@ function pickElement(x: number, y: number): Element | null {
   const seam = (window as unknown as { __dndPick?: (x: number, y: number) => Element | null }).__dndPick;
   if (typeof seam === "function") return seam(x, y);
   return document.elementFromPoint(x, y);
+}
+
+/**
+ * A18: the zone under the pointer, skipping zones this drag looks through.
+ * A 종일 막대가 날짜 칸을 덮고 있어도, 시간표에서 끌어온 일정은 그 아래 종일 칸에 놓입니다.
+ */
+function pickZone(x: number, y: number, skip: string[]): HTMLElement | null {
+  const first = pickElement(x, y);
+  const direct = first instanceof Element ? first.closest<HTMLElement>("[data-drop-zone]") : null;
+  if (direct && !skip.includes(direct.dataset.dropZone ?? "")) return direct;
+  if (skip.length === 0) return direct;
+  if (typeof document.elementsFromPoint !== "function") return null;
+  for (const element of document.elementsFromPoint(x, y)) {
+    const zone = element.closest?.<HTMLElement>("[data-drop-zone]");
+    if (zone && !skip.includes(zone.dataset.dropZone ?? "")) return zone;
+  }
+  return null;
 }
 
 /** Reads the `data-drop-*` attributes of a zone element. */
@@ -178,8 +200,7 @@ export function DndProvider({ children }: { children: ReactNode }) {
     const updateHover = () => {
       const current = gestureRef.current;
       if (!current?.active) return;
-      const found = pickElement(current.x, current.y);
-      const zoneEl = found instanceof Element ? found.closest<HTMLElement>("[data-drop-zone]") : null;
+      const zoneEl = pickZone(current.x, current.y, current.options.skipZones ?? []);
       if (zoneEl !== current.hoverEl) {
         if (current.hoverEl) delete current.hoverEl.dataset.dropHover;
         current.hoverEl = zoneEl;

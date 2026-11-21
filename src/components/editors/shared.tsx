@@ -47,7 +47,7 @@ export function TagInput({
           }}
           onBlur={commit}
           placeholder={tags.length === 0 ? placeholder : ""}
-          className="min-w-[6rem] flex-1 border-none bg-transparent px-1 py-0.5 text-[15px] outline-none placeholder:text-ink-400"
+          className="min-w-[6rem] flex-1 border-none bg-transparent px-1 py-0.5 text-[calc(15px*var(--fs))] outline-none placeholder:text-ink-400"
         />
       </div>
     </div>
@@ -88,7 +88,7 @@ export function ProjectPicker({
 
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      {available.length === 0 && !onCreate ? <p className="text-[15px] text-ink-400">연결할 프로젝트가 아직 없습니다.</p> : null}
+      {available.length === 0 && !onCreate ? <p className="text-[calc(15px*var(--fs))] text-ink-400">연결할 프로젝트가 아직 없습니다.</p> : null}
       {available.map((project) => {
         const active = value.includes(project.id);
         return (
@@ -125,16 +125,16 @@ export function ProjectPicker({
             onBlur={() => void commit()}
             placeholder={busy ? "만드는 중…" : "새 프로젝트 이름"}
             aria-label="새 프로젝트 만들기"
-            className="input h-7 w-[8.5rem] py-0 text-[14px]"
+            className="input h-7 w-[8.5rem] py-0 text-[calc(14px*var(--fs))]"
           />
         ) : (
           <button
             type="button"
             onClick={() => setAdding(true)}
             aria-label="새 프로젝트 만들기"
-            className="inline-flex h-[26px] items-center gap-0.5 rounded-full border border-dashed border-paper-400 px-2 text-[14px] text-ink-500 transition hover:border-ink-500 hover:text-ink-900"
+            className="inline-flex h-[26px] items-center gap-0.5 rounded-full border border-dashed border-paper-400 px-2 text-[calc(14px*var(--fs))] text-ink-500 transition hover:border-ink-500 hover:text-ink-900"
           >
-            <span className="text-[15px] leading-none">+</span> 새 프로젝트
+            <span className="text-[calc(15px*var(--fs))] leading-none">+</span> 새 프로젝트
           </button>
         )
       ) : null}
@@ -188,5 +188,5 @@ export function EditorFooter({
 
 export function ErrorNote({ message }: { message: string | null }) {
   if (!message) return null;
-  return <p className="rounded-lg bg-rose-50 px-2.5 py-1.5 text-[14.5px] text-rose-600">{message}</p>;
+  return <p className="rounded-lg bg-rose-50 px-2.5 py-1.5 text-[calc(14.5px*var(--fs))] text-rose-600">{message}</p>;
 }

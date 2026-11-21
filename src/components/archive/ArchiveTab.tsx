@@ -116,7 +116,7 @@ export function ArchiveTab() {
     <div className="pb-16">
       <div className="flex items-end justify-between gap-3">
         <div className="min-w-0">
-          <p className="truncate text-[13.5px] text-ink-400">
+          <p className="truncate text-[calc(13.5px*var(--fs))] text-ink-400">
             {trashMode
               ? base.length > 0
                 ? `휴지통 ${base.length}개 · 복원하거나 완전 삭제할 수 있습니다`
@@ -125,7 +125,7 @@ export function ArchiveTab() {
                   .map((kind) => `${kind} ${counts[kind]}`)
                   .join(" · ") || "아직 담긴 것이 없습니다"}
           </p>
-          <h1 className="mt-1.5 text-[20px] font-semibold leading-none tracking-[-0.02em] text-ink-900 md:text-[21px]">아카이브</h1>
+          <h1 className="mt-1.5 text-[calc(20px*var(--fs))] font-semibold leading-none tracking-[-0.02em] text-ink-900 md:text-[calc(21px*var(--fs))]">아카이브</h1>
         </div>
 
         <div className="flex flex-none items-center gap-1.5">
@@ -150,7 +150,7 @@ export function ArchiveTab() {
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="제목·내용·태그 검색"
-            className="w-full rounded-full bg-paper-200 px-3.5 py-2 text-[15px] text-ink-900 placeholder:text-ink-400 focus:bg-paper-200 focus:outline-none"
+            className="w-full rounded-full bg-paper-200 px-3.5 py-2 text-[calc(15px*var(--fs))] text-ink-900 placeholder:text-ink-400 focus:bg-paper-200 focus:outline-none"
           />
         </div>
       ) : null}
@@ -167,13 +167,13 @@ export function ArchiveTab() {
                 setTag(null);
               }}
               className={cn(
-                "inline-flex items-center gap-1 rounded-full px-3 py-1 text-[15px] font-medium transition",
+                "inline-flex items-center gap-1 rounded-full px-3 py-1 text-[calc(15px*var(--fs))] font-medium transition",
                 active ? "bg-ink-900 text-white" : "bg-paper-200 text-ink-500 hover:bg-paper-300/70 hover:text-ink-800",
               )}
             >
               {kind}
               {counts[kind] ? (
-                <span className={cn("text-[13.5px]", active ? "text-white/70" : "text-ink-400")}>{counts[kind]}</span>
+                <span className={cn("text-[calc(13.5px*var(--fs))]", active ? "text-white/70" : "text-ink-400")}>{counts[kind]}</span>
               ) : null}
             </button>
           );
@@ -184,7 +184,7 @@ export function ArchiveTab() {
             type="button"
             onClick={() => setTag(tag === itemTag ? null : itemTag)}
             className={cn(
-              "rounded-full px-2.5 py-1 text-[14px] transition",
+              "rounded-full px-2.5 py-1 text-[calc(14px*var(--fs))] transition",
               tag === itemTag ? "bg-ink-900 text-white" : "bg-paper-200/70 text-ink-500 hover:bg-paper-300/60",
             )}
           >
@@ -199,17 +199,17 @@ export function ArchiveTab() {
             setDraft({ kind: category === "전체" ? "메모" : category, date: todayISO() });
             setEditorId(null);
           }}
-          className="rounded-full border border-dashed border-paper-400 px-2.5 py-1 text-[14px] text-ink-400 transition hover:border-ink-300 hover:text-ink-700"
+          className="rounded-full border border-dashed border-paper-400 px-2.5 py-1 text-[calc(14px*var(--fs))] text-ink-400 transition hover:border-ink-300 hover:text-ink-700"
         >
           + 담기
         </button>
       </div>
 
-      <div className="mt-2 flex items-center gap-2 text-[14px] text-ink-400">
+      <div className="mt-2 flex items-center gap-2 text-[calc(14px*var(--fs))] text-ink-400">
         <select
           value={sort}
           onChange={(event) => setSort(event.target.value as SortKey)}
-          className="rounded-md bg-transparent py-0.5 text-[14px] text-ink-400 focus:outline-none"
+          className="rounded-md bg-transparent py-0.5 text-[calc(14px*var(--fs))] text-ink-400 focus:outline-none"
         >
           <option value="recent">최신순</option>
           <option value="rating">별점순</option>
@@ -236,7 +236,7 @@ export function ArchiveTab() {
         <div className="mt-3">
           {base.length > 0 ? (
             // Records exist here; only the kind·folder·tag·search filter hides them.
-            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-paper-300 bg-paper-50/60 px-3 py-2 text-[15px] text-ink-500">
+            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-paper-300 bg-paper-50/60 px-3 py-2 text-[calc(15px*var(--fs))] text-ink-500">
               <span>고른 필터에 맞는 항목이 없습니다. {base.length}개가 다른 분류·폴더에 있습니다.</span>
               <button
                 type="button"
@@ -280,12 +280,12 @@ export function ArchiveTab() {
             const tone = archiveTone(item.kind);
             return (
               <article key={item.id} className="group relative flex flex-col rounded-2xl border border-paper-300 px-4 py-3.5 pb-3 transition hover:border-paper-400">
-                <p className={cn("text-[14px] font-medium", tone.text)}>{item.kind}</p>
+                <p className={cn("text-[calc(14px*var(--fs))] font-medium", tone.text)}>{item.kind}</p>
                 <div className="mt-1 flex items-start justify-between gap-2">
                   <button type="button" onClick={() => setEditorId(item.id)} className="min-w-0 flex-1 text-left">
-                    <p className="line-clamp-2 text-[16.5px] font-semibold leading-snug tracking-tight text-ink-900">{item.title}</p>
+                    <p className="line-clamp-2 text-[calc(16.5px*var(--fs))] font-semibold leading-snug tracking-tight text-ink-900">{item.title}</p>
                     {item.memo ? (
-                      <p className="mt-0.5 line-clamp-1 text-[14.5px] text-ink-400">
+                      <p className="mt-0.5 line-clamp-1 text-[calc(14.5px*var(--fs))] text-ink-400">
                         <RichText spans={item.memoRich} value={item.memo} links={false} />
                       </p>
                     ) : null}
@@ -301,7 +301,7 @@ export function ArchiveTab() {
                 </div>
 
                 {item.body && item.body.trim() !== item.title.trim() ? (
-                  <button type="button" onClick={() => setEditorId(item.id)} className="mt-1.5 line-clamp-2 text-left text-[15px] leading-relaxed text-ink-500">
+                  <button type="button" onClick={() => setEditorId(item.id)} className="mt-1.5 line-clamp-2 text-left text-[calc(15px*var(--fs))] leading-relaxed text-ink-500">
                     {truncate(item.body.replace(/\n/g, " "), 120)}
                   </button>
                 ) : null}
@@ -313,7 +313,7 @@ export function ArchiveTab() {
                         key={itemTag}
                         type="button"
                         onClick={() => setTag(itemTag)}
-                        className="rounded-full bg-paper-200/70 px-1.5 py-0.5 text-[13px] text-ink-500 hover:bg-paper-300/60"
+                        className="rounded-full bg-paper-200/70 px-1.5 py-0.5 text-[calc(13px*var(--fs))] text-ink-500 hover:bg-paper-300/60"
                       >
                         #{itemTag}
                       </button>
@@ -323,7 +323,7 @@ export function ArchiveTab() {
 
                 <div className="mt-2 flex items-center gap-1.5 pt-1">
                   <StarRating value={item.rating} size={12} onChange={(value) => void update("archive", item.id, { rating: value })} />
-                  <span className="text-[13.5px] text-ink-400">
+                  <span className="text-[calc(13.5px*var(--fs))] text-ink-400">
                     {item.date ? `${formatShort(item.date)} ${weekdayKo(item.date)}` : ""}
                   </span>
                   {item.link ? (
@@ -343,7 +343,7 @@ export function ArchiveTab() {
                             if (ok) notify(`‘${item.title}’을(를) 복원했습니다.`, "success");
                           });
                         }}
-                        className="rounded px-1.5 py-0.5 text-[13.5px] text-ink-500 hover:bg-paper-200"
+                        className="rounded px-1.5 py-0.5 text-[calc(13.5px*var(--fs))] text-ink-500 hover:bg-paper-200"
                       >
                         복원
                       </button>
@@ -352,7 +352,7 @@ export function ArchiveTab() {
                         onClick={() => {
                           void destroy("archive", item.id).then(() => notify(`‘${item.title}’을(를) 완전히 삭제했습니다.`, "success"));
                         }}
-                        className="rounded px-1.5 py-0.5 text-[13.5px] text-red-500 hover:bg-red-50"
+                        className="rounded px-1.5 py-0.5 text-[calc(13.5px*var(--fs))] text-red-500 hover:bg-red-50"
                       >
                         완전 삭제
                       </button>
@@ -361,7 +361,7 @@ export function ArchiveTab() {
                     <button
                       type="button"
                       onClick={() => void update("archive", item.id, { trash: true })}
-                      className="rounded px-1.5 py-0.5 text-[13px] text-ink-300 hover:bg-paper-200 hover:text-red-500"
+                      className="rounded px-1.5 py-0.5 text-[calc(13px*var(--fs))] text-ink-300 hover:bg-paper-200 hover:text-red-500"
                     >
                       휴지통
                     </button>
@@ -386,7 +386,7 @@ export function ArchiveTab() {
             value={quickTitle}
             onChange={(event) => setQuickTitle(event.target.value)}
             placeholder="링크 붙여넣기 또는 메모 입력 후 Enter"
-            className="min-w-0 flex-1 border-none bg-transparent text-[15px] text-ink-900 outline-none placeholder:text-ink-400"
+            className="min-w-0 flex-1 border-none bg-transparent text-[calc(15px*var(--fs))] text-ink-900 outline-none placeholder:text-ink-400"
           />
           <button type="submit" disabled={!quickTitle.trim() || busy} className="btn-primary btn-xs flex-none">
             담기

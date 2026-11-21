@@ -58,7 +58,7 @@ function Splash() {
       <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-ink-900 text-white">
         <SparkIcon size={19} />
       </span>
-      <p className="text-[15px] text-ink-500">기록을 불러오는 중…</p>
+      <p className="text-[calc(15px*var(--fs))] text-ink-500">기록을 불러오는 중…</p>
     </div>
   );
 }
@@ -228,7 +228,7 @@ export function AppShell() {
               <span className="flex h-5 w-5 flex-none items-center justify-center rounded-md bg-ink-900 text-white">
                 <SparkIcon size={11} />
               </span>
-              <span className="truncate text-[15px] font-semibold tracking-tight text-ink-900">나의 다이어리</span>
+              <span className="truncate text-[calc(15px*var(--fs))] font-semibold tracking-tight text-ink-900">나의 다이어리</span>
             </div>
             <div className="flex flex-none items-center gap-0.5">
               <SaveIndicator compact />
@@ -247,13 +247,13 @@ export function AppShell() {
 
       {demo ? (
             <div className="border-b border-paper-300 bg-paper-200/60">
-              <div className="mx-auto flex w-full max-w-[1680px] items-center gap-2 px-4 py-1.5 text-[14px] text-ink-600 md:px-6 lg:px-8">
+              <div className="mx-auto flex w-full max-w-[1680px] items-center gap-2 px-4 py-1.5 text-[calc(14px*var(--fs))] text-ink-600 md:px-6 lg:px-8">
                 <span className="flex-none font-semibold text-ink-800">데모 미리보기</span>
                 <p className="min-w-0 flex-1 truncate">
                   아직 Notion에 연결되지 않아 예시 기록을 보여 줍니다.
                   <span className="hidden sm:inline"> Vercel에 NOTION_TOKEN을 추가하면 실제 기록으로 바뀝니다.</span>
                 </p>
-                <button type="button" onClick={() => setSettingsOpen(true)} className="flex-none rounded-full border border-paper-400 px-2 py-0.5 text-[14px] hover:bg-white">
+                <button type="button" onClick={() => setSettingsOpen(true)} className="flex-none rounded-full border border-paper-400 px-2 py-0.5 text-[calc(14px*var(--fs))] hover:bg-white">
                   연결 방법
                 </button>
               </div>
@@ -262,12 +262,12 @@ export function AppShell() {
 
           {!demo && unconfigured.length > 0 ? (
             <div className="border-b border-amber-200 bg-amber-50/70">
-              <div className="mx-auto flex w-full max-w-[1680px] flex-col gap-1 px-4 py-1.5 text-[14px] text-amber-800 sm:flex-row sm:items-center md:px-6 lg:px-8">
+              <div className="mx-auto flex w-full max-w-[1680px] flex-col gap-1 px-4 py-1.5 text-[calc(14px*var(--fs))] text-amber-800 sm:flex-row sm:items-center md:px-6 lg:px-8">
                 <p className="min-w-0 flex-1">
                   미연결 DB: {unconfiguredLabels.join(" · ")}
                   <span className="hidden sm:inline"> — 이 DB를 쓰는 화면은 조회·저장되지 않습니다. 설정 → 연결에서 상태를 확인하세요.</span>
                 </p>
-                <button type="button" onClick={() => setSettingsOpen(true)} className="flex-none self-start rounded-full border border-amber-300 px-2 py-0.5 text-[14px] hover:bg-white sm:self-auto">
+                <button type="button" onClick={() => setSettingsOpen(true)} className="flex-none self-start rounded-full border border-amber-300 px-2 py-0.5 text-[calc(14px*var(--fs))] hover:bg-white sm:self-auto">
                   연결 설정
                 </button>
               </div>
@@ -276,7 +276,7 @@ export function AppShell() {
 
           {errorEntries.length > 0 && !fatalError ? (
             <div className="border-b border-paper-300 bg-paper-200/50 px-4 py-1.5 md:px-6 lg:px-8">
-              <div className="mx-auto flex w-full max-w-[1680px] flex-col gap-1 text-[14px] text-ink-600 sm:flex-row sm:items-center">
+              <div className="mx-auto flex w-full max-w-[1680px] flex-col gap-1 text-[calc(14px*var(--fs))] text-ink-600 sm:flex-row sm:items-center">
                 <p className="min-w-0 flex-1">
                   일부 DB를 불러오지 못했습니다: {errorEntries.map(([key]) => key).join(", ")} ·{" "}
                   <span className="text-ink-400">{errorEntries[0]?.[1]}</span>
@@ -293,7 +293,7 @@ export function AppShell() {
 
       {fatalError ? (
         <div className="border-b border-red-200 bg-red-50 px-4 py-1.5 md:px-6 lg:px-8">
-          <div className="mx-auto flex w-full max-w-[1680px] items-center gap-2 text-[14.5px] text-red-600">
+          <div className="mx-auto flex w-full max-w-[1680px] items-center gap-2 text-[calc(14.5px*var(--fs))] text-red-600">
             <p className="min-w-0 flex-1">{fatalError}</p>
             <button type="button" onClick={() => void refresh()} className="btn-outline btn-xs flex-none">
               다시 시도
@@ -325,7 +325,7 @@ export function AppShell() {
               >
                 {item.label}
                 {item.key === "projects" && openProjectCount > 0 ? (
-                  <span className={cn("text-[14.5px] font-semibold", active ? "text-blue-500" : "text-blue-500/80")}>
+                  <span className={cn("text-[calc(14.5px*var(--fs))] font-semibold", active ? "text-blue-500" : "text-blue-500/80")}>
                     {openProjectCount}
                   </span>
                 ) : null}
@@ -349,8 +349,8 @@ export function AppShell() {
                         <Icon size={13} />
                       </span>
                       <span className="min-w-0">
-                        <span className="block text-[15px] font-medium text-ink-900">{item.label}</span>
-                        <span className="block text-[13.5px] text-ink-400">{item.hint}</span>
+                        <span className="block text-[calc(15px*var(--fs))] font-medium text-ink-900">{item.label}</span>
+                        <span className="block text-[calc(13.5px*var(--fs))] text-ink-400">{item.hint}</span>
                       </span>
                     </button>
                   );
@@ -387,7 +387,7 @@ export function AppShell() {
           <div
             key={toast.id}
             className={cn(
-              "pointer-events-auto flex items-start gap-2 rounded-xl border px-3.5 py-2 text-[15px] shadow-lift animate-slide-up",
+              "pointer-events-auto flex items-start gap-2 rounded-xl border px-3.5 py-2 text-[calc(15px*var(--fs))] shadow-lift animate-slide-up",
               toast.tone === "error"
                 ? "border-red-200 bg-red-50 text-red-600"
                 : toast.tone === "success"

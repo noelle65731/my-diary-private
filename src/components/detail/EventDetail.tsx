@@ -205,7 +205,7 @@ function EventDetailInner({
               </button>
             )}
           </div>
-          <span className="text-[13.5px] text-ink-400">
+          <span className="text-[calc(13.5px*var(--fs))] text-ink-400">
             {invalidField ? <span className="text-rose-500">필수값을 입력해 주세요</span> : isDirty ? "바뀐 값은 자동으로 저장됩니다" : "변경 없음"}
           </span>
         </>
@@ -222,8 +222,8 @@ function EventDetailInner({
           onActivate={() => setField("title")}
           onDone={() => setField(null)}
           placeholder="제목 없음"
-          valueClassName="border-none px-0 text-[22px] font-semibold tracking-tight text-ink-900"
-          inputClassName="text-[16px] font-medium"
+          valueClassName="border-none px-0 text-[calc(22px*var(--fs))] font-semibold tracking-tight text-ink-900"
+          inputClassName="text-[calc(16px*var(--fs))] font-medium"
         />
 
         <div className="flex flex-wrap items-center gap-1.5 pt-1">
@@ -273,7 +273,7 @@ function EventDetailInner({
               placeholder="날짜를 정해 주세요"
             />
             <div>
-              <p className="text-[13.5px] text-ink-400">종일</p>
+              <p className="text-[calc(13.5px*var(--fs))] text-ink-400">종일</p>
               <button
                 type="button"
                 aria-pressed={draft.allDay}
@@ -281,8 +281,8 @@ function EventDetailInner({
                 onClick={() => set("allDay", !draft.allDay)}
                 className={
                   draft.allDay
-                    ? "mt-0.5 rounded-full border border-ink-900 bg-ink-900 px-3 py-1 text-[15px] text-paper-50"
-                    : "mt-0.5 rounded-full border border-paper-400 bg-white px-3 py-1 text-[15px] text-ink-600"
+                    ? "mt-0.5 rounded-full border border-ink-900 bg-ink-900 px-3 py-1 text-[calc(15px*var(--fs))] text-paper-50"
+                    : "mt-0.5 rounded-full border border-paper-400 bg-white px-3 py-1 text-[calc(15px*var(--fs))] text-ink-600"
                 }
               >
                 {draft.allDay ? "종일" : "시간 지정"}
@@ -332,7 +332,7 @@ function EventDetailInner({
 
           {/* 색 — 노션 팔레트 그대로, 고르면 바로 캘린더 블록에 적용됩니다. */}
           <div className="mt-2">
-            <p className="text-[13px] text-ink-400">색</p>
+            <p className="text-[calc(13px*var(--fs))] text-ink-400">색</p>
             <div className="mt-1 flex flex-wrap items-center gap-1.5">
               {EVENT_COLORS.map((choice) => {
                 const active = (colorOf(event.id) ?? "default") === choice.key;
@@ -353,7 +353,7 @@ function EventDetailInner({
                   />
                 );
               })}
-              <span className="ml-1 text-[12.5px] text-ink-400">노션 색</span>
+              <span className="ml-1 text-[calc(12.5px*var(--fs))] text-ink-400">노션 색</span>
             </div>
           </div>
 

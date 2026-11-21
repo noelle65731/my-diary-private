@@ -174,7 +174,7 @@ function BinderEditorInner({
           value={form.title}
           onChange={(event) => patch("title", event.target.value)}
           placeholder={form.kind === "일기" ? "오늘의 제목" : "노트 제목"}
-          className="border-0 border-b border-paper-300 bg-transparent px-0 text-[18px] font-medium focus:ring-0"
+          className="border-0 border-b border-paper-300 bg-transparent px-0 text-[calc(18px*var(--fs))] font-medium focus:ring-0"
         />
 
         <div className="flex flex-wrap items-center gap-3">
@@ -188,7 +188,7 @@ function BinderEditorInner({
             type="date"
             value={form.date}
             onChange={(event) => patch("date", event.target.value)}
-            className="rounded-lg border border-paper-400 bg-white/70 px-2 py-1 text-[15px]"
+            className="rounded-lg border border-paper-400 bg-white/70 px-2 py-1 text-[calc(15px*var(--fs))]"
           />
         </div>
 
@@ -198,13 +198,13 @@ function BinderEditorInner({
             <button
               type="button"
               onClick={() => setPreview((current) => !current)}
-              className={cn("text-[14px]", preview ? "text-accent-600" : "text-ink-400 hover:text-ink-600")}
+              className={cn("text-[calc(14px*var(--fs))]", preview ? "text-accent-600" : "text-ink-400 hover:text-ink-600")}
             >
               {preview ? "편집으로" : "미리보기"}
             </button>
           </div>
           {preview ? (
-            <div className="doc-body card-quiet max-h-[42vh] overflow-y-auto px-4 py-3 text-[15.5px] text-ink-700">
+            <div className="doc-body card-quiet max-h-[42vh] overflow-y-auto px-4 py-3 text-[calc(15.5px*var(--fs))] text-ink-700">
               {renderMarkdown(form.body)}
             </div>
           ) : (
@@ -215,7 +215,7 @@ function BinderEditorInner({
               className="min-h-[240px] font-[0.9rem] leading-[1.75]"
             />
           )}
-          <p className="mt-1 text-[13.5px] text-ink-400">
+          <p className="mt-1 text-[calc(13.5px*var(--fs))] text-ink-400">
             Markdown 지원: # 제목 · - 목록 · - [ ] 체크 · **굵게** · &gt; 인용
           </p>
         </div>

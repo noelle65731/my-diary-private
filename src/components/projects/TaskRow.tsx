@@ -76,7 +76,7 @@ export function TaskRow({
         {done ? <CheckIcon size={10} /> : null}
       </button>
       <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-left">
-        <span className={cn("flex items-center gap-1 truncate text-[15px] text-ink-800", done && "text-ink-400 line-through")}>
+        <span className={cn("flex items-center gap-1 truncate text-[calc(15px*var(--fs))] text-ink-800", done && "text-ink-400 line-through")}>
           {task.urgent ? <FlagIcon size={11} className="flex-none text-rose-400" /> : null}
           <span className="truncate">{task.title}</span>
         </span>
@@ -86,11 +86,11 @@ export function TaskRow({
             spans={task.memoRich}
             value={task.memo}
             links={false}
-            className="mt-0.5 line-clamp-2 block text-[14px] leading-snug text-ink-400"
+            className="mt-0.5 line-clamp-2 block text-[calc(14px*var(--fs))] leading-snug text-ink-400"
           />
         ) : null}
         {!compact ? (
-          <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[13px] text-ink-400">
+          <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[calc(13px*var(--fs))] text-ink-400">
             <span className={cn("chip py-0", taskTone(task.category).bg, taskTone(task.category).text)}>{task.category}</span>
             {showProjectName ? <span className="truncate">{showProjectName}</span> : null}
             {task.date ? <span>{formatShort(task.date)} {weekdayKo(task.date)}</span> : null}

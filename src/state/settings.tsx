@@ -14,7 +14,7 @@ import type { ArchiveKind } from "@/lib/types";
 export type CalendarViewKey = "year" | "month" | "week" | "three" | "day" | "habit";
 
 export interface Settings {
-  /** 1–6, scales the whole app. */
+  /** A18: 1–9단계 — 1~3은 더 작은 쪽에 새로 더한 단계, 6이 기본(15px)입니다. */
   fontSize: number;
   weekStartsOn: 0 | 1;
   showWeekends: boolean;
@@ -40,7 +40,7 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-  fontSize: 3,
+  fontSize: 6,
   weekStartsOn: 1,
   showWeekends: true,
   weekStartHour: 9,
@@ -73,13 +73,24 @@ interface SettingsContextValue {
 const SettingsContext = createContext<SettingsContextValue | null>(null);
 
 /**
- * Step 3 is the default and equals the `html { font-size: 15px }` baseline in
- * globals.css, so a stored setting never shifts text size on hydration.
+ * A18: 글자 크기 9단계. 1~3은 새로 더한 작은 단계이고, 6단계가 `html { font-size: 15px }`
+ * 기본값과 같습니다(예전 3단계를 6단계로 옮겨 적습니다 — 저장된 설정은 한 번 옮겨 줍니다).
  */
-function fontSizeToPx(level: number): number {
-  const clamped = Math.max(1, Math.min(6, level));
-  return 13.2 + (clamped - 1) * 0.9;
+const FONT_PX = [11.4, 12, 12.6, 13.2, 14.1, 15, 15.9, 16.8, 17.7];
+const FONT_BASE_PX = 15;
+const FONT_STEPS = FONT_PX.length;
+
+export function fontSizeToPx(level: number): number {
+  const clamped = Math.max(1, Math.min(FONT_STEPS, Math.round(level)));
+  return FONT_PX[clamped - 1]!;
 }
+
+/** px 글자 크기 클래스들이 곱해서 쓰는 배율(`--fs`). */
+export function fontSizeScale(level: number): number {
+  return fontSizeToPx(level) / FONT_BASE_PX;
+}
+
+export { FONT_STEPS };
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
@@ -88,8 +99,16 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
       if (raw) {
-        const parsed = JSON.parse(raw) as Partial<Settings>;
-        setSettings({ ...DEFAULT_SETTINGS, ...parsed });
+        const parsed = JSON.parse(raw) as Partial<Settings> & { fontSizeVersion?: number };
+        // A18: 예전 6단계 설정(1~6)을 9단계로 옮깁니다 — 같은 크기를 가리키게 3을 더합니다.
+        const legacy = parsed.fontSizeVersion !== 2;
+        const fontSize =
+          legacy && typeof parsed.fontSize === "number"
+            ? Math.max(1, Math.min(FONT_STEPS, Math.round(parsed.fontSize) + 3))
+            : parsed.fontSize;
+        const next = { ...DEFAULT_SETTINGS, ...parsed, fontSize: fontSize ?? DEFAULT_SETTINGS.fontSize, fontSizeVersion: 2 };
+        setSettings(next);
+        if (legacy) window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
       }
     } catch {
       /* ignore broken storage */
@@ -98,6 +117,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     document.documentElement.style.fontSize = `${fontSizeToPx(settings.fontSize)}px`;
+    document.documentElement.style.setProperty("--fs", String(fontSizeScale(settings.fontSize)));
     document.documentElement.dataset.fontSize = String(settings.fontSize);
   }, [settings.fontSize]);
 

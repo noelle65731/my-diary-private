@@ -245,7 +245,7 @@ function EventEditorInner({
           value={form.title}
           onChange={(event) => patch("title", event.target.value)}
           placeholder="무엇을 기록할까요?"
-          className="border-0 border-b border-paper-300 bg-transparent px-0 text-[18px] font-medium focus:ring-0"
+          className="border-0 border-b border-paper-300 bg-transparent px-0 text-[calc(18px*var(--fs))] font-medium focus:ring-0"
         />
 
         <div>
@@ -283,11 +283,11 @@ function EventEditorInner({
                   )}
                 />
               ))}
-              <span className="ml-1 text-[13.5px] text-ink-400">
+              <span className="ml-1 text-[calc(13.5px*var(--fs))] text-ink-400">
                 {EVENT_COLORS.find((choice) => choice.key === form.color)?.label ?? "기본"}
               </span>
             </div>
-            <p className="mt-1 text-[13px] text-ink-400">노션 색 그대로 · 이 브라우저에 저장되고 분류 색보다 먼저 보입니다.</p>
+            <p className="mt-1 text-[calc(13px*var(--fs))] text-ink-400">노션 색 그대로 · 이 브라우저에 저장되고 분류 색보다 먼저 보입니다.</p>
           </div>
         ) : null}
 
@@ -312,10 +312,10 @@ function EventEditorInner({
                 onChange={(event) => patch("endDate", event.target.value)}
                 className="input"
               />
-              <span className="mt-1 block text-[13.5px] text-ink-400">여러 날이면 종료 날짜를 넣어 주세요.</span>
+              <span className="mt-1 block text-[calc(13.5px*var(--fs))] text-ink-400">여러 날이면 종료 날짜를 넣어 주세요.</span>
               {multiDayDraft ? (
                 <div className="mt-2">
-                  <span className="text-[13.5px] text-ink-400">저장 방식</span>
+                  <span className="text-[calc(13.5px*var(--fs))] text-ink-400">저장 방식</span>
                   <div className="mt-1 flex gap-1.5">
                     {([
                       { value: "days", label: "날짜마다" },
@@ -337,14 +337,14 @@ function EventEditorInner({
                       </button>
                     ))}
                   </div>
-                  <span className="mt-1 block text-[13.5px] text-ink-400">
+                  <span className="mt-1 block text-[calc(13.5px*var(--fs))] text-ink-400">
                     {multiMode === "days" ? "하루씩 따로 저장됩니다." : "하나의 일정으로 이어집니다."}
                   </span>
                 </div>
               ) : null}
             </label>
           ) : (
-            <div className="flex items-end pb-2 text-[14px] text-ink-400">주간 키에 자동으로 묶입니다</div>
+            <div className="flex items-end pb-2 text-[calc(14px*var(--fs))] text-ink-400">주간 키에 자동으로 묶입니다</div>
           )}
         </div>
 
@@ -419,7 +419,7 @@ function EventEditorInner({
         <ErrorNote message={error} />
 
         {existing ? (
-          <p className="flex items-center gap-1 text-[14px] text-ink-400">
+          <p className="flex items-center gap-1 text-[calc(14px*var(--fs))] text-ink-400">
             <CalendarIcon size={12} />
             {existing.weekKey ? `주간 키 ${existing.weekKey}` : "일정"}
           </p>

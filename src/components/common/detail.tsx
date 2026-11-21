@@ -84,8 +84,8 @@ export function DetailShell({
               <ChevronLeftIcon size={18} />
             </button>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-[15px] font-medium text-ink-700">{label}</p>
-              {subtitle ? <p className="truncate text-[13.5px] text-ink-400">{subtitle}</p> : null}
+              <p className="truncate text-[calc(15px*var(--fs))] font-medium text-ink-700">{label}</p>
+              {subtitle ? <p className="truncate text-[calc(13.5px*var(--fs))] text-ink-400">{subtitle}</p> : null}
             </div>
             <button type="button" onClick={onClose} className="icon-btn" aria-label="전체 닫기" title="전체 닫기">
               <XIcon size={18} />
@@ -117,7 +117,7 @@ export function DetailSection({
   return (
     <section className="border-t border-paper-300/70 py-2.5 first:border-t-0 first:pt-0">
       <div className="mb-1 flex items-center justify-between gap-2">
-        <h3 className="text-[13.5px] font-medium tracking-[0.02em] text-ink-400">{title}</h3>
+        <h3 className="text-[calc(13.5px*var(--fs))] font-medium tracking-[0.02em] text-ink-400">{title}</h3>
         {action}
       </div>
       {children}
@@ -179,7 +179,7 @@ export function InlineText({
 }) {
   return (
     <div className="py-0.5">
-      <p className="flex items-center text-[13.5px] text-ink-400">
+      <p className="flex items-center text-[calc(13.5px*var(--fs))] text-ink-400">
         {label}
         <RequiredMark required={required} invalid={invalid} />
       </p>
@@ -224,7 +224,7 @@ export function InlineText({
           onClick={onActivate}
           aria-label={`${label} 수정`}
           className={cn(
-            "min-h-[1.9rem] w-full rounded-lg border-b border-dashed border-paper-300 px-1 py-1 text-left text-[16px] text-ink-800 transition hover:border-ink-400 hover:bg-paper-100/60",
+            "min-h-[1.9rem] w-full rounded-lg border-b border-dashed border-paper-300 px-1 py-1 text-left text-[calc(16px*var(--fs))] text-ink-800 transition hover:border-ink-400 hover:bg-paper-100/60",
             invalid && "border-rose-300",
             valueClassName,
           )}
@@ -233,7 +233,7 @@ export function InlineText({
             (value.trim() ? (
               <span className="whitespace-pre-wrap break-words">{value}</span>
             ) : (
-              <span className="text-[15px] text-ink-300">{placeholder ?? "눌러서 입력"}</span>
+              <span className="text-[calc(15px*var(--fs))] text-ink-300">{placeholder ?? "눌러서 입력"}</span>
             ))}
         </button>
         {onClear && value.trim() ? (
@@ -250,12 +250,12 @@ export function InlineText({
         </span>
       )}
       {invalid ? (
-        <p className="mt-0.5 text-[14px] text-rose-500" role="alert">
+        <p className="mt-0.5 text-[calc(14px*var(--fs))] text-rose-500" role="alert">
           <RequiredMark required invalid />
           <span className="ml-0.5">{invalidMessage}</span>
         </p>
       ) : hint ? (
-        <p className="mt-0.5 text-[13.5px] text-ink-400">{hint}</p>
+        <p className="mt-0.5 text-[calc(13.5px*var(--fs))] text-ink-400">{hint}</p>
       ) : null}
     </div>
   );
@@ -299,7 +299,7 @@ export function InlineChoice<T extends string>({
 
   return (
     <div className="py-0.5">
-      <p className="text-[13.5px] text-ink-400">{label}</p>
+      <p className="text-[calc(13.5px*var(--fs))] text-ink-400">{label}</p>
       <div className="mt-1 flex flex-wrap items-center gap-1.5">
         {options.map((option) => (
           <button
@@ -336,21 +336,21 @@ export function InlineChoice<T extends string>({
               onBlur={commit}
               placeholder={`${label} 이름`}
               aria-label={`${label} 새로 추가`}
-              className="input h-7 w-[7.5rem] py-0 text-[14px]"
+              className="input h-7 w-[7.5rem] py-0 text-[calc(14px*var(--fs))]"
             />
           ) : (
             <button
               type="button"
               onClick={() => setAdding(true)}
               aria-label={`${label} ${addLabel}`}
-              className="inline-flex h-[26px] items-center gap-0.5 rounded-full border border-dashed border-paper-400 px-2 text-[14px] text-ink-500 transition hover:border-ink-500 hover:text-ink-900"
+              className="inline-flex h-[26px] items-center gap-0.5 rounded-full border border-dashed border-paper-400 px-2 text-[calc(14px*var(--fs))] text-ink-500 transition hover:border-ink-500 hover:text-ink-900"
             >
-              <span className="text-[15px] leading-none">+</span> {addLabel}
+              <span className="text-[calc(15px*var(--fs))] leading-none">+</span> {addLabel}
             </button>
           )
         ) : null}
       </div>
-      {hint ? <p className="mt-0.5 text-[13.5px] text-ink-400">{hint}</p> : null}
+      {hint ? <p className="mt-0.5 text-[calc(13.5px*var(--fs))] text-ink-400">{hint}</p> : null}
     </div>
   );
 }
@@ -382,7 +382,7 @@ export function InlineStatus<T extends string>({
             aria-pressed={active}
             onClick={() => onChange(option)}
             className={cn(
-              "rounded-full border px-2.5 py-1 text-[15px] font-medium transition",
+              "rounded-full border px-2.5 py-1 text-[calc(15px*var(--fs))] font-medium transition",
               active
                 ? toneOf
                   ? toneOf(option)
@@ -437,10 +437,10 @@ export function EmptyEditable({
     <button
       type="button"
       onClick={onClick}
-      className="w-full rounded-xl border border-dashed border-paper-300 px-3 py-2.5 text-left text-[15px] text-ink-400 transition hover:border-ink-300 hover:text-ink-700"
+      className="w-full rounded-xl border border-dashed border-paper-300 px-3 py-2.5 text-left text-[calc(15px*var(--fs))] text-ink-400 transition hover:border-ink-300 hover:text-ink-700"
     >
       {label}
-      {hint ? <span className="mt-0.5 block text-[13.5px] text-ink-300">{hint}</span> : null}
+      {hint ? <span className="mt-0.5 block text-[calc(13.5px*var(--fs))] text-ink-300">{hint}</span> : null}
     </button>
   );
 }

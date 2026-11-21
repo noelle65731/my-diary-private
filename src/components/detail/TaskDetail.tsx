@@ -308,7 +308,7 @@ function TaskDetailInner({
               </button>
             )}
           </div>
-          <span className="text-[13.5px] text-ink-400">
+          <span className="text-[calc(13.5px*var(--fs))] text-ink-400">
             {invalidField ? (
               <span className="text-rose-500">필수값을 입력해 주세요</span>
             ) : isDirty || bodyDirty ? (
@@ -331,8 +331,8 @@ function TaskDetailInner({
           onActivate={() => setField("title")}
           onDone={() => setField(null)}
           placeholder="제목 없음"
-          inputClassName="text-[16px] font-medium"
-          valueClassName="border-none px-0 text-[22px] font-semibold tracking-tight text-ink-900"
+          inputClassName="text-[calc(16px*var(--fs))] font-medium"
+          valueClassName="border-none px-0 text-[calc(22px*var(--fs))] font-semibold tracking-tight text-ink-900"
         />
 
         {isProject ? (
@@ -356,7 +356,7 @@ function TaskDetailInner({
               setField(null);
             }}
           />
-          <span className="text-[14px] text-ink-400">{formatShort(draft.date || task.createdAt.slice(0, 10) || todayISO())}</span>
+          <span className="text-[calc(14px*var(--fs))] text-ink-400">{formatShort(draft.date || task.createdAt.slice(0, 10) || todayISO())}</span>
         </div>
 
         {draft.status === "대기 중" && !isProject ? (
@@ -380,7 +380,7 @@ function TaskDetailInner({
               placeholder="다음에 할 일"
             />
             <div className="sm:col-span-2">
-              <p className="text-[13.5px] text-ink-400">재확인 일정 (원할 때만)</p>
+              <p className="text-[calc(13.5px*var(--fs))] text-ink-400">재확인 일정 (원할 때만)</p>
               <div className="mt-1 flex flex-wrap items-center gap-1.5">
                 <InlineText
                   label="확인일"
@@ -505,16 +505,16 @@ function TaskDetailInner({
           title="내용 (Notion 페이지 본문)"
           action={
             bodyText === null ? (
-              <span className="text-[13.5px] text-ink-300">불러오는 중…</span>
+              <span className="text-[calc(13.5px*var(--fs))] text-ink-300">불러오는 중…</span>
             ) : bodyEditing ? (
-              <button type="button" onClick={() => setBodyEditing(false)} aria-label="내용 입력 마침" className="text-[13.5px] text-ink-500 hover:text-ink-800">
+              <button type="button" onClick={() => setBodyEditing(false)} aria-label="내용 입력 마침" className="text-[calc(13.5px*var(--fs))] text-ink-500 hover:text-ink-800">
                 입력 마침
               </button>
             ) : null
           }
         >
           {bodyText === null ? (
-            <p className="rounded-lg bg-paper-100/60 px-2 py-2 text-[15px] text-ink-400">페이지 본문을 불러오는 중입니다.</p>
+            <p className="rounded-lg bg-paper-100/60 px-2 py-2 text-[calc(15px*var(--fs))] text-ink-400">페이지 본문을 불러오는 중입니다.</p>
           ) : bodyEditing ? (
             <div>
               <textarea
@@ -526,7 +526,7 @@ function TaskDetailInner({
                 placeholder="페이지 본문에 적을 내용"
                 className="input min-h-[110px] resize-y leading-relaxed"
               />
-              <p className="mt-1 text-[13.5px] text-ink-400">
+              <p className="mt-1 text-[calc(13.5px*var(--fs))] text-ink-400">
                 문단만 바뀌고 토글·목록 같은 다른 블록은 그대로 남습니다.
                 {preserved.length > 0 ? ` (보존: ${preserved.slice(0, 3).join(", ")})` : ""}
               </p>
@@ -536,7 +536,7 @@ function TaskDetailInner({
               type="button"
               onClick={() => setBodyEditing(true)}
               aria-label="내용 수정"
-              className="w-full whitespace-pre-wrap rounded-lg border-b border-dashed border-paper-300 px-1 py-1.5 text-left text-[15px] leading-relaxed text-ink-700 transition hover:border-ink-400 hover:bg-paper-100/60"
+              className="w-full whitespace-pre-wrap rounded-lg border-b border-dashed border-paper-300 px-1 py-1.5 text-left text-[calc(15px*var(--fs))] leading-relaxed text-ink-700 transition hover:border-ink-400 hover:bg-paper-100/60"
             >
               {bodyText}
             </button>
@@ -572,7 +572,7 @@ function TaskDetailInner({
           />
         </DetailSection>
 
-        <p className="pt-1 text-[13px] text-ink-300">
+        <p className="pt-1 text-[calc(13px*var(--fs))] text-ink-300">
           이전·바깥 클릭은 한 단계, X는 전체 닫기입니다. 바뀐 값이 없으면 저장하지 않습니다.
         </p>
       </div>
