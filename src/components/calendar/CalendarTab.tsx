@@ -30,6 +30,8 @@ import { WeekPanel } from "@/components/calendar/WeekPanel";
 import { MonthView, RoutineHeat } from "@/components/calendar/MonthView";
 import { YearView } from "@/components/calendar/YearView";
 import { DayView } from "@/components/calendar/DayView";
+import { DayListPanel, byAllDayOrder, dayItemsFor } from "@/components/calendar/DayListPanel";
+import { eventCoversDay } from "@/components/calendar/calendar-utils";
 import { HabitView } from "@/components/calendar/HabitView";
 import { EventEditor, type EventDraft } from "@/components/editors/EventEditor";
 import { EventDetail } from "@/components/detail/EventDetail";
@@ -99,12 +101,18 @@ export function CalendarTab() {
   const [weekPanelOpen, setWeekPanelOpen] = useState(false);
   /** A4: X closes every layer that came with the detail, including the month day list. */
   const [dayListSignal, setDayListSignal] = useState(0);
+  /**
+   * A32: 주간 보기의 요일 머리글(예: `토 21`)이나 일정 칸을 누르면 열리는 그 날의 정리 목록.
+   * 월간 보기의 하루 목록과 같은 화면(DayListPanel)을 씁니다.
+   */
+  const [daySummary, setDaySummary] = useState<{ day: string; startTime?: string | null } | null>(null);
 
   const closeEveryLayer = () => {
     setEventEditor({ open: false });
     setTaskId(null);
     setRoutineId(null);
     setDayListSignal((current) => current + 1);
+    setDaySummary(null);
   };
 
   const firstViewPass = useRef(true);
@@ -125,6 +133,7 @@ export function CalendarTab() {
     setTaskId(null);
     setRoutineId(null);
     setWeekPanelOpen(false);
+    setDaySummary(null);
   });
 
   useEffect(() => {
@@ -320,6 +329,24 @@ export function CalendarTab() {
     void update("calendar", id, { startTime, endTime });
   };
 
+  /** A32: 하루 목록에서 종일 일정 순서를 ↑↓로 바꿉니다 — 월간 보기와 같은 규칙(`정렬`). */
+  const moveAllDayInDay = (day: string, id: string, direction: -1 | 1) => {
+    const list = events
+      .filter((event) => event.kind === "일정" && event.allDay && eventCoversDay(event, day))
+      .sort(byAllDayOrder);
+    const index = list.findIndex((event) => event.id === id);
+    const target = index + direction;
+    if (index < 0 || target < 0 || target >= list.length) return;
+    const reordered = [...list];
+    const moved = reordered[target]!;
+    reordered[target] = reordered[index]!;
+    reordered[index] = moved;
+    reordered.forEach((event, position) => {
+      const value = (position + 1) * 10;
+      if (event.sort !== value) void update("calendar", event.id, { sort: value });
+    });
+  };
+
   /** B5: all-day bars reorder by drag; the order is kept in `정렬`. */
   const reorderAllDay = (ids: string[]) => {
     ids.forEach((id, index) => {
@@ -329,7 +356,7 @@ export function CalendarTab() {
   };
 
   /**
-   * A29: '이번 주 꼭' — 지금 보고 있는 주에 항목이 쌓입니다. 이번 주를 보고 있으면 오늘,
+   * A32: '이번 주 꼭' — 지금 보고 있는 주에 항목이 쌓입니다. 이번 주를 보고 있으면 오늘,
    * 다른 주를 보고 있으면 그 주의 월요일 날짜로 놓여 그 주의 목록에 남습니다.
    */
   const addFavorite = async (titleText: string, targetWeekStart: string) => {
@@ -564,6 +591,7 @@ export function CalendarTab() {
               onToggleTask={toggleTask}
               onUpdateEvent={(id, patch) => void update("calendar", id, patch)}
               onCreate={(date) => createEvent(date, null)}
+              onCreateTask={(date) => openTaskDraft({ kind: "할 일", date })}
               onRoutineCount={(routine, date, count) => void setRoutineCount(routine, date, count)}
               onMoveItem={(type, id, date) => {
                 if (type === "task") {
@@ -592,6 +620,7 @@ export function CalendarTab() {
                 setCursor(day);
                 setView("day");
               }}
+              onOpenDaySummary={(day, startTime) => setDaySummary({ day, startTime: startTime ?? null })}
               onOpenEvent={openEvent}
               onOpenTask={openTask}
               onOpenRoutine={(id) => setRoutineId(id)}
@@ -626,6 +655,7 @@ export function CalendarTab() {
                 setCursor(day);
                 setView("day");
               }}
+              onOpenDaySummary={(day, startTime) => setDaySummary({ day, startTime: startTime ?? null })}
               onOpenEvent={openEvent}
               onOpenTask={openTask}
               onOpenRoutine={(id) => setRoutineId(id)}
@@ -725,6 +755,31 @@ export function CalendarTab() {
               )}
             </div>
         </aside>
+      ) : null}
+
+      {/*
+        A32: 주간 보기에서 고른 날의 정리 목록 — 월간 보기의 하루 목록과 같은 화면입니다.
+        상세가 이 위에 열리므로, 상세를 닫으면 다시 이 목록으로 돌아옵니다.
+      */}
+      {daySummary ? (
+        <DayListPanel
+          day={daySummary.day}
+          startTime={daySummary.startTime ?? null}
+          items={dayItemsFor(daySummary.day, events, tasks)}
+          onClose={() => setDaySummary(null)}
+          onGoDay={() => {
+            const day = daySummary.day;
+            setDaySummary(null);
+            setCursor(day);
+            setView("day");
+          }}
+          onOpenEvent={openEvent}
+          onOpenTask={openTask}
+          onToggleTask={toggleTask}
+          onMoveAllDay={(id, direction) => moveAllDayInDay(daySummary.day, id, direction)}
+          onCreateEvent={(time) => createEvent(daySummary.day, time)}
+          onCreateTask={() => openTaskDraft({ kind: "할 일", date: daySummary.day })}
+        />
       ) : null}
 
       <EventDetail

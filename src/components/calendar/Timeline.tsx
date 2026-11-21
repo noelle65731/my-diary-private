@@ -25,6 +25,16 @@ export interface TimelineProps {
   hourHeight?: number;
   gutterWidth?: string;
   onOpenEvent: (id: string) => void;
+  /**
+   * A32: 넓은 화면에서 일정 카드를 누르면 그 일정을 바로 열지 않고,
+   * 그 날의 정리 목록을 먼저 보여 줍니다. 이 값이 있으면 이쪽이 먼저 불립니다.
+   */
+  onOpenEventDay?: (id: string, day: string) => void;
+  /**
+   * A32: 빈 시간표 칸을 한 번 눌렀을 때. 넘기지 않으면 예전처럼 그 시각으로 새 일정을 엽니다.
+   * (끌어서 범위를 그리는 동작은 그대로 새 일정을 만듭니다.)
+   */
+  onClickEmptyDay?: (day: string, time: string | null) => void;
   /** B5: an empty-slot drag fills start and end; a plain tap still creates a 1-hour slot. */
   onCreate?: (date: string, time?: string | null, endTime?: string | null) => void;
   onMoveEvent?: (id: string, date: string, time: string | null) => void;
@@ -83,6 +93,8 @@ export function Timeline({
   hourHeight = 34,
   gutterWidth = "3.1rem",
   onOpenEvent,
+  onOpenEventDay,
+  onClickEmptyDay,
   onCreate,
   onMoveEvent,
   onMoveAllDayDate,
@@ -312,7 +324,12 @@ export function Timeline({
                 if (!origin || origin.day !== day) return;
                 if (Math.hypot(event.clientX - origin.x, event.clientY - origin.y) >= TAP_SLOP) return;
                 if (Date.now() - origin.at > TAP_MS) return;
-                onCreate?.(day, toTime(dropTime(event as unknown as { clientY: number; currentTarget: HTMLDivElement }, bounds.start)));
+                const clickedTime = toTime(dropTime(event as unknown as { clientY: number; currentTarget: HTMLDivElement }, bounds.start));
+                if (onClickEmptyDay) {
+                  onClickEmptyDay(day, clickedTime);
+                  return;
+                }
+                onCreate?.(day, clickedTime);
               }}
               onDragOver={(event) => {
                 if (!onMoveEvent) return;
@@ -421,6 +438,10 @@ export function Timeline({
                     onClick={(clickEvent) => {
                       clickEvent.stopPropagation();
                       if (moved.current) return;
+                      if (onOpenEventDay) {
+                        onOpenEventDay(event.id, day);
+                        return;
+                      }
                       onOpenEvent(event.id);
                     }}
                     className={cn(
@@ -431,7 +452,7 @@ export function Timeline({
                       event.canceled && "opacity-50",
                     )}
                     style={{ top, height, width, left }}
-                    title={onResizeEvent ? "가운데를 누르면 상세, 위/아래 가장자리를 끌면 시간이 늘어납니다" : undefined}
+                    title={onResizeEvent ? "가운데를 누르면 그 날 정리, 위/아래 가장자리를 끌면 시간이 늘어납니다" : undefined}
                   >
                     {timeLabel ? (
                       <span

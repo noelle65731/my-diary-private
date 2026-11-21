@@ -258,9 +258,13 @@ def main():
         page.screenshot(path=f"{OUT}/nav-pc-week-head-hover.png")
         head.click()
         page.wait_for_timeout(700)
-        check("주간 헤더 클릭 → 일간 보기", active_view(page) == "일간", active_view(page))
-        check("주간 헤더 클릭 → 11월 18일", "11월 18일" in h1(page), h1(page))
+        # A32: 요일 머리글은 이제 그 날의 정리 목록을 먼저 열고, 일간 보기는 그 안의 버튼으로 갑니다.
+        check("주간 헤더 클릭 → 그 날 정리 목록", page.locator("[data-day-list]").count() == 1, "")
         page.screenshot(path=f"{OUT}/nav-pc-week-to-day.png")
+        page.get_by_role("button", name="이 날짜로 이동").first.click()
+        page.wait_for_timeout(700)
+        check("정리 목록의 '이 날짜로 이동' → 일간 보기", active_view(page) == "일간", active_view(page))
+        check("주간 헤더 → 11월 18일 일간", "11월 18일" in h1(page), h1(page))
 
         ctx.close()
 

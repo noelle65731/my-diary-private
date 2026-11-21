@@ -9,8 +9,9 @@ import { routineTone, taskTone } from "@/components/common/tone";
 import { useEventColors } from "@/state/event-colors";
 import { useCategoryColors } from "@/state/category-colors";
 import { useProjectColors } from "@/state/project-colors";
-import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, XIcon } from "@/components/icons";
+import { CheckIcon } from "@/components/icons";
 import { eventCoversDay, routineCountForDay } from "@/components/calendar/calendar-utils";
+import { DayListPanel, type DayListItem } from "@/components/calendar/DayListPanel";
 
 interface MonthViewProps {
   cursor: string;
@@ -33,12 +34,14 @@ interface MonthViewProps {
   onToggleTask?: (task: ProjectTask) => void;
   onUpdateEvent: (id: string, patch: Record<string, unknown>) => void;
   onCreate: (date: string) => void;
+  /** A32: 그 날짜로 새 할 일을 더합니다. */
+  onCreateTask: (date: string) => void;
   onRoutineCount: (routine: Routine, date: string, count: number) => void;
   /** B5: dragging a chip onto another date moves the 일정/할 일 there. */
   onMoveItem?: (type: "event" | "task", id: string, date: string) => void;
 }
 
-type CellItem = { type: "event"; event: CalendarEvent } | { type: "task"; task: ProjectTask };
+type CellItem = DayListItem;
 
 const LAST = Number.MAX_SAFE_INTEGER;
 
@@ -76,6 +79,7 @@ export function MonthView({
   onRoutineCount,
   onMoveItem,
   onCreate,
+  onCreateTask,
 }: MonthViewProps) {
   const today = todayISO();
   const { toneFor } = useEventColors();
@@ -456,216 +460,14 @@ export function MonthView({
             setOpenDay(null);
             onSelectDay(openDayDate);
           }}
-          onCreate={() => onCreate(openDayDate)}
+          onCreateEvent={() => onCreate(openDayDate)}
+          onCreateTask={() => onCreateTask(openDayDate)}
           onOpenEvent={onOpenEvent}
           onOpenTask={onOpenTask}
           onToggleTask={onToggleTask}
           onMoveAllDay={(id, direction) => moveAllDay(openDayDate, id, direction)}
         />
       ) : null}
-    </div>
-  );
-}
-
-/**
- * A3: the full list of one date, opened on top of the month grid (bottom sheet on a
- * phone, side card on a wide screen). It never leaves the month view by itself —
- * only `이 날짜로 이동` opens the day view, and closing returns to the same month.
- */
-function DayListPanel({
-  day,
-  items,
-  onClose,
-  onGoDay,
-  onOpenEvent,
-  onOpenTask,
-  onToggleTask,
-  onMoveAllDay,
-  onCreate,
-}: {
-  day: string;
-  items: CellItem[];
-  onClose: () => void;
-  onGoDay: () => void;
-  onOpenEvent: (id: string) => void;
-  onOpenTask: (id: string) => void;
-  onToggleTask?: (task: ProjectTask) => void;
-  onMoveAllDay: (id: string, direction: -1 | 1) => void;
-  /** A16: the day list can start a new record without leaving the month. */
-  onCreate?: () => void;
-}) {
-  const { toneFor } = useEventColors();
-  const categoryColor = useCategoryColors();
-  const holiday = holidayName(day);
-  const allDay = items.filter((item) => item.type === "event" && item.event.allDay) as { type: "event"; event: CalendarEvent }[];
-  const timed = items.filter((item) => item.type === "event" && !item.event.allDay) as { type: "event"; event: CalendarEvent }[];
-  const dayTasks = items.filter((item) => item.type === "task") as { type: "task"; task: ProjectTask }[];
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-start sm:justify-end">
-      <button type="button" aria-label="닫기" onClick={onClose} className="absolute inset-0 bg-ink-900/10" />
-      <div
-        role="dialog"
-        aria-label={`${formatShort(day)} 하루 목록`}
-        className="relative z-10 flex max-h-[72dvh] w-full flex-col overflow-hidden rounded-t-3xl border border-paper-300 bg-white pb-[env(safe-area-inset-bottom)] shadow-lift animate-slide-up sm:mt-24 sm:mr-6 sm:max-h-[calc(100dvh-9rem)] sm:w-[21rem] sm:animate-pop-in sm:rounded-2xl sm:pb-0"
-      >
-        <div className="flex items-start gap-3 border-b border-paper-300/80 px-4 pb-2.5 pt-3">
-          <div className="min-w-0 flex-1">
-            <p className="text-[calc(13.5px*var(--fs))] text-ink-400">이 날짜 전체</p>
-            <p className="mt-0.5 truncate text-[calc(16px*var(--fs))] font-semibold text-ink-900">
-              {formatShort(day)} {weekdayKo(day)}요일
-              {holiday ? <span className="ml-1 text-[calc(14.5px*var(--fs))] font-normal text-red-500">{holiday}</span> : null}
-            </p>
-          </div>
-          <button type="button" onClick={onClose} className="icon-btn -mr-1 -mt-1" aria-label="닫기">
-            <XIcon size={16} />
-          </button>
-        </div>
-
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-          {items.length === 0 ? (
-            <p className="rounded-xl bg-paper-200/50 px-3 py-6 text-center text-[calc(14.5px*var(--fs))] text-ink-400">이 날짜에는 일정도 할 일도 없습니다.</p>
-          ) : null}
-
-          {allDay.length > 0 ? (
-            <section className="mb-3">
-              <p className="mb-1 flex items-baseline justify-between text-[calc(13.5px*var(--fs))] text-ink-400">
-                <span>종일 일정</span>
-                {allDay.length > 1 ? <span className="text-[calc(13px*var(--fs))] text-ink-300">↑↓ 로 순서 바꾸기</span> : null}
-              </p>
-              <ul className="space-y-1">
-                {allDay.map(({ event }, index) => {
-                  const tone = toneFor(event);
-                  return (
-                    <li key={event.id} className={cn("flex items-center gap-1 rounded-lg border px-2 py-1.5", tone.bg, tone.border)}>
-                      <button
-                        type="button"
-                        onClick={() => onOpenEvent(event.id)}
-                        className={cn(
-                          "min-w-0 flex-1 truncate text-left text-[calc(15px*var(--fs))]",
-                          tone.text,
-                          event.canceled && "line-through opacity-50",
-                          event.done && "opacity-60",
-                        )}
-                      >
-                        {event.title}
-                      </button>
-                      {allDay.length > 1 ? (
-                        <span className="flex flex-none items-center gap-0.5">
-                          <button
-                            type="button"
-                            onClick={() => onMoveAllDay(event.id, -1)}
-                            disabled={index === 0}
-                            aria-label={`${event.title} 위로`}
-                            className="flex h-5 w-5 items-center justify-center rounded text-ink-400 transition hover:bg-white/70 hover:text-ink-800 disabled:opacity-25"
-                          >
-                            <ChevronLeftIcon size={12} className="rotate-90" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => onMoveAllDay(event.id, 1)}
-                            disabled={index === allDay.length - 1}
-                            aria-label={`${event.title} 아래로`}
-                            className="flex h-5 w-5 items-center justify-center rounded text-ink-400 transition hover:bg-white/70 hover:text-ink-800 disabled:opacity-25"
-                          >
-                            <ChevronRightIcon size={12} className="rotate-90" />
-                          </button>
-                        </span>
-                      ) : null}
-                    </li>
-                  );
-                })}
-              </ul>
-            </section>
-          ) : null}
-
-          {timed.length > 0 ? (
-            <section className="mb-3">
-              <p className="mb-1 text-[calc(13.5px*var(--fs))] text-ink-400">시간 일정</p>
-              <ul className="space-y-1">
-                {timed.map(({ event }) => {
-                  const tone = toneFor(event);
-                  return (
-                    <li key={event.id} className="flex items-center gap-2">
-                      <span className={cn("w-[4.4rem] flex-none text-[calc(14px*var(--fs))] tabular-nums", tone.text)}>
-                        {event.startTime}
-                        {event.endTime ? `–${event.endTime}` : ""}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => onOpenEvent(event.id)}
-                        className={cn("min-w-0 flex-1 truncate text-left text-[calc(15px*var(--fs))] text-ink-700", event.canceled && "line-through opacity-50")}
-                      >
-                        {event.title}
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            </section>
-          ) : null}
-
-          {dayTasks.length > 0 ? (
-            <section className="mb-3">
-              <p className="mb-1 text-[calc(13.5px*var(--fs))] text-ink-400">할 일 {dayTasks.length}</p>
-              <ul className="space-y-0.5">
-                {dayTasks.map(({ task }) => {
-                  const tone = categoryColor.toneOf(task.category, taskTone(task.category));
-                  const waiting = task.status === "대기 중";
-                  return (
-                    <li key={task.id} className="flex items-start gap-2">
-                      <button
-                        type="button"
-                        onClick={() => onToggleTask?.(task)}
-                        aria-label={task.status === "완료" ? `${task.title} 완료 해제` : `${task.title} 완료`}
-                        aria-pressed={task.status === "완료"}
-                        className={cn(
-                          "mt-[3px] flex h-[15px] w-[15px] flex-none items-center justify-center rounded-[4px] border transition",
-                          task.status === "완료" ? cn(tone.solid, "border-transparent text-white") : "border-ink-300 hover:border-ink-500",
-                        )}
-                      >
-                        {task.status === "완료" ? <CheckIcon size={9} /> : null}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => onOpenTask(task.id)}
-                        className={cn(
-                          "min-w-0 flex-1 text-left text-[calc(15px*var(--fs))] leading-snug text-ink-700",
-                          task.status === "완료" && "text-ink-300 line-through",
-                        )}
-                      >
-                        {task.title}
-                      </button>
-                      {waiting ? <span className="mt-[1px] flex-none rounded bg-paper-200 px-1 text-[calc(12.5px*var(--fs))] text-ink-500">대기</span> : null}
-                      {task.startTime ? (
-                        <span className="mt-[3px] flex-none text-[calc(12.5px*var(--fs))] tabular-nums text-ink-400">
-                          {timeRangeLabel(task.startTime, task.endTime)}
-                        </span>
-                      ) : null}
-                    </li>
-                  );
-                })}
-              </ul>
-            </section>
-          ) : null}
-        </div>
-
-        <div className="flex items-center justify-between gap-2 border-t border-paper-300/80 bg-paper-50/60 px-4 py-2.5">
-          <button type="button" onClick={onClose} className="btn-ghost btn-xs">
-            닫기
-          </button>
-          <div className="flex items-center gap-1.5">
-            {onCreate ? (
-              <button type="button" onClick={onCreate} className="btn-outline btn-xs">
-                + 새 일정
-              </button>
-            ) : null}
-            <button type="button" onClick={onGoDay} className="btn-primary btn-xs">
-              이 날짜로 이동
-            </button>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

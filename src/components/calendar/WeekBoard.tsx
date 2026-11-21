@@ -30,6 +30,8 @@ interface WeekBoardProps {
   startHour: number;
   endHour: number;
   onSelectDay: (day: string) => void;
+  /** A32: 요일 머리글·일정 칸을 누르면 그 날의 정리 목록(종일·시간 일정 + 할 일)을 엽니다. */
+  onOpenDaySummary?: (day: string, startTime?: string | null) => void;
   onOpenEvent: (id: string) => void;
   onOpenTask: (id: string) => void;
   onOpenRoutine: (id: string) => void;
@@ -56,6 +58,12 @@ interface WeekBoardProps {
   onReorderAllDay?: (orderedIds: string[]) => void;
 }
 
+/** 프로젝트가 없는 할 일은 게시판에서 index 행으로 모입니다. */
+const INBOX_KEY = "inbox";
+/** A32: 행을 만드는 기준과 똑같이, 이 할 일이 어느 행에 속하는지 돌려줍니다. */
+const rowKeyOf = (task: ProjectTask, projects: ProjectTask[]) =>
+  projects.find((item) => item.id === (task.projectIds[0] ?? ""))?.id ?? INBOX_KEY;
+
 const snapMinutes = (minutes: number) => Math.round(minutes / 15) * 15;
 const toClock = (minutes: number) => `${String(Math.floor(minutes / 60) % 24).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
 
@@ -68,6 +76,7 @@ export function WeekBoard({
   startHour,
   endHour,
   onSelectDay,
+  onOpenDaySummary,
   onOpenEvent,
   onOpenTask,
   onOpenRoutine,
@@ -98,7 +107,12 @@ export function WeekBoard({
   /** B5: all-day 4건 → 3건 + 펼치기, and the 시간표 lifts when the rows fold. */
   const [allDayExpanded, setAllDayExpanded] = useState(false);
   const [customOpen, setCustomOpen] = useState(false);
-  /** A19: 폰에서 프로젝트 칸을 누르면 열리는 그 날의 할 일 시트. */
+  /**
+   * A19 · A32: 주간 칸을 누르면 열리는 '그 날 이 프로젝트의 할 일' 시트.
+   * 폰에서 먼저 쓰던 화면이고, 이제 PC에서도 프로젝트 칸·할 일 제목을 누르면
+   * 바로 수정 화면으로 들어가지 않고 이 목록이 먼저 열립니다.
+   * `key`는 프로젝트 id, 프로젝트가 없으면 index 행과 같은 "inbox"입니다.
+   */
   const [cellSheet, setCellSheet] = useState<{ key: string; title: string; day: string } | null>(null);
   const [narrow, setNarrow] = useState(false);
   /** Lets the timetable take the full height when the user wants every event at once. */
@@ -165,7 +179,7 @@ export function WeekBoard({
     [days.length, gutter],
   );
 
-  const visibleEvents = events.filter((event) => !event.trash);
+  const visibleEvents = useMemo(() => events.filter((event) => !event.trash), [events]);
   // B4: a canceled task stays faintly in its own place (with its reason), never vanishes.
   const visibleTasks = useMemo(() => tasks.filter((task) => !task.trash), [tasks]);
 
@@ -195,18 +209,25 @@ export function WeekBoard({
       });
   }, [weekTasks, projects, mode, hiddenProjectIds]);
 
-  /** A19: 프로젝트 칸 시트에 보여 줄 그 날의 할 일 — 진행 중인 것과 완료한 것 모두. */
+  /**
+   * A19: 프로젝트 칸 시트에 보여 줄 그 날의 할 일 — 진행 중인 것과 완료한 것 모두.
+   * A32: 행을 만들 때와 똑같은 기준으로 프로젝트를 찾습니다. 예전에는 프로젝트가 없는
+   * 할 일을 `""`로 비교해, 게시판에서 index 행에 보이던 할 일이 시트에서는 하나도
+   * 나오지 않았습니다(`"" !== "inbox"`). 지금은 없는 프로젝트도 index 행으로 모입니다.
+   */
   const sheetTasks = useMemo(() => {
     if (!cellSheet) return [];
     return visibleTasks
       .filter((task) => {
-        const projectId = task.projectIds[0] ?? "";
-        if (projectId !== cellSheet.key) return false;
-        return task.date === cellSheet.day || task.due === cellSheet.day;
+        if (!(task.date === cellSheet.day || task.due === cellSheet.day)) return false;
+        return rowKeyOf(task, projects) === cellSheet.key;
       })
       .sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0) || String(a.createdAt).localeCompare(String(b.createdAt)));
-  }, [cellSheet, visibleTasks]);
+  }, [cellSheet, visibleTasks, projects]);
 
+  const sheetDateLabel = cellSheet
+    ? `${Number(cellSheet.day.slice(5, 7))}월 ${Number(cellSheet.day.slice(8, 10))}일 (${weekdayKo(cellSheet.day)})`
+    : "";
   const routineGroups = useMemo(() => {
     const active = routines.filter(
       (routine) =>
@@ -395,9 +416,14 @@ export function WeekBoard({
               type="button"
               data-today={isToday ? "true" : undefined}
               data-week-day-head={day}
-              title={`${Number(day.slice(5, 7))}월 ${Number(day.slice(8, 10))}일 ${weekdayKo(day)}요일 · 하루 보기`}
-              aria-label={`${Number(day.slice(5, 7))}월 ${Number(day.slice(8, 10))}일 하루 보기`}
-              onClick={() => onSelectDay(day)}
+              title={`${Number(day.slice(5, 7))}월 ${Number(day.slice(8, 10))}일 ${weekdayKo(day)}요일 · 그 날 정리`}
+              aria-label={`${Number(day.slice(5, 7))}월 ${Number(day.slice(8, 10))}일 그 날 정리`}
+              onClick={() => {
+                /* A32: 날짜 머리글은 바로 일간 보기로 뛰지 않고, 그 날의 일정·할 일 요약을 먼저 엽니다.
+                   일간 보기는 그 요약의 `이 날짜로 이동`으로 들어갑니다. */
+                if (onOpenDaySummary) onOpenDaySummary(day);
+                else onSelectDay(day);
+              }}
               className="group/day flex flex-col items-center gap-0.5 pb-0.5 pt-1.5 transition hover:bg-paper-200/40"
             >
               <span
@@ -496,6 +522,11 @@ export function WeekBoard({
                     key={day}
                     data-drop-zone="allday-day"
                     data-drop-day={day}
+                    onClick={() => {
+                      /* A32: 종일 칸의 빈 자리를 눌러도 그 날의 정리 목록이 먼저 열립니다. */
+                      if (narrow) return;
+                      onOpenDaySummary?.(day);
+                    }}
                     className={cn("border-l border-paper-300", isSameISO(day, today) && todayCell)}
                   />
                 ))}
@@ -552,7 +583,17 @@ export function WeekBoard({
                     }}
                     data-drop-zone="allday-bar"
                     data-drop-id={event.id}
-                    onClick={() => onOpenEvent(event.id)}
+                    onClick={(clickEvent) => {
+                      /* A32: 종일 막대도 그 일정의 수정 화면이 아니라, 누른 날의 정리 목록을 먼저 엽니다. */
+                      if (!narrow && onOpenDaySummary) {
+                        const box = clickEvent.currentTarget.getBoundingClientRect();
+                        const ratio = box.width > 0 ? (clickEvent.clientX - box.left) / box.width : 0;
+                        const offset = Math.max(0, Math.min(span - 1, Math.floor(ratio * span)));
+                        onOpenDaySummary(days[startIdx + offset] ?? event.date);
+                        return;
+                      }
+                      onOpenEvent(event.id);
+                    }}
                     title={allDayExpanded ? undefined : "끌어서 종일 일정 순서 바꾸기"}
                     className={cn(
                       "absolute h-[19px] overflow-hidden rounded-md border px-1.5 text-left text-[calc(13px*var(--fs))] font-medium leading-[17px] md:px-2 md:text-[calc(13.5px*var(--fs))]",
@@ -619,6 +660,12 @@ export function WeekBoard({
           hourHeight={timeExpanded ? 40 : 32}
           gutterWidth={gutter}
           onOpenEvent={onOpenEvent}
+          onOpenEventDay={
+            narrow || !onOpenDaySummary ? undefined : (_id, day) => onOpenDaySummary(day)
+          }
+          onClickEmptyDay={
+            narrow || !onOpenDaySummary ? undefined : (day, time) => onOpenDaySummary(day, time)
+          }
           onCreate={onCreate}
           onMoveEvent={onMoveEvent}
           onMoveAllDayDate={onMoveAllDayDate}
@@ -701,8 +748,9 @@ export function WeekBoard({
                     data-week-project-cell={`${project?.title ?? "index"}:${day}`}
                     onClick={(event) => {
                       /* A19: 폰에서는 칸이 좁아, 칸을 한 번 누르면 그 날 이 프로젝트의 할 일을
-                         모아 보여 주고 거기서 새 할 일도 더합니다(할 일 줄을 누른 경우는 빼고). */
-                      if (!narrow) return;
+                         모아 보여 주고 거기서 새 할 일도 더합니다(할 일 줄을 누른 경우는 빼고).
+                         A32: PC에서도 똑같이 — 바로 수정 화면으로 들어가지 않고 정리된 목록이
+                         먼저 열립니다. */
                       if ((event.target as HTMLElement).closest("[data-week-task]")) return;
                       setCellSheet({ key, title: project?.title ?? "index", day });
                     }}
@@ -778,12 +826,15 @@ export function WeekBoard({
                                   : undefined
                               }
                               onClick={(event) => {
+                                /* A19: 폰에서는 할 일 제목을 눌러도 그 날 목록 시트로 갑니다 —
+                                   체크는 시트 안에서 한 번 더 누르면 됩니다.
+                                   A32: PC에서도 같은 목록을 먼저 보여 줍니다(끌기로 옮긴 경우는
+                                   dnd가 클릭을 막아 여기 오지 않습니다). */
                                 if (!narrow) {
-                                  onOpenTask(task.id);
+                                  event.stopPropagation();
+                                  setCellSheet({ key, title: project?.title ?? "index", day });
                                   return;
                                 }
-                                /* A19: 폰에서는 할 일 제목을 눌러도 그 날 목록 시트로 갑니다 —
-                                   체크는 시트 안에서 한 번 더 누르면 됩니다. */
                                 const origin = tapOrigin.current;
                                 tapOrigin.current = null;
                                 const travelled = origin && origin.id === task.id ? Math.hypot(event.clientX - origin.x, event.clientY - origin.y) : 0;
@@ -977,14 +1028,19 @@ export function WeekBoard({
         </div>
       </div>
 
-      {/* A19: 폰에서 프로젝트 칸을 누르면 — 그 날 이 프로젝트의 할 일을 한 화면에 모아 보여 줍니다. */}
+      {/*
+        A19 · A32: 주간 칸을 누르면 — 그 날 이 프로젝트의 할 일을 한 화면에 모아 보여 주고,
+        여기서 새 할 일도 더합니다. 폰에서는 원래 이 화면이었고, 이제 PC에서도 똑같이
+        바로 수정 화면으로 들어가지 않고 이 정리된 목록이 먼저 열립니다.
+      */}
       {cellSheet ? (
-        <div className="fixed inset-0 z-50 flex items-end justify-center" data-week-cell-sheet={cellSheet.day}>
+        <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-start sm:justify-end" data-week-cell-sheet={cellSheet.day}>
           <button type="button" aria-label="닫기" onClick={() => setCellSheet(null)} className="absolute inset-0 bg-ink-900/10" />
           <div
             role="dialog"
-            aria-label={`${cellSheet.title} ${cellSheet.day} 할 일`}
-            className="relative z-10 flex max-h-[70dvh] w-full flex-col overflow-hidden rounded-t-3xl border border-paper-300 bg-white pb-[env(safe-area-inset-bottom)] shadow-lift animate-slide-up sm:mb-6 sm:w-[26rem] sm:rounded-3xl"
+            aria-modal="true"
+            aria-label={`${cellSheet.title} ${sheetDateLabel} 할 일`}
+            className="relative z-10 flex max-h-[70dvh] w-full flex-col overflow-hidden rounded-t-3xl border border-paper-300 bg-white pb-[env(safe-area-inset-bottom)] shadow-lift animate-slide-up sm:mt-20 sm:mr-6 sm:max-h-[calc(100dvh-8rem)] sm:w-[24rem] sm:rounded-3xl sm:pb-0"
           >
             <div className="flex items-start gap-3 border-b border-paper-300/80 px-4 pb-2.5 pt-3">
               <div className="min-w-0 flex-1">
@@ -992,11 +1048,7 @@ export function WeekBoard({
                   이 날 할 일 {sheetTasks.length > 0 ? `· ${sheetTasks.length}개` : ""}
                 </p>
                 <p className="mt-0.5 truncate text-[calc(16px*var(--fs))] font-semibold text-ink-900">
-                  {cellSheet.title} ·{" "}
-                  {(() => {
-                    const date = new Date(`${cellSheet.day}T12:00:00`);
-                    return `${date.getMonth() + 1}월 ${date.getDate()}일 (${weekdayKo(cellSheet.day)})`;
-                  })()}
+                  {cellSheet.title} · {sheetDateLabel}
                 </p>
               </div>
               <button type="button" onClick={() => setCellSheet(null)} className="icon-btn -mr-1 -mt-1" aria-label="닫기">
@@ -1004,7 +1056,7 @@ export function WeekBoard({
               </button>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3" data-sheet-scroll="true">
               {sheetTasks.length === 0 ? (
                 <p className="rounded-xl bg-paper-200/50 px-3 py-6 text-center text-[calc(14.5px*var(--fs))] text-ink-400">
                   이 날 이 프로젝트에 예정된 할 일이 없습니다.
@@ -1049,6 +1101,11 @@ export function WeekBoard({
                           </span>
                           {memoLine ? <span className="mt-0.5 block truncate text-[calc(13px*var(--fs))] text-ink-400">{memoLine}</span> : null}
                         </button>
+                        {task.startTime ? (
+                          <span className="mt-[3px] flex-none text-[calc(12.5px*var(--fs))] tabular-nums text-ink-400">
+                            {timeRangeLabel(task.startTime, task.endTime)}
+                          </span>
+                        ) : null}
                         {canceled ? (
                           <span className="mt-[2px] flex-none rounded bg-paper-200 px-1 text-[calc(11.5px*var(--fs))] font-medium text-ink-500">취소</span>
                         ) : waiting ? (
@@ -1071,7 +1128,8 @@ export function WeekBoard({
                 onClick={() => {
                   const target = cellSheet;
                   setCellSheet(null);
-                  onCreateTaskForProject(target.key, target.day);
+                  /* index 행(프로젝트 없음)에서 더한 할 일은 프로젝트 없이 저장됩니다. */
+                  onCreateTaskForProject(target.key === INBOX_KEY ? "" : target.key, target.day);
                 }}
                 className="btn-primary btn-xs"
               >
