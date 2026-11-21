@@ -63,6 +63,30 @@
 }
 
 @layer components {
+  /* A20: 스크롤바는 움직이는 동안에만 보입니다. 평소에는 thumb을 투명하게 두되
+     폭(8px)을 그대로 유지해 사라졌다 나타나도 글자가 밀리지 않습니다. */
+  .scrollbar-quiet {
+    scrollbar-color: transparent transparent;
+    scrollbar-width: thin;
+  }
+
+  .scrollbar-quiet::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .scrollbar-quiet::-webkit-scrollbar-thumb {
+    background: transparent;
+  }
+
+  .is-scrolling {
+    scrollbar-color: rgba(156, 163, 175, 0.45) transparent;
+  }
+
+  .is-scrolling::-webkit-scrollbar-thumb {
+    background: rgba(156, 163, 175, 0.4);
+  }
+
   .card {
     @apply rounded-2xl border border-paper-300 bg-white;
   }

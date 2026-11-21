@@ -18,6 +18,7 @@ import { Timeline, minutesFromDrop } from "@/components/calendar/Timeline";
 import { useDnd } from "@/components/common/dnd";
 import { useEventColors } from "@/state/event-colors";
 import { useProjectColors } from "@/state/project-colors";
+import { useAutoHideScrollbar } from "@/lib/use-auto-hide-scroll";
 import { useCategoryColors } from "@/state/category-colors";
 
 interface WeekBoardProps {
@@ -115,6 +116,9 @@ export function WeekBoard({
   /** A19: 분류에 직접 고른 색이 있으면 프로젝트 점·할 일 체크·루틴 배지에 그 색을 씁니다. */
   const categoryColor = useCategoryColors();
   const dnd = useDnd();
+  /** A20: 게시판·일정 창 모두 스크롤바가 움직일 때만 보입니다. */
+  const boardBar = useAutoHideScrollbar();
+  const scheduleBar = useAutoHideScrollbar();
   const scroller = useRef<HTMLDivElement | null>(null);
   /** A19: 일정 영역(종일+시간표)의 스크롤 창 — 지금 시각이 보이도록 처음에 옮깁니다. */
   const scheduleScroll = useRef<HTMLDivElement | null>(null);
@@ -299,11 +303,13 @@ export function WeekBoard({
       <div
         ref={scroller}
         data-week-board-scroll="true"
+        onScroll={boardBar.onScroll}
         className={cn(
           "flex min-h-0 min-w-0 flex-1 flex-col overscroll-contain",
           /* A18: 프로젝트를 다 펼치면 게시판이 화면보다 길어질 수 있습니다. 그때는
              프로젝트 칸이 아니라 이 게시판 전체가 세로로 움직입니다(날짜 머리글은 위에 붙음). */
           narrow ? "-mx-1 overflow-auto pb-1" : "overflow-y-auto overflow-x-clip pb-1",
+          boardBar.className,
         )}
       >
         <div className={cn("flex min-h-full flex-col pb-1", narrow && "min-w-[44rem]")}>
@@ -459,6 +465,7 @@ export function WeekBoard({
       <div
         ref={scheduleScroll}
         data-week-scroll="true"
+        onScroll={scheduleBar.onScroll}
         style={
           narrow
             ? undefined
@@ -467,6 +474,7 @@ export function WeekBoard({
         className={cn(
           "relative flex-none",
           narrow ? "overflow-visible" : "overflow-y-auto overflow-x-clip overscroll-contain",
+          scheduleBar.className,
         )}
       >
         {/* all-day — 스크롤 창 안, 시간표 바로 위. 접지 않고 같이 올라갑니다. */}

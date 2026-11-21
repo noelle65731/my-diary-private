@@ -25,6 +25,7 @@ import { currentCalendarCategory, isLegacyCalendarCategory } from "@/lib/types";
 import { ChevronLeftIcon, ChevronRightIcon, PlusIcon, SearchIcon, TrashIcon } from "@/components/icons";
 import { ModeChips } from "@/components/common/ModeChips";
 import { WeekBoard } from "@/components/calendar/WeekBoard";
+import { useAutoHideScrollbar } from "@/lib/use-auto-hide-scroll";
 import { WeekPanel } from "@/components/calendar/WeekPanel";
 import { MonthView, RoutineHeat } from "@/components/calendar/MonthView";
 import { YearView } from "@/components/calendar/YearView";
@@ -51,6 +52,8 @@ function eventMode(event: CalendarEvent): string {
 }
 
 export function CalendarTab() {
+  /** A20: 주간 보기 오른쪽 패널도 스크롤바가 움직일 때만 보입니다. */
+  const weekPanelBar = useAutoHideScrollbar();
   const { data, update, setRoutineCount, findItem, create } = useData();
   const { settings, addCategory, removeCategory } = useSettings();
   // A16: the 분류 filter shares one list with the routine/task pickers.
@@ -649,7 +652,13 @@ export function CalendarTab() {
       </div>
 
       {view === "week" ? (
-        <aside className="side-panel sticky top-12 hidden h-[calc(100dvh-8rem)] w-[19rem] flex-none overflow-y-auto pb-2 pl-5 xl:block">
+        <aside
+          onScroll={weekPanelBar.onScroll}
+          className={cn(
+            "side-panel sticky top-12 hidden h-[calc(100dvh-8rem)] w-[19rem] flex-none overflow-y-auto pb-2 pl-5 xl:block",
+            weekPanelBar.className,
+          )}
+        >
           {renderWeekPanel()}
         </aside>
       ) : null}
