@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { CalendarEvent } from "@/lib/types";
 import { todayISO } from "@/lib/date";
 import { cn } from "@/lib/utils";
-import { categoryTone } from "@/components/common/tone";
+import { useEventColors } from "@/state/event-colors";
 import { useDnd, type DropTarget } from "@/components/common/dnd";
 import {
   eventCoversDay,
@@ -87,6 +87,7 @@ export function Timeline({
   compact = false,
 }: TimelineProps) {
   const today = todayISO();
+  const { toneFor } = useEventColors();
   const dnd = useDnd();
   const active = useMemo(() => events.filter((event) => !event.trash), [events]);
   /** B5: the current-time line keeps moving without a reload. */
@@ -307,7 +308,7 @@ export function Timeline({
                 if (!id) return;
                 onMoveEvent(id, day, toTime(dropTime(event as unknown as { clientY: number; currentTarget: HTMLDivElement }, bounds.start)));
               }}
-              className={cn("relative touch-pan-y border-l border-paper-300", isToday && "bg-paper-200/25")}
+              className={cn("relative touch-pan-y border-l border-paper-300", isToday && "bg-[#e8edf4]")}
               style={{
                 height: totalHeight,
                 backgroundImage:
@@ -334,7 +335,7 @@ export function Timeline({
                 const shownEnd = live ? live.end : end;
                 const top = ((Math.max(shownStart, bounds.start) - bounds.start) / 60) * hourHeight;
                 const height = Math.max(18, ((Math.min(shownEnd, bounds.end) - Math.max(shownStart, bounds.start)) / 60) * hourHeight - 2);
-                const tone = categoryTone(event.category);
+                const tone = toneFor(event);
                 const width = `calc(${100 / lanes}% - 4px)`;
                 const left = `calc(${(lane * 100) / lanes}% + 2px)`;
                 const timeLabel = event.startTime ? `${toTime(shownStart)}${event.endTime || live ? `–${toTime(shownEnd)}` : ""}` : "";

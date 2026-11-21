@@ -5,7 +5,8 @@ import type { CalendarEvent, ProjectTask, Routine } from "@/lib/types";
 import { formatFullKo } from "@/lib/date";
 import { holidayName } from "@/lib/holidays";
 import { cn } from "@/lib/utils";
-import { categoryTone, routineTone, taskTone } from "@/components/common/tone";
+import { routineTone, taskTone } from "@/components/common/tone";
+import { useEventColors } from "@/state/event-colors";
 import { ProjectIcon } from "@/components/common/ProjectIcon";
 import { CheckIcon, PencilIcon, PlusIcon } from "@/components/icons";
 import {
@@ -58,6 +59,7 @@ export function DayView({
   recordCount,
 }: DayViewProps) {
   const dnd = useDnd();
+  const { toneFor } = useEventColors();
   const visible = events.filter((event) => !event.trash && (hiddenIncluded || !event.hidden));
   const allDay = allDayEventsForDay(visible, day);
   const timed = timedEventsForDay(visible, day).filter((event) => !event.canceled);
@@ -102,7 +104,7 @@ export function DayView({
           <div className="mb-2 flex flex-wrap items-center gap-1.5 border-b border-paper-300 pb-2">
             <span className="text-[13.5px] text-ink-400">종일</span>
             {allDay.map((event) => {
-              const tone = categoryTone(event.category);
+              const tone = toneFor(event);
               return (
                 <button
                   key={event.id}

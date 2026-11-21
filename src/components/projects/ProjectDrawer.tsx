@@ -6,6 +6,8 @@ import { useSettings } from "@/state/settings";
 import { useCategoryOptions } from "@/state/categories";
 import { Drawer, EmptyState, Segmented } from "@/components/common/primitives";
 import { taskTone } from "@/components/common/tone";
+import { PASTELS } from "@/components/common/pastels";
+import { useProjectColors } from "@/state/project-colors";
 import { CheckIcon, PlusIcon } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { todayISO } from "@/lib/date";
@@ -32,6 +34,7 @@ export function ProjectDrawer({
 }) {
   const { data, create, update, remove } = useData();
   const { addCategory } = useSettings();
+  const { pastelOf, chosenOf, setColor } = useProjectColors();
   /** A16: 이 화면에서 바로 분류를 바꾸거나 새로 만듭니다. */
   const categories = useCategoryOptions();
   const [newCategory, setNewCategory] = useState<string | null>(null);
@@ -148,6 +151,38 @@ export function ProjectDrawer({
     >
       {project ? (
         <div className="space-y-4">
+          {/* 프로젝트 색 — 자동 배정된 파스텔을 직접 바꿀 수 있습니다. */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="mr-1 text-[13.5px] text-ink-400">색</span>
+            {PASTELS.map((pastel) => {
+              const active = chosenOf(project.id) === pastel.key;
+              return (
+                <button
+                  key={pastel.key}
+                  type="button"
+                  data-project-color={pastel.key}
+                  onClick={() => setColor(project.id, pastel.key)}
+                  aria-label={pastel.label}
+                  aria-pressed={active}
+                  title={pastel.label}
+                  className={cn(
+                    "h-6 w-6 rounded-full border border-black/5 transition",
+                    pastel.dot,
+                    active ? "ring-2 ring-ink-900 ring-offset-1" : "hover:scale-110",
+                  )}
+                />
+              );
+            })}
+            <button
+              type="button"
+              onClick={() => setColor(project.id, null)}
+              className="ml-1 rounded-full bg-paper-200 px-2 py-[2px] text-[12.5px] text-ink-500 transition hover:bg-paper-300"
+            >
+              자동
+            </button>
+            <span className="text-[12.5px] text-ink-400">{pastelOf(project.id).label}</span>
+          </div>
+
           {project.memo ? (
             <p className="rounded-xl bg-paper-100/70 px-3 py-2 text-[15px] leading-relaxed text-ink-600">
               <RichText spans={project.memoRich} value={project.memo} />

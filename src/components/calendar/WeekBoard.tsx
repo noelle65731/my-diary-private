@@ -6,7 +6,7 @@ import { isSameISO, todayISO, weekdayKo } from "@/lib/date";
 import { holidayName } from "@/lib/holidays";
 import { cn } from "@/lib/utils";
 import { mergeCategories } from "@/state/categories";
-import { categoryTone, priorityOf, projectEmoji, routineTone, taskTone } from "@/components/common/tone";
+import { priorityOf, projectEmoji, routineTone, taskTone } from "@/components/common/tone";
 import { CheckIcon, ChevronDownIcon, ChevronRightIcon } from "@/components/icons";
 import {
   eventCoversDay,
@@ -16,6 +16,8 @@ import {
 } from "@/components/calendar/calendar-utils";
 import { Timeline, minutesFromDrop } from "@/components/calendar/Timeline";
 import { useDnd } from "@/components/common/dnd";
+import { useEventColors } from "@/state/event-colors";
+import { useProjectColors } from "@/state/project-colors";
 
 interface WeekBoardProps {
   days: string[];
@@ -83,6 +85,8 @@ export function WeekBoard({
   onReorderAllDay,
 }: WeekBoardProps) {
   const today = todayISO();
+  /** 오늘 열은 일정·프로젝트·루틴이 같은 톤으로 이어지도록 한 가지 색을 같이 씁니다. */
+  const todayCell = "bg-[#e8edf4]";
   /** A6: the first project row carries the collapse-all control for the whole project area. */
   const [projectsCollapsed, setProjectsCollapsed] = useState(false);
   /** The routine area folds away as a whole, the same way the project area does. */
@@ -101,6 +105,8 @@ export function WeekBoard({
    * so the pointer is sampled on down and compared on click.
    */
   const tapOrigin = useRef<{ id: string; x: number; y: number; at: number } | null>(null);
+  const { toneFor } = useEventColors();
+  const { pastelOf } = useProjectColors();
   const dnd = useDnd();
   const scroller = useRef<HTMLDivElement | null>(null);
   const dayKey = days.join(",");
@@ -122,8 +128,9 @@ export function WeekBoard({
     const delta = box.left - frame.left;
     scroller.current.scrollLeft += delta - (scroller.current.clientWidth - box.width) / 2;
   }, [narrow, dayKey]);
-  /* the frozen left column: wide enough on a phone to read a project or routine name */
-  const gutter = narrow ? "6rem" : "7.6rem";
+  /* the frozen left column: wide enough on a phone to read a project or routine name;
+     on a desktop a little wider so '브랜드 포트폴리오' is not cut to '브랜드 포…' */
+  const gutter = narrow ? "6rem" : "9rem";
   const grid = useMemo(
     () => ({ gridTemplateColumns: `${gutter} repeat(${days.length}, minmax(0, 1fr))` }),
     [days.length, gutter],
@@ -427,12 +434,12 @@ export function WeekBoard({
                     key={day}
                     data-drop-zone="allday-day"
                     data-drop-day={day}
-                    className="border-l border-paper-300"
+                    className={cn("border-l border-paper-300", isSameISO(day, today) && todayCell)}
                   />
                 ))}
               </div>
               {allDayBars.map(({ event, startIdx, span, lane }) => {
-                const tone = categoryTone(event.category);
+                const tone = toneFor(event);
                 return (
                   <button
                     key={event.id}
@@ -583,14 +590,19 @@ export function WeekBoard({
           const tone = project ? taskTone(project.category) : null;
           return (
             <div key={key} className="grid border-b border-paper-300/80 last:border-b-0" style={grid}>
-              <div className="group/row sticky left-0 z-20 flex min-h-[2rem] items-center gap-1 border-r border-paper-300 bg-white py-0.5 pr-1">
+              <div
+                className={cn(
+                  "group/row sticky left-0 z-20 flex min-h-[2rem] items-center gap-1 border-r border-paper-300 py-0.5 pr-1",
+                  project ? pastelOf(project.id).bg : "bg-white",
+                )}
+              >
                 {project ? (
                   <span className={cn("h-2 w-2 flex-none rounded-full", tone ? tone.dot : "bg-paper-400")} aria-hidden="true" />
                 ) : null}
                 <button
                   type="button"
                   onClick={() => (project ? onOpenTask(project.id) : onCreateTaskForProject(""))}
-                  className="min-w-0 flex-1 truncate text-left text-[14.5px] font-semibold text-ink-900 hover:text-ink-900"
+                  className="line-clamp-2 min-w-0 flex-1 break-keep text-left text-[14px] font-semibold leading-[1.15] text-ink-900 hover:text-ink-900"
                   title={project?.title ?? "index"}
                   aria-label={project?.title ?? "index"}
                 >
@@ -616,7 +628,11 @@ export function WeekBoard({
                     data-drop-zone="week-task-day"
                     data-drop-day={day}
                     data-week-task-day={day}
-                    className={cn("min-h-[2rem] border-l border-paper-300/80 py-0.5", narrow ? "px-[3px]" : "px-1")}
+                    className={cn(
+                      "min-h-[2rem] border-l border-paper-300/80 py-0.5",
+                      narrow ? "px-[3px]" : "px-1",
+                      isSameISO(day, today) && todayCell,
+                    )}
                   >
                     <div className={cn(narrow ? "space-y-1.5" : "space-y-1")}>
                       {cell.map((task) => {
@@ -657,7 +673,7 @@ export function WeekBoard({
                               );
                             }}
                             title={canceled ? `취소${task.cancelReason ? ` · ${task.cancelReason}` : ""}` : "끌어서 다른 날짜로 옮기기"}
-                            className={cn("flex items-start", narrow ? "gap-0.5" : "gap-1.5", canceled && "opacity-45")}
+                            className={cn("flex items-start", narrow ? "gap-0.5" : "gap-1", canceled && "opacity-45")}
                           >
                             {narrow ? null : (
                               <button
@@ -704,9 +720,8 @@ export function WeekBoard({
                                 <span
                                   className={cn(
                                     "min-w-0 text-ink-800",
-                                    narrow
-                                      ? "line-clamp-2 break-words text-[14px] leading-[1.2]"
-                                      : "truncate text-[14px] leading-[1.25]",
+                                    /* 두 줄까지는 그대로 보여 주고, 그 뒤에야 …으로 줄입니다. */
+                                    "line-clamp-2 break-keep text-[14px] leading-[1.2]",
                                     (done || canceled) && "text-ink-400 line-through",
                                   )}
                                 >
@@ -827,7 +842,14 @@ export function WeekBoard({
                   const count = routineCountForDay(routines, routine, day);
                   const done = count >= target;
                   return (
-                    <div key={day} className="flex items-center justify-center border-l border-paper-300/50 py-[3px]">
+                    <div
+                      key={day}
+                      data-week-routine-day={day}
+                      className={cn(
+                        "flex items-center justify-center border-l border-paper-300/50 py-[3px]",
+                        isSameISO(day, today) && todayCell,
+                      )}
+                    >
                       {scheduled ? (
                         <button
                           type="button"

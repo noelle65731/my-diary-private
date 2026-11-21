@@ -1,6 +1,8 @@
 "use client";
 
 import { DataProvider } from "@/state/store";
+import { EventColorProvider } from "@/state/event-colors";
+import { ProjectColorProvider } from "@/state/project-colors";
 import { SettingsProvider } from "@/state/settings";
 import { UiProvider } from "@/state/ui";
 import { AppShell } from "@/components/AppShell";
@@ -11,9 +13,13 @@ export function AppRoot() {
     <SettingsProvider>
       <UiProvider>
         <DataProvider>
-          <DndProvider>
-            <AppShell />
-          </DndProvider>
+          <EventColorProvider>
+            <ProjectColorProvider>
+              <DndProvider>
+                <AppShell />
+              </DndProvider>
+            </ProjectColorProvider>
+          </EventColorProvider>
         </DataProvider>
       </UiProvider>
     </SettingsProvider>

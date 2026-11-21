@@ -5,7 +5,8 @@ import type { CalendarEvent, ModeFilter, ProjectTask, Routine } from "@/lib/type
 import { daysInMonth, formatShort, isSameISO, monthMatrix, todayISO, weekdayKo } from "@/lib/date";
 import { holidayName } from "@/lib/holidays";
 import { cn } from "@/lib/utils";
-import { categoryTone, routineTone, taskTone } from "@/components/common/tone";
+import { routineTone, taskTone } from "@/components/common/tone";
+import { useEventColors } from "@/state/event-colors";
 import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, XIcon } from "@/components/icons";
 import { eventCoversDay, routineCountForDay } from "@/components/calendar/calendar-utils";
 
@@ -72,6 +73,7 @@ export function MonthView({
   onCreate,
 }: MonthViewProps) {
   const today = todayISO();
+  const { toneFor } = useEventColors();
   const year = Number(cursor.slice(0, 4));
   const month0 = Number(cursor.slice(5, 7)) - 1;
   const matrix = useMemo(() => monthMatrix(year, month0, weekStartsOn), [year, month0, weekStartsOn]);
@@ -151,6 +153,10 @@ export function MonthView({
     });
   };
 
+  /** 한 칩이 차지하는 높이(px) — 설정한 개수만큼은 잘리지 않고 보이도록 행 최소 높이를 잡습니다. */
+  const chipRow = 22;
+  const cellMinHeight = 28 + dayItems * chipRow + (dayItems - 1) * 2 + 6;
+
   const openDayDate = openDay;
   const openDayItems = openDayDate ? itemsForDay(openDayDate) : [];
 
@@ -173,14 +179,18 @@ export function MonthView({
         })}
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
       {matrix.map((row, rowIndex) => {
         const cells = showWeekends ? row : row.filter((_, index) => {
           const dow = new Date(`${row[index]}T12:00:00`).getDay();
           return dow !== 0 && dow !== 6;
         });
         return (
-          <div key={rowIndex} className="grid min-h-0 flex-1 border-b border-paper-300 last:border-b-0" style={{ gridTemplateColumns: `repeat(${cells.length}, minmax(0,1fr))` }}>
+          <div
+            key={rowIndex}
+            className="grid min-h-0 flex-1 border-b border-paper-300 last:border-b-0"
+            style={{ gridTemplateColumns: `repeat(${cells.length}, minmax(0,1fr))`, minHeight: cellMinHeight }}
+          >
             {cells.map((day) => {
               const inMonth = day.slice(0, 7) === cursor.slice(0, 7);
               const items = itemsForDay(day);
@@ -236,14 +246,15 @@ export function MonthView({
                   </div>
                   {holiday ? <p className="truncate text-[12.5px] text-red-500">{holiday}</p> : null}
 
-                  <div className="mt-0.5 space-y-[3px] md:space-y-[4px]">
+                  <div className="mt-0.5 space-y-[2px]">
                     {visibleItems.map((item) => {
                       if (item.type === "event") {
-                        const tone = categoryTone(item.event.category);
+                        const tone = toneFor(item.event);
                         const multiDay = !!item.event.endDate && item.event.endDate > item.event.date;
                         return (
                           <button
                             key={item.event.id}
+                            data-month-item={item.event.id}
                             type="button"
                             draggable={!!onMoveItem}
                             onDragStart={(event) => {
@@ -252,7 +263,7 @@ export function MonthView({
                             }}
                             onClick={() => openItemFirst("event", item.event.id, day)}
                             className={cn(
-                              "flex w-full items-start gap-1 rounded px-0.5 py-[2px] text-left text-[13px] leading-[1.35] md:px-1 md:text-[14px] md:leading-[1.45]",
+                              "flex w-full items-start gap-1 rounded px-0.5 py-[1px] text-left text-[13px] leading-[1.3] md:px-1 md:text-[14px] md:leading-[1.35]",
                               multiDay ? cn(tone.bg, tone.text) : tone.text,
                               item.event.canceled && "line-through opacity-50",
                               item.event.done && "opacity-60",
@@ -268,12 +279,13 @@ export function MonthView({
                       return (
                         <div
                           key={item.task.id}
+                          data-month-item={item.task.id}
                           draggable={!!onMoveItem}
                           onDragStart={(event) => {
                             event.dataTransfer.setData("text/diary-item", `task:${item.task.id}`);
                             event.dataTransfer.effectAllowed = "move";
                           }}
-                          className="flex min-h-[1.1rem] w-full items-center gap-0.5 px-0.5 py-[2px] md:min-h-[1.2rem] md:gap-1 md:px-1"
+                          className="flex min-h-[1rem] w-full items-center gap-0.5 px-0.5 py-[1px] md:min-h-[1.05rem] md:gap-1 md:px-1"
                         >
                           <button
                             type="button"
@@ -390,6 +402,7 @@ function DayListPanel({
   /** A16: the day list can start a new record without leaving the month. */
   onCreate?: () => void;
 }) {
+  const { toneFor } = useEventColors();
   const holiday = holidayName(day);
   const allDay = items.filter((item) => item.type === "event" && item.event.allDay) as { type: "event"; event: CalendarEvent }[];
   const timed = items.filter((item) => item.type === "event" && !item.event.allDay) as { type: "event"; event: CalendarEvent }[];
@@ -429,7 +442,7 @@ function DayListPanel({
               </p>
               <ul className="space-y-1">
                 {allDay.map(({ event }, index) => {
-                  const tone = categoryTone(event.category);
+                  const tone = toneFor(event);
                   return (
                     <li key={event.id} className={cn("flex items-center gap-1 rounded-lg border px-2 py-1.5", tone.bg, tone.border)}>
                       <button
@@ -478,7 +491,7 @@ function DayListPanel({
               <p className="mb-1 text-[13.5px] text-ink-400">시간 일정</p>
               <ul className="space-y-1">
                 {timed.map(({ event }) => {
-                  const tone = categoryTone(event.category);
+                  const tone = toneFor(event);
                   return (
                     <li key={event.id} className="flex items-center gap-2">
                       <span className={cn("w-[4.4rem] flex-none text-[14px] tabular-nums", tone.text)}>

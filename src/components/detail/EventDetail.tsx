@@ -4,6 +4,9 @@ import { useMemo, useState } from "react";
 import { useData } from "@/state/store";
 import { useSettings } from "@/state/settings";
 import { useCategoryOptions } from "@/state/categories";
+import { useEventColors } from "@/state/event-colors";
+import { cn } from "@/lib/utils";
+import { EVENT_COLORS } from "@/components/common/event-colors";
 import {
   DetailSection,
   DetailShell,
@@ -143,6 +146,7 @@ function EventDetailInner({
 }) {
   const { data, update, remove } = useData();
   const { settings } = useSettings();
+  const { colorOf, setColor } = useEventColors();
   const { draft, set, markSaved, changedKeys, isDirty } = useDetailDraft(formFromEvent(event));
   const [field, setField] = useState<string | null>(null);
   /** A10/A16: 업무 · 개인 · 공부 and the categories the user added — nothing older. */
@@ -325,6 +329,33 @@ function EventDetailInner({
               />
             </div>
           ) : null}
+
+          {/* 색 — 노션 팔레트 그대로, 고르면 바로 캘린더 블록에 적용됩니다. */}
+          <div className="mt-2">
+            <p className="text-[13px] text-ink-400">색</p>
+            <div className="mt-1 flex flex-wrap items-center gap-1.5">
+              {EVENT_COLORS.map((choice) => {
+                const active = (colorOf(event.id) ?? "default") === choice.key;
+                return (
+                  <button
+                    key={choice.key}
+                    type="button"
+                    data-event-color={choice.key}
+                    aria-label={choice.label}
+                    aria-pressed={active}
+                    title={choice.label}
+                    onClick={() => setColor(event.id, choice.key)}
+                    className={cn(
+                      "h-6 w-6 rounded-full border border-black/5 transition",
+                      choice.swatch,
+                      active ? "ring-2 ring-ink-900 ring-offset-1" : "hover:scale-110",
+                    )}
+                  />
+                );
+              })}
+              <span className="ml-1 text-[12.5px] text-ink-400">노션 색</span>
+            </div>
+          </div>
 
           <div className="mt-1 grid gap-2 sm:grid-cols-2">
             <InlineChoice label="유형" value={draft.kind} options={KINDS} onChange={(value) => set("kind", value)} />

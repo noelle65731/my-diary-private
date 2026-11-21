@@ -61,6 +61,7 @@ function fixture() {
     task("tk-1", "사례 1 정리", { category: "업무", date: "2026-11-18", urgent: true, important: true, projectIds: ["pj-1"] }),
     task("tk-2", "사례 2 정리", { category: "업무", date: "2026-11-20", status: "완료", doneAt: "2026-11-20", projectIds: ["pj-1"] }),
     task("tk-3", "와이어프레임", { category: "업무", date: TODAY, projectIds: ["pj-1"] }),
+    task("tk-30", "포트폴리오 사례 정리와 브랜드 가이드 점검", { category: "업무", date: TODAY, memo: "레퍼런스 40장", projectIds: ["pj-1"] }),
     task("tk-4", "약국 들르기", { category: "개인", date: TODAY, favorite: true, urgent: true }),
     task("tk-5", "옷장 비우기", { category: "개인", date: "2026-11-22", projectIds: ["pj-2"] }),
   ];
@@ -137,6 +138,33 @@ const MEASURE = () => {
     timelineH: scroll ? (document.querySelector("[data-timeline-column]") || { getBoundingClientRect: () => ({ height: 0 }) }).getBoundingClientRect().height : 0,
     gutter: box(gutterLabel),
     header: box(document.querySelector("[data-week-header]")),
+    todayTint: (() => {
+      const today = "2026-11-21";
+      const other = "2026-11-20";
+      const bg = (el) => (el ? getComputedStyle(el).backgroundColor : null);
+      return {
+        timeline: bg(document.querySelector(`[data-timeline-column][data-day="${today}"]`)),
+        project: bg(document.querySelector(`[data-week-task-day="${today}"]`)),
+        routine: bg(document.querySelector(`[data-week-routine-day="${today}"]`)),
+        otherTimeline: bg(document.querySelector(`[data-timeline-column][data-day="${other}"]`)),
+        otherProject: bg(document.querySelector(`[data-week-task-day="${other}"]`)),
+      };
+    })(),
+    longTitle: (() => {
+      const node = [...document.querySelectorAll("[data-week-task] span")].find(
+        (n) => n.children.length === 0 && n.textContent.includes("브랜드 가이드"),
+      );
+      if (!node) return null;
+      const r = node.getBoundingClientRect();
+      const cs = getComputedStyle(node);
+      return { h: Math.round(r.height), w: Math.round(r.width), clamp: cs.webkitLineClamp, ls: cs.lineHeight };
+    })(),
+    projectLabel: (() => {
+      const node = [...document.querySelectorAll("button[aria-label]")].find((n) => n.getAttribute("aria-label") === "브랜드 포트폴리오");
+      if (!node) return null;
+      const r = node.getBoundingClientRect();
+      return { w: Math.round(r.width), h: Math.round(r.height), clipped: node.scrollHeight > node.clientHeight + 1 };
+    })(),
     headerPosition: (() => { const el = document.querySelector("[data-week-header]"); return el ? getComputedStyle(el).position : null; })(),
     bodyScrollTop: document.querySelector("[data-week-scroll]") ? document.querySelector("[data-week-scroll]").scrollTop : null,
   };
@@ -194,6 +222,13 @@ const shot = async (page, name) => {
     check("PC: 프로젝트 구역 아래 구분선 2px 검정", /^2px rgb\(17, 24, 39\)/.test(m.sections[1].borderBottom || ""), m.sections[1].borderBottom);
     check("PC: 바깥 테두리만 있고 안쪽 구역엔 좌우 테두리 없음", /^0px/.test(m.sections[1].borderLeft || ""), m.sections[1].borderLeft);
     check("PC: 프로젝트·루틴 구역이 화면 안", m.sections[2].box.bottom <= 900 && m.sections[1].box.top < 900, JSON.stringify(m.sections.map((s) => s.box && s.box.bottom)));
+    check(
+      "PC: 오늘 열이 일정·프로젝트·루틴에서 같은 톤",
+      !!m.todayTint.timeline && m.todayTint.timeline === m.todayTint.project && m.todayTint.project === m.todayTint.routine && m.todayTint.otherProject !== m.todayTint.timeline,
+      JSON.stringify(m.todayTint),
+    );
+    check("PC: 할 일 제목 두 줄까지 보임", !!m.longTitle && m.longTitle.clamp === "2" && m.longTitle.h > 26, JSON.stringify(m.longTitle));
+    check("PC: 프로젝트 이름이 잘리지 않음", !!m.projectLabel && !m.projectLabel.clipped, JSON.stringify(m.projectLabel));
     await page.getByRole("button", { name: "3일", exact: true }).click();
     await page.waitForTimeout(800);
     await shot(page, "pc-three-tight");
@@ -224,6 +259,11 @@ const shot = async (page, name) => {
     check("모바일: 일정 영역이 세로 스크롤 컨테이너 아님", !!m.scheduleScroll && m.scheduleScroll.overflowY === "visible", m.scheduleScroll && m.scheduleScroll.overflowY);
     check("모바일: 프로젝트 구역이 첫 화면 안", m.sections[1].box.top < 844, String(m.sections[1].box.top));
     check("모바일: 루틴 구역도 첫 화면 안", m.sections[2].box.bottom <= 844, String(m.sections[2].box.bottom));
+    check(
+      "모바일: 오늘 열이 일정·프로젝트·루틴에서 같은 톤",
+      !!m.todayTint.timeline && m.todayTint.timeline === m.todayTint.project && m.todayTint.project === m.todayTint.routine,
+      JSON.stringify(m.todayTint),
+    );
 
     // 왼쪽 시간 열 고정 — 게시판을 가로로 밀어도 시간 이름이 제자리
     const gutterX = async () => {

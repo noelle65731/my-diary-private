@@ -7,6 +7,8 @@ import { EditorFooter, ErrorNote, ProjectPicker } from "@/components/editors/sha
 import { MemoEditor } from "@/components/editors/MemoField";
 import { plainOfSpans, spansFromMarkdown } from "@/lib/richtext";
 import { CalendarIcon, StarIcon } from "@/components/icons";
+import { EVENT_COLORS, type EventColorKey } from "@/components/common/event-colors";
+import { useEventColors } from "@/state/event-colors";
 import { addDaysISO, memoTitle, startOfWeekISO, todayISO, weekKeyOf } from "@/lib/date";
 import { cn } from "@/lib/utils";
 import { type CalendarCategory, type CalendarEvent, type CalendarKind, currentCalendarCategory } from "@/lib/types";
@@ -35,9 +37,11 @@ interface FormState {
   canceled: boolean;
   cancelReason: string;
   projectIds: string[];
+  /** 노션 팔레트에서 고른 일정 색 (이 브라우저에 저장) */
+  color: EventColorKey;
 }
 
-function formFromEvent(event: CalendarEvent): FormState {
+function formFromEvent(event: CalendarEvent, color: EventColorKey = "default"): FormState {
   return {
     title: event.title,
     kind: event.kind,
@@ -56,6 +60,7 @@ function formFromEvent(event: CalendarEvent): FormState {
     canceled: event.canceled,
     cancelReason: event.cancelReason,
     projectIds: event.projectIds,
+    color,
   };
 }
 
@@ -81,6 +86,7 @@ function formFromDraft(draft?: EventDraft): FormState {
     canceled: false,
     cancelReason: "",
     projectIds: [],
+    color: "default",
   };
 }
 
@@ -110,10 +116,13 @@ function EventEditorInner({
 }) {
   const { data, create, update, remove } = useData();
   const existing = eventId ? data.calendar.find((item) => item.id === eventId) ?? null : null;
-  const [form, setForm] = useState<FormState>(existing ? formFromEvent(existing) : formFromDraft(draft));
+  const { colorOf, setColor } = useEventColors();
   /** A16: what the window opened with, so closing saves only when something changed. */
   const initialForm = useRef<FormState | null>(null);
-  if (initialForm.current === null) initialForm.current = existing ? formFromEvent(existing) : formFromDraft(draft);
+  if (initialForm.current === null) {
+    initialForm.current = existing ? formFromEvent(existing, colorOf(existing.id) ?? "default") : formFromDraft(draft);
+  }
+  const [form, setForm] = useState<FormState>(initialForm.current);
   const closing = useRef(false);
   const [error, setError] = useState<string | null>(null);
   /** B6: 여러 날을 고르면 '날짜마다'가 기본이고, 저장할 때 '기간'으로 바꿀 수 있습니다. */
@@ -124,43 +133,53 @@ function EventEditorInner({
     setForm((current) => ({ ...current, [key]: value }));
   const multiDayDraft = form.kind === "일정" && !!form.endDate && form.endDate > form.date;
 
+  /** 저장 본문 — 색만 바뀌었는지 비교하려고 따로 만들어 둡니다. */
+  const buildPayload = (state: FormState): Record<string, unknown> => {
+    const weekStart = startOfWeekISO(state.date);
+    const multi = state.kind === "일정" && !!state.endDate && state.endDate > state.date;
+    const spans = spansFromMarkdown(state.memo);
+    return {
+      title: state.title.trim(),
+      kind: state.kind,
+      category: state.category,
+      date: state.date,
+      startTime: state.allDay ? null : state.startTime,
+      endTime: state.allDay || state.kind !== "일정" ? null : state.endTime || null,
+      // Bug fix: an all-day multi-day event used to lose its end date here.
+      endDate: state.kind === "일정" ? (multi && multiMode === "range" ? state.endDate : state.date) : state.date,
+      memo: plainOfSpans(spans),
+      memoRich: spans,
+      done: state.done,
+      favorite: state.favorite,
+      hidden: state.hidden,
+      canceled: state.canceled,
+      cancelReason: state.cancelReason,
+      cancelAt: state.canceled ? existing?.cancelAt ?? todayISO() : null,
+      projectIds: state.projectIds,
+      weekKey: state.kind === "일정" ? "" : weekKeyOf(weekStart),
+      baseDate: state.kind === "일정" ? null : weekStart,
+    };
+  };
+
   const save = async (): Promise<boolean> => {
     if (!form.title.trim()) {
       setError("제목을 입력해 주세요.");
       return false;
     }
-    const weekStart = startOfWeekISO(form.date);
-    const multiDay = form.kind === "일정" && !!form.endDate && form.endDate > form.date;
-    const payload: Record<string, unknown> = {
-      title: form.title.trim(),
-      kind: form.kind,
-      category: form.category,
-      date: form.date,
-      startTime: form.allDay ? null : form.startTime,
-      endTime: form.allDay || form.kind !== "일정" ? null : form.endTime || null,
-      // Bug fix: an all-day multi-day event used to lose its end date here.
-      endDate: form.kind === "일정" ? (multiDay && multiMode === "range" ? form.endDate : form.date) : form.date,
-      ...(() => {
-        const spans = spansFromMarkdown(form.memo);
-        return { memo: plainOfSpans(spans), memoRich: spans };
-      })(),
-      done: form.done,
-      favorite: form.favorite,
-      hidden: form.hidden,
-      canceled: form.canceled,
-      cancelReason: form.cancelReason,
-      cancelAt: form.canceled ? existing?.cancelAt ?? todayISO() : null,
-      projectIds: form.projectIds,
-      weekKey: form.kind === "일정" ? "" : weekKeyOf(weekStart),
-      baseDate: form.kind === "일정" ? null : weekStart,
-    };
+    const payload = buildPayload(form);
+    /** 바뀐 것이 색뿐이면 노션은 건드리지 않고 이 브라우저에만 색을 남깁니다. */
+    const bodyChanged = JSON.stringify(payload) !== JSON.stringify(buildPayload(initialForm.current ?? form));
+    const colorKey = form.color;
     if (existing) {
-      const ok = await update("calendar", existing.id, payload);
-      if (!ok) {
-        setError("저장하지 못했습니다. 잠시 후 다시 시도해 주세요.");
-        return false;
+      if (bodyChanged) {
+        const ok = await update("calendar", existing.id, payload);
+        if (!ok) {
+          setError("저장하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+          return false;
+        }
       }
-    } else if (multiDay && multiMode === "days") {
+      setColor(existing.id, colorKey);
+    } else if (multiDayDraft && multiMode === "days") {
       // B6: '날짜마다' makes one record per day, each with the same time range.
       let cursor = form.date;
       let ok = true;
@@ -170,6 +189,7 @@ function EventEditorInner({
           ok = false;
           break;
         }
+        if (created.id) setColor(created.id, colorKey);
         cursor = addDaysISO(cursor, 1);
       }
       if (!ok) {
@@ -182,6 +202,7 @@ function EventEditorInner({
         setError("저장하지 못했습니다. 잠시 후 다시 시도해 주세요.");
         return false;
       }
+      if (created.id) setColor(created.id, colorKey);
     }
     return true;
   };
@@ -241,6 +262,34 @@ function EventEditorInner({
             ]}
           />
         </div>
+
+        {form.kind === "일정" ? (
+          <div>
+            <p className="label">색</p>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {EVENT_COLORS.map((choice) => (
+                <button
+                  key={choice.key}
+                  type="button"
+                  data-event-color={choice.key}
+                  aria-pressed={form.color === choice.key}
+                  aria-label={choice.label}
+                  title={choice.label}
+                  onClick={() => patch("color", choice.key)}
+                  className={cn(
+                    "h-7 w-7 rounded-full border border-black/5 transition",
+                    choice.swatch,
+                    form.color === choice.key ? "ring-2 ring-ink-900 ring-offset-2" : "hover:brightness-[0.97]",
+                  )}
+                />
+              ))}
+              <span className="ml-1 text-[13.5px] text-ink-400">
+                {EVENT_COLORS.find((choice) => choice.key === form.color)?.label ?? "기본"}
+              </span>
+            </div>
+            <p className="mt-1 text-[13px] text-ink-400">노션 색 그대로 · 이 브라우저에 저장되고 분류 색보다 먼저 보입니다.</p>
+          </div>
+        ) : null}
 
         <div className="grid grid-cols-2 gap-3">
           <label className="block">

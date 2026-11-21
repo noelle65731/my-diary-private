@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useData } from "@/state/store";
+import { useProjectColors } from "@/state/project-colors";
+import { PASTELS } from "@/components/common/pastels";
 import { useSettings } from "@/state/settings";
 import { useCategoryOptions } from "@/state/categories";
 import { useTabReset, useUi } from "@/state/ui";
@@ -360,139 +362,43 @@ export function ProjectsTab() {
               </form>
             </article>
 
-            {projects.map((project) => {
-              const children = sortProjectTaskList(tasks.filter((task) => !task.trash && task.projectIds.includes(project.id)));
-              const open = children.filter((task) => task.status !== "완료" && task.status !== "취소");
-              const recent = settings.showCompletedTasks
-                ? children
-                    .filter((task) => task.status === "완료")
-                    .sort((a, b) => (b.doneAt ?? "").localeCompare(a.doneAt ?? ""))
-                    .slice(0, settings.projectCompletedPreview)
-                : [];
-              const orderedOpen = sortTasksNewestFirst(open);
-              const last = [...children].sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""))[0];
-              const tone = taskTone(project.category);
-              return (
-                <article
+            {projects.map((project) => (
+                <ProjectCard
                   key={project.id}
-                  onDragOver={(event) => {
-                    if (event.dataTransfer.types.includes("text/diary-task") || event.dataTransfer.types.includes("text/diary-project")) event.preventDefault();
+                  project={project}
+                  tasks={tasks}
+                  onOpenProject={setProjectId}
+                  onOpenTask={(id) => void openTask(id)}
+                  onToggleTask={toggleTask}
+                  onCreateTask={(target) =>
+                    setTaskDraft({ kind: "할 일", category: target.category, projectId: target.id })
+                  }
+                  drag={{
+                    draggable: true,
+                    onDragOver: (event) => {
+                      if (event.dataTransfer.types.includes("text/diary-task") || event.dataTransfer.types.includes("text/diary-project")) event.preventDefault();
+                    },
+                    onDrop: (event) => {
+                      const taskDrag = event.dataTransfer.getData("text/diary-task");
+                      if (taskDrag) {
+                        event.preventDefault();
+                        void update("projects", taskDrag, { projectIds: [project.id], category: project.category });
+                        return;
+                      }
+                      const projectDrag = event.dataTransfer.getData("text/diary-project");
+                      if (projectDrag) {
+                        event.preventDefault();
+                        reorder(projects, projectDrag, project.id);
+                      }
+                    },
+                    onDragStart: (event) => {
+                      if (event.dataTransfer.types.includes("text/diary-task")) return;
+                      event.dataTransfer.setData("text/diary-project", project.id);
+                      event.dataTransfer.effectAllowed = "move";
+                    },
                   }}
-                  onDrop={(event) => {
-                    const taskDrag = event.dataTransfer.getData("text/diary-task");
-                    if (taskDrag) {
-                      event.preventDefault();
-                      // B6: only the relation changes; the task's own content is preserved.
-                      void update("projects", taskDrag, { projectIds: [project.id], category: project.category });
-                      return;
-                    }
-                    const projectDrag = event.dataTransfer.getData("text/diary-project");
-                    if (projectDrag) {
-                      event.preventDefault();
-                      reorder(projects, projectDrag, project.id);
-                    }
-                  }}
-                  draggable
-                  onDragStart={(event) => {
-                    if (event.dataTransfer.types.includes("text/diary-task")) return;
-                    event.dataTransfer.setData("text/diary-project", project.id);
-                    event.dataTransfer.effectAllowed = "move";
-                  }}
-                  className="flex min-h-[10rem] flex-col rounded-2xl border border-paper-300 px-3.5 py-3 transition hover:border-paper-400"
-                >
-                  <header className="flex items-start gap-2">
-                    <span className={cn("flex h-8 w-8 flex-none items-center justify-center overflow-hidden rounded-lg text-[18px]", tone.soft)}>
-                      <ProjectIcon icon={project.icon} seed={project.id} category={project.category} className="h-full w-full" />
-                    </span>
-                    <button type="button" onClick={() => setProjectId(project.id)} className="min-w-0 flex-1 text-left">
-                      <p className="truncate text-[17px] font-semibold tracking-tight text-ink-900">{project.title}</p>
-                      <p className="truncate text-[14px] text-ink-500">
-                        {last?.doneAt || last?.date ? `${dateLabel(last.doneAt?.slice(0, 10) ?? last.date)} 기록` : "아직 기록 없음"}
-                      </p>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        // A16: 카드에서 바로 NOW 숨김 켜기/끄기 — 카드가 열리지 않게 합니다.
-                        event.stopPropagation();
-                        void update("projects", project.id, { hidden: !project.hidden });
-                      }}
-                      className={cn(
-                        "flex-none rounded-full px-1.5 py-[1px] text-[11.5px] font-semibold leading-[1.6] transition",
-                        project.hidden
-                          ? "bg-ink-900 text-white"
-                          : "bg-paper-200 text-ink-400 hover:bg-paper-300/80 hover:text-ink-700",
-                      )}
-                      aria-label={project.hidden ? `${project.title} NOW 숨김 해제` : `${project.title} NOW 숨기기`}
-                      aria-pressed={!!project.hidden}
-                      title={project.hidden ? "NOW 숨김 켜짐 — 누르면 다시 보입니다" : "NOW 숨김 켜기"}
-                    >
-                      NOW
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setProjectId(project.id)}
-                      className="flex-none text-ink-300 transition hover:text-ink-600"
-                      aria-label="프로젝트 열기"
-                    >
-                      <ChevronRightIcon size={15} />
-                    </button>
-                  </header>
-
-                  <p className="mt-1.5 text-[14px] text-ink-500">남은 할 일 {open.length}</p>
-                  <ul className="mt-1 space-y-1.5">
-                    {orderedOpen.slice(0, CARD_OPEN_PREVIEW).map((task) => (
-                      <TaskLine
-                        key={task.id}
-                        task={task}
-                        onToggle={() => toggleTask(task)}
-                        onOpen={() => void openTask(task.id)}
-                      />
-                    ))}
-                    {open.length === 0 ? <li className="text-[14px] text-ink-300">남은 할 일이 없습니다.</li> : null}
-                    {open.length > CARD_OPEN_PREVIEW ? (
-                      <li>
-                        <button
-                          type="button"
-                          onClick={() => setProjectId(project.id)}
-                          className="pl-[1.375rem] text-[13.5px] text-ink-400 transition hover:text-ink-700"
-                        >
-                          +{open.length - CARD_OPEN_PREVIEW}개 더 보기
-                        </button>
-                      </li>
-                    ) : null}
-                  </ul>
-
-                  {recent.length > 0 ? (
-                    <div className="mt-2 border-t border-paper-300/70 pt-1.5">
-                      <p className="text-[13px] text-ink-400">최근 기록</p>
-                      <ul className="mt-0.5 space-y-0.5">
-                        {recent.map((task) => (
-                          <li key={task.id} className="flex items-center gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => void openTask(task.id)}
-                              className="min-w-0 flex-1 truncate text-left text-[14px] text-ink-500"
-                            >
-                              {task.title}
-                            </button>
-                            <span className="flex-none text-[13px] text-ink-400">{dateLabel(task.doneAt?.slice(0, 10) ?? task.date)}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
-
-                  <button
-                    type="button"
-                    onClick={() => setTaskDraft({ kind: "할 일", category: project.category, projectId: project.id })}
-                    className="mt-auto pt-1.5 text-left text-[14px] text-ink-400 transition hover:text-ink-700"
-                  >
-                    + 할 일
-                  </button>
-                </article>
-              );
-            })}
+                />
+            ))}
           </div>
 
           {routines.length > 0 ? (
@@ -643,6 +549,182 @@ export function ProjectsTab() {
         onClose={() => setRoutineId(null)}
       />
     </div>
+  );
+}
+
+/**
+ * 프로젝트 카드 — 트랙과 히스토리가 같은 규격으로 씁니다.
+ * 배경은 프로젝트마다 자동으로 돌아가는 아주 옅은 파스텔입니다.
+ */
+function ProjectCard({
+  project,
+  tasks,
+  mode = "track",
+  onOpenProject,
+  onOpenTask,
+  onToggleTask,
+  onCreateTask,
+  onRestore,
+  restoreLabel = "되살리기",
+  drag,
+}: {
+  project: ProjectTask;
+  tasks: ProjectTask[];
+  mode?: "track" | "history";
+  onOpenProject: (id: string) => void;
+  onOpenTask: (id: string) => void;
+  onToggleTask: (task: ProjectTask) => void;
+  onCreateTask?: (project: ProjectTask) => void;
+  onRestore?: (project: ProjectTask) => void;
+  /** 되살리기 / 보이기 — 히스토리에서 어떤 동작인지 */
+  restoreLabel?: string;
+  drag?: {
+    draggable?: boolean;
+    onDragStart?: (event: React.DragEvent<HTMLElement>) => void;
+    onDragOver?: (event: React.DragEvent<HTMLElement>) => void;
+    onDrop?: (event: React.DragEvent<HTMLElement>) => void;
+  };
+}) {
+  const { update } = useData();
+  const { settings } = useSettings();
+  const { pastelOf } = useProjectColors();
+  const pastel = pastelOf(project.id);
+  const tone = taskTone(project.category);
+  const children = sortProjectTaskList(tasks.filter((task) => !task.trash && task.projectIds.includes(project.id)));
+  const open = children.filter((task) => task.status !== "완료" && task.status !== "취소");
+  const orderedOpen = sortTasksNewestFirst(open);
+  const recent = settings.showCompletedTasks
+    ? children
+        .filter((task) => task.status === "완료")
+        .sort((a, b) => (b.doneAt ?? "").localeCompare(a.doneAt ?? ""))
+        .slice(0, settings.projectCompletedPreview)
+    : [];
+  const last = [...children].sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""))[0];
+
+  return (
+    <article
+      data-project-card={project.id}
+      {...drag}
+      className={cn(
+        "flex min-h-[10rem] flex-col rounded-2xl border px-3.5 py-3 transition",
+        pastel.bg,
+        pastel.border,
+        mode === "track" ? "hover:border-paper-400" : "opacity-95",
+      )}
+    >
+      <header className="flex items-start gap-2">
+        <span className={cn("flex h-8 w-8 flex-none items-center justify-center overflow-hidden rounded-lg text-[18px]", pastel.bg)}>
+          <ProjectIcon icon={project.icon} seed={project.id} category={project.category} className="h-full w-full" />
+        </span>
+        <button type="button" onClick={() => onOpenProject(project.id)} className="min-w-0 flex-1 text-left">
+          <p className="truncate text-[17px] font-semibold tracking-tight text-ink-900">{project.title}</p>
+          <p className="truncate text-[14px] text-ink-500">
+            {mode === "history"
+              ? `${project.category} · ${project.history ? "History" : project.status}`
+              : last?.doneAt || last?.date
+                ? `${dateLabel(last.doneAt?.slice(0, 10) ?? last.date)} 기록`
+                : "아직 기록 없음"}
+          </p>
+        </button>
+        {mode === "track" ? (
+          <button
+            type="button"
+            onClick={(event) => {
+              // A16: 카드에서 바로 NOW 숨김 켜기/끄기 — 카드가 열리지 않게 합니다.
+              event.stopPropagation();
+              void update("projects", project.id, { hidden: !project.hidden });
+            }}
+            className={cn(
+              "flex-none rounded-full px-1.5 py-[1px] text-[11.5px] font-semibold leading-[1.6] transition",
+              project.hidden ? "bg-ink-900 text-white" : "bg-white/70 text-ink-400 hover:bg-paper-200 hover:text-ink-700",
+            )}
+            aria-label={project.hidden ? `${project.title} NOW 숨김 해제` : `${project.title} NOW 숨기기`}
+            aria-pressed={!!project.hidden}
+            title={project.hidden ? "NOW 숨김 켜짐 — 누르면 다시 보입니다" : "NOW 숨김 켜기"}
+          >
+            NOW
+          </button>
+        ) : (
+          <span className="flex-none rounded-full bg-white/70 px-1.5 py-[1px] text-[11.5px] font-semibold leading-[1.6] text-ink-500">
+            {project.category}
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={() => onOpenProject(project.id)}
+          className="flex-none text-ink-300 transition hover:text-ink-600"
+          aria-label="프로젝트 열기"
+        >
+          <ChevronRightIcon size={15} />
+        </button>
+      </header>
+
+      <p className="mt-1.5 text-[14px] text-ink-500">
+        {mode === "history" ? `완료한 할 일 ${children.filter((task) => task.status === "완료").length}` : `남은 할 일 ${open.length}`}
+      </p>
+      <ul className="mt-1 space-y-1.5">
+        {(mode === "history" ? [...children].filter((task) => task.status === "완료").sort((a, b) => (b.doneAt ?? "").localeCompare(a.doneAt ?? "")) : orderedOpen)
+          .slice(0, CARD_OPEN_PREVIEW + 1)
+          .map((task) => (
+            <TaskLine key={task.id} task={task} onToggle={() => onToggleTask(task)} onOpen={() => onOpenTask(task.id)} />
+          ))}
+        {mode === "history" && children.filter((task) => task.status === "완료").length === 0 && open.length === 0 ? (
+          <li className="text-[14px] text-ink-400">남은 할 일이 없습니다.</li>
+        ) : null}
+        {mode === "track" && open.length === 0 ? <li className="text-[14px] text-ink-400">남은 할 일이 없습니다.</li> : null}
+        {mode === "track" && open.length > CARD_OPEN_PREVIEW ? (
+          <li>
+            <button
+              type="button"
+              onClick={() => onOpenProject(project.id)}
+              className="pl-[1.375rem] text-[13.5px] text-ink-500 transition hover:text-ink-700"
+            >
+              +{open.length - CARD_OPEN_PREVIEW}개 더 보기
+            </button>
+          </li>
+        ) : null}
+      </ul>
+
+      {mode === "track" && recent.length > 0 ? (
+        <div className="mt-2 border-t border-black/[0.06] pt-1.5">
+          <p className="text-[13px] text-ink-400">최근 기록</p>
+          <ul className="mt-0.5 space-y-0.5">
+            {recent.map((task) => (
+              <li key={task.id} className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => onOpenTask(task.id)}
+                  className="min-w-0 flex-1 truncate text-left text-[14px] text-ink-500"
+                >
+                  {task.title}
+                </button>
+                <span className="flex-none text-[13px] text-ink-400">{dateLabel(task.doneAt?.slice(0, 10) ?? task.date)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {mode === "history" ? (
+        <button
+          type="button"
+          onClick={() => onRestore?.(project)}
+          className="mt-auto pt-2 text-left text-[14px] text-ink-500 transition hover:text-ink-800"
+        >
+          {restoreLabel}
+        </button>
+      ) : (
+        onCreateTask ? (
+          <button
+            type="button"
+            onClick={() => onCreateTask(project)}
+            className="mt-auto pt-1.5 text-left text-[14px] text-ink-400 transition hover:text-ink-700"
+          >
+            + 할 일
+          </button>
+        ) : null
+      )}
+    </article>
   );
 }
 
@@ -907,43 +989,39 @@ function HistoryView({
   onRestoreRoutine: (routine: Routine) => void;
   onRestoreProject: (project: ProjectTask) => void;
 }) {
-  const finishedProjects = projects.filter((project) => project.status === "완료" || project.status === "취소" || project.history);
+  /** 완료·취소·History·숨김까지 모두 카드로 보여 줍니다 (트랙과 같은 규격). */
+  const finishedProjects = projects.filter(
+    (project) => !project.trash && (project.status === "완료" || project.status === "취소" || project.history || project.hidden),
+  );
   const pastRoutines = routines.filter((routine) => routine.history || routine.trash);
   const doneTasks = tasks.filter((task) => task.status === "완료").slice(0, 40);
   const canceled = tasks.filter((task) => task.status === "취소").slice(0, 20);
 
   return (
-    <div className="mt-4 grid gap-4 lg:grid-cols-2">
-      <section className="rounded-2xl border border-paper-300 px-3.5 py-3">
+    <div className="mt-4 space-y-4">
+      <section>
         <h3 className="mb-2 text-[15px] font-semibold text-ink-900">지난 프로젝트</h3>
         {finishedProjects.length === 0 ? (
           <p className="text-[14.5px] text-ink-400">완료했거나 접은 프로젝트가 아직 없습니다.</p>
         ) : (
-          <ul className="divide-y divide-paper-300/60">
-            {finishedProjects.map((project) => {
-              const children = tasks.filter((task) => task.projectIds.includes(project.id));
-              const done = children.filter((task) => task.status === "완료").length;
-              return (
-                <li key={project.id} className="flex items-center gap-2 py-1.5">
-                  <button type="button" onClick={() => onOpenProject(project.id)} className="min-w-0 flex-1 text-left">
-                    <span className="block truncate text-[15px] text-ink-700">{project.title}</span>
-                    <span className="text-[13px] text-ink-400">
-                      {project.category} · {project.status} · {done}/{children.length}
-                    </span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onRestoreProject(project)}
-                    className="rounded px-1.5 py-0.5 text-[13px] text-ink-400 hover:bg-paper-200 hover:text-ink-700"
-                  >
-                    되살리기
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
+          <div className="cards-grid" style={{ "--proj-cols": 3 } as React.CSSProperties}>
+            {finishedProjects.map((project) => (
+              <ProjectCard
+                key={project.id}
+                project={project}
+                tasks={tasks}
+                mode="history"
+                onOpenProject={onOpenProject}
+                onOpenTask={onOpenTask}
+                onToggleTask={(task) => onRestoreTask(task)}
+                onRestore={onRestoreProject}
+              />
+            ))}
+          </div>
         )}
       </section>
+
+      <div className="grid gap-4 lg:grid-cols-2">
 
       <section className="rounded-2xl border border-paper-300 px-3.5 py-3">
         <h3 className="mb-2 text-[15px] font-semibold text-ink-900">지난 루틴</h3>
@@ -1017,6 +1095,7 @@ function HistoryView({
           </ul>
         )}
       </section>
+      </div>
     </div>
   );
 }
@@ -1076,50 +1155,53 @@ function HistorySpace({
   );
 
   return (
-    <div className="mt-4 grid gap-4 lg:grid-cols-2">
-      <section className="rounded-2xl border border-paper-300 px-3.5 py-3">
+    <div className="mt-4 space-y-4">
+      <section>
         <h3 className="mb-2 text-[15px] font-semibold text-ink-900">숨긴 프로젝트</h3>
         {hiddenProjects.length === 0 ? (
           <p className="text-[14.5px] text-ink-400">숨긴 프로젝트가 없습니다.</p>
         ) : (
-          <ul className="divide-y divide-paper-300/60">
+          <div className="cards-grid" style={{ "--proj-cols": 3 } as React.CSSProperties}>
             {hiddenProjects.map((project) => (
-              <Row key={project.id} title={project.title} meta={`${project.category} · 숨김`} onOpen={() => onOpenProject(project.id)}>
-                <button
-                  type="button"
-                  onClick={() => onToggleHidden(project)}
-                  aria-label={`${project.title} 숨김 해제`}
-                  className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[13px] text-ink-500 hover:bg-paper-200 hover:text-ink-800"
-                >
-                  <EyeIcon size={13} off /> 보이기
-                </button>
-              </Row>
+              <ProjectCard
+                key={project.id}
+                project={project}
+                tasks={tasks}
+                mode="history"
+                restoreLabel="보이기"
+                onOpenProject={onOpenProject}
+                onOpenTask={onOpenTask}
+                onToggleTask={(task) => onRestoreTask(task)}
+                onRestore={onToggleHidden}
+              />
             ))}
-          </ul>
+          </div>
         )}
       </section>
 
-      <section className="rounded-2xl border border-paper-300 px-3.5 py-3">
+      <section>
         <h3 className="mb-2 text-[15px] font-semibold text-ink-900">완료한 프로젝트</h3>
         {doneProjects.length === 0 ? (
           <p className="text-[14.5px] text-ink-400">완료했거나 접은 프로젝트가 없습니다.</p>
         ) : (
-          <ul className="divide-y divide-paper-300/60">
+          <div className="cards-grid" style={{ "--proj-cols": 3 } as React.CSSProperties}>
             {doneProjects.map((project) => (
-              <Row key={project.id} title={project.title} meta={`${project.category} · ${project.history ? "History" : project.status}`} onOpen={() => onOpenProject(project.id)}>
-                <button
-                  type="button"
-                  onClick={() => onRestoreProject(project)}
-                  className="rounded px-1.5 py-0.5 text-[13px] text-ink-400 hover:bg-paper-200 hover:text-ink-700"
-                >
-                  되살리기
-                </button>
-              </Row>
+              <ProjectCard
+                key={project.id}
+                project={project}
+                tasks={tasks}
+                mode="history"
+                onOpenProject={onOpenProject}
+                onOpenTask={onOpenTask}
+                onToggleTask={(task) => onRestoreTask(task)}
+                onRestore={onRestoreProject}
+              />
             ))}
-          </ul>
+          </div>
         )}
       </section>
 
+      <div className="grid gap-4 lg:grid-cols-2">
       <section className="rounded-2xl border border-paper-300 px-3.5 py-3">
         <h3 className="mb-2 text-[15px] font-semibold text-ink-900">History로 보낸 항목</h3>
         {sentTasks.length + sentRoutines.length === 0 ? (
@@ -1143,6 +1225,7 @@ function HistorySpace({
           </ul>
         )}
       </section>
+      </div>
     </div>
   );
 }
