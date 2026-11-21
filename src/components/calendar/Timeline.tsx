@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CalendarEvent } from "@/lib/types";
-import { todayISO } from "@/lib/date";
+import { formatShort, minutesToTime, todayISO, weekdayKo } from "@/lib/date";
 import { cn } from "@/lib/utils";
 import { categoryTone } from "@/components/common/tone";
+import { useDnd } from "@/components/common/dnd";
 import {
   eventCoversDay,
   eventEndMinutes,
@@ -12,6 +13,13 @@ import {
   layoutDayEvents,
   timedEventsForDay,
 } from "@/components/calendar/calendar-utils";
+
+export interface EventTimePatch {
+  date: string;
+  startTime: string | null;
+  endTime: string | null;
+  endDate: string | null;
+}
 
 export interface TimelineProps {
   days: string[];
@@ -28,6 +36,8 @@ export interface TimelineProps {
   onResizeEvent?: (id: string, startTime: string, endTime: string) => void;
   compact?: boolean;
 }
+
+const SNAP = 15;
 
 function hourLabel(minutes: number): string {
   const h = Math.floor(minutes / 60);
@@ -58,6 +68,7 @@ export function Timeline({
   onResizeEvent,
   compact = false,
 }: TimelineProps) {
+  const { start } = useDnd();
   const today = todayISO();
   const active = useMemo(() => events.filter((event) => !event.trash), [events]);
   /** B5: the current-time line keeps moving without a reload. */
@@ -68,17 +79,17 @@ export function Timeline({
   }, []);
 
   const bounds = useMemo(() => {
-    let start = startHour * 60;
-    let end = endHour * 60;
+    let from = startHour * 60;
+    let to = endHour * 60;
     for (const event of active) {
       if (event.allDay || event.kind !== "일정") continue;
       for (const day of days) {
         if (!eventCoversDay(event, day)) continue;
-        start = Math.min(start, Math.floor(eventStartMinutes(event) / 60) * 60);
-        end = Math.max(end, Math.ceil(eventEndMinutes(event) / 60) * 60);
+        from = Math.min(from, Math.floor(eventStartMinutes(event) / 60) * 60);
+        to = Math.max(to, Math.ceil(eventEndMinutes(event) / 60) * 60);
       }
     }
-    return { start: Math.max(0, start), end: Math.min(24 * 60, Math.max(end, start + 60)) };
+    return { start: Math.max(0, from), end: Math.min(24 * 60, Math.max(to, from + 60)) };
   }, [active, days, endHour, startHour]);
 
   const totalHeight = ((bounds.end - bounds.start) / 60) * hourHeight;
@@ -91,15 +102,76 @@ export function Timeline({
   const now = new Date(nowTick);
   const nowMinutes = now.getHours() * 60 + now.getMinutes();
   const showNow = days.includes(today) && nowMinutes >= bounds.start && nowMinutes <= bounds.end;
+  const nowTop = ((nowMinutes - bounds.start) / 60) * hourHeight;
 
-  const dropTime = (event: { clientY: number; currentTarget: HTMLDivElement }, boundsStart: number) => {
-    const rect = event.currentTarget.getBoundingClientRect();
-    const offsetY = event.clientY - rect.top;
-    const minutes = boundsStart + (offsetY / hourHeight) * 60;
-    return Math.max(0, Math.min(23 * 60 + 30, Math.round(minutes / 30) * 30));
+  /** Pointer y inside a column → minutes from midnight, snapped to 15 minutes. */
+  const minutesAt = (rect: DOMRect, y: number) => bounds.start + ((y - rect.top) / hourHeight) * 60;
+
+  const columnHint = (date: string, minutes: number) =>
+    `${formatShort(date)} ${weekdayKo(date)} · ${timeLabel(snapMinutes(minutes))}`;
+
+  const handleMove = (event: CalendarEvent) => (pointerEvent: React.PointerEvent<HTMLElement>) => {
+    if (!onMoveEvent) return;
+    const duration = Math.max(SNAP, eventEndMinutes(event) - eventStartMinutes(event));
+    start(
+      pointerEvent,
+      { kind: "event", id: event.id, label: event.title },
+      (target, point) => {
+        if (!target) return;
+        const date = target.zone === "cal-day" ? target.data.date : null;
+        if (!date) return;
+        const dropMinutes = snapMinutes(minutesAt(target.rect, point.y));
+        const from = Math.max(0, Math.min(24 * 60 - duration, dropMinutes));
+        onMoveEvent(event.id, {
+          date,
+          startTime: timeLabel(from),
+          endTime: timeLabel(from + duration),
+          endDate: date,
+        });
+      },
+      {
+        getHint: (target, point) =>
+          target.zone === "cal-day" && target.data.date
+            ? columnHint(target.data.date, minutesAt(target.rect, point.y))
+            : null,
+      },
+    );
   };
 
-  const nowTop = ((nowMinutes - bounds.start) / 60) * hourHeight;
+  const handleResize = (event: CalendarEvent, edge: "start" | "end") => (pointerEvent: React.PointerEvent<HTMLElement>) => {
+    if (!onResizeEvent) return;
+    const columnEl = pointerEvent.currentTarget.parentElement;
+    const label = edge === "start" ? `${event.title} · 시작` : `${event.title} · 끝`;
+    start(
+      pointerEvent,
+      { kind: "event-resize", id: event.id, label },
+      (target, point) => {
+        const rect = columnEl?.getBoundingClientRect() ?? target?.rect;
+        if (!rect) return;
+        const minutes = Math.max(0, Math.min(24 * 60, snapMinutes(minutesAt(rect, point.y))));
+        if (edge === "start") {
+          const end = eventEndMinutes(event);
+          const nextStart = Math.min(minutes, end - SNAP);
+          onResizeEvent(event.id, {
+            date: event.date,
+            startTime: timeLabel(nextStart),
+            endTime: timeLabel(end),
+            endDate: event.endDate && event.endDate > event.date ? event.endDate : event.date,
+          });
+        } else {
+          const from = eventStartMinutes(event);
+          const nextEnd = Math.max(from + SNAP, minutes);
+          onResizeEvent(event.id, {
+            date: event.date,
+            startTime: timeLabel(from),
+            endTime: timeLabel(nextEnd),
+            endDate: event.date,
+          });
+        }
+      },
+      { getHint: () => null },
+    );
+  };
 
   /** B5: pointer drag (mouse and touch) on an empty column paints a new time range. */
   const [drag, setDrag] = useState<{ day: string; anchor: number; current: number } | null>(null);
@@ -324,6 +396,28 @@ export function Timeline({
                           </span>
                         ) : null}
                       </span>
+                      {height > 34 ? (
+                        <span className={cn("mt-0.5 hidden truncate text-[0.6rem] leading-tight opacity-80 md:block", tone.text)}>
+                          {event.startTime}
+                          {event.endTime ? `–${event.endTime}` : ""}
+                        </span>
+                      ) : null}
+                    </button>
+                    {resizable ? (
+                      <>
+                        <span
+                          role="presentation"
+                          aria-hidden="true"
+                          onPointerDown={handleResize(event, "start")}
+                          className={cn("dnd-handle absolute inset-x-1 top-0 z-10 cursor-ns-resize", handleClass)}
+                        />
+                        <span
+                          role="presentation"
+                          aria-hidden="true"
+                          onPointerDown={handleResize(event, "end")}
+                          className={cn("dnd-handle absolute inset-x-1 bottom-0 z-10 cursor-ns-resize", handleClass)}
+                        />
+                      </>
                     ) : null}
                     {compactCard && !timeLabel ? (
                       <span className={cn("block truncate text-[0.56rem] font-medium leading-[1.1]", tone.text, event.canceled && "line-through")}>

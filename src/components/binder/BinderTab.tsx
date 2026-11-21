@@ -19,6 +19,8 @@ import {
 } from "@/lib/date";
 import { holidayName } from "@/lib/holidays";
 import { cn, truncate } from "@/lib/utils";
+import { useDnd, isAfterTarget } from "@/components/common/dnd";
+import { applySortValues, reorderSortValues, sortByStoredOrder } from "@/lib/order";
 import type { BinderEntry, ProjectTask } from "@/lib/types";
 import { previewText, renderMarkdown } from "@/lib/markdown";
 import { BookIcon, CheckIcon, ChevronLeftIcon, ChevronRightIcon, PlusIcon, SearchIcon, StarIcon } from "@/components/icons";
@@ -32,6 +34,7 @@ type BinderView = "weekly" | "daily" | "notes";
 
 export function BinderTab() {
   const { data, update, create } = useData();
+  const { start } = useDnd();
   const { settings } = useSettings();
   const { focus, clearFocus, pendingBinderDate, consumeBinderDate, setSearchOpen } = useUi();
 
@@ -83,6 +86,47 @@ export function BinderTab() {
   const openEntry = (id: string) => {
     setEditorId(id);
     setEditorDraft(null);
+  };
+
+  /** Diary moved to another day (weekly spread). */
+  const handleDiaryDrag = (entry: BinderEntry) => (pointerEvent: React.PointerEvent<HTMLElement>) => {
+    start(
+      pointerEvent,
+      { kind: "binder", id: entry.id, label: entry.title },
+      (target) => {
+        if (!target || target.zone !== "binder-day") return;
+        const date = target.data.date;
+        if (!date || date === entry.date) return;
+        void update("binder", entry.id, { date });
+      },
+      {
+        getHint: (target) =>
+          target.zone === "binder-day" && target.data.date
+            ? `${formatShort(target.data.date)} ${weekdayKo(target.data.date)}로 옮기기`
+            : null,
+      },
+    );
+  };
+
+  /** Notes reordered by hand. */
+  const handleNoteDrag = (note: BinderEntry, list: BinderEntry[]) => (pointerEvent: React.PointerEvent<HTMLElement>) => {
+    start(
+      pointerEvent,
+      { kind: "note", id: note.id, label: note.title },
+      (target, point) => {
+        if (!target || target.zone !== "binder-note") return;
+        const targetId = target.data.id;
+        if (!targetId || targetId === note.id) return;
+        const index = list.findIndex((item) => item.id === targetId);
+        if (index === -1) return;
+        const after = Math.abs(point.x - (target.rect.left + target.rect.width / 2)) > Math.abs(point.y - (target.rect.top + target.rect.height / 2))
+          ? point.x > target.rect.left + target.rect.width / 2
+          : isAfterTarget(target, point.y);
+        const insert = index + (after ? 1 : 0);
+        applySortValues(update, "binder", list, reorderSortValues(list, note.id, insert));
+      },
+      { getHint: () => "노트 순서 바꾸기" },
+    );
   };
 
   return (
@@ -173,6 +217,7 @@ export function BinderTab() {
                 entry={dayEntry(day)}
                 lines={settings.binderPreviewLines}
                 onOpen={() => (dayEntry(day) ? openEntry(dayEntry(day)!.id) : openNew(day))}
+                onDrag={dayEntry(day) ? handleDiaryDrag(dayEntry(day)!) : undefined}
               />
             ))}
           </section>
@@ -186,6 +231,7 @@ export function BinderTab() {
                 entry={dayEntry(day)}
                 lines={settings.binderPreviewLines}
                 onOpen={() => (dayEntry(day) ? openEntry(dayEntry(day)!.id) : openNew(day))}
+                onDrag={dayEntry(day) ? handleDiaryDrag(dayEntry(day)!) : undefined}
               />
             ))}
           </section>
@@ -220,6 +266,7 @@ export function BinderTab() {
             onMonth={setMonth}
             onOpen={openEntry}
             onNew={() => openNew(cursor, "노트")}
+            onDrag={handleNoteDrag}
             onCreateEntry={async (title, date) => {
               const created = await create("binder", { title, kind: "노트", date, body: "" });
               if (created) openEntry(created.id);
@@ -267,26 +314,40 @@ function DiaryRow({
   entry,
   lines,
   onOpen,
+  onDrag,
 }: {
   day: string;
   entry: BinderEntry | null;
   lines: number;
   onOpen: () => void;
+  onDrag?: (event: React.PointerEvent<HTMLElement>) => void;
 }) {
   const isToday = isSameISO(day, todayISO());
   const holiday = holidayName(day);
   const dow = new Date(`${day}T12:00:00`).getDay();
   const preview = entry ? previewText(entry.body, Math.max(1, lines)) : [];
+  const bodyLines = entry ? preview.filter((line) => line !== entry.title).slice(0, Math.max(1, lines - 1)) : [];
 
   return (
-    <div className="grid border-b border-paper-300/80" style={{ gridTemplateColumns: "2.9rem minmax(0,1fr)" }}>
+    <div
+      data-drop-zone="binder-day"
+      data-drop-date={day}
+      className="grid border-b border-paper-300/70"
+      style={{ gridTemplateColumns: "3.8rem minmax(0,1fr)" }}
+    >
       <div className="py-2 text-center">
         <button
           type="button"
           onClick={onOpen}
           className={cn(
-            "mx-auto flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-[0.9rem] font-semibold tabular-nums",
-            isToday ? "bg-ink-900 text-white" : holiday || dow === 0 ? "text-red-500" : dow === 6 ? "text-blue-600" : "text-ink-800",
+            "mx-auto flex h-11 min-w-11 items-center justify-center rounded-full px-1 text-[1.7rem] font-semibold leading-none tabular-nums transition",
+            isToday
+              ? "bg-ink-900 text-white"
+              : holiday || dow === 0
+                ? "text-red-500"
+                : dow === 6
+                  ? "text-blue-600"
+                  : "text-ink-800",
           )}
         >
           {Number(day.slice(8, 10))}
@@ -301,21 +362,26 @@ function DiaryRow({
         ) : null}
       </div>
 
-      <button type="button" onClick={onOpen} className="min-h-[4.6rem] min-w-0 overflow-hidden py-2 pl-3 text-left">
+      <button
+        type="button"
+        data-drag-source={entry ? "binder" : undefined}
+        onPointerDown={onDrag}
+        onClick={onOpen}
+        className={cn("min-h-[5.4rem] min-w-0 overflow-hidden py-2.5 pl-3 text-left", entry && "cursor-grab")}
+        style={entry ? { touchAction: "pan-y", WebkitTouchCallout: "none" } : undefined}
+      >
         {entry ? (
           <>
-            <p className="line-clamp-1 text-[0.84rem] font-medium text-ink-900">{entry.title}</p>
-            {Array.from({ length: Math.max(0, lines - 1) }, (_, index) => (
-              <p key={index} className="mt-1 block h-[1.1rem] max-w-full truncate border-b border-paper-200 text-[0.74rem] leading-[1.1rem] text-ink-500">
-                {truncate(preview[index] ?? "", 60)}
-              </p>
-            ))}
+            <p className="line-clamp-1 text-[0.86rem] font-medium text-ink-900">{entry.title}</p>
+            <div className="mt-1 space-y-0.5">
+              {bodyLines.map((line, index) => (
+                <p key={index} className="line-clamp-1 text-[0.74rem] leading-[1.4] text-ink-500">
+                  {truncate(line, 60)}
+                </p>
+              ))}
+            </div>
           </>
-        ) : (
-          Array.from({ length: lines }, (_, index) => (
-            <p key={index} className={cn("h-[1.05rem] border-b border-paper-200", index === 0 && "mt-0.5")} />
-          ))
-        )}
+        ) : null}
       </button>
     </div>
   );
@@ -583,17 +649,20 @@ function NotesView({
   onMonth,
   onOpen,
   onNew,
+  onDrag,
 }: {
   notes: BinderEntry[];
   month: string;
   onMonth: (month: string) => void;
   onOpen: (id: string) => void;
   onNew: () => void;
+  onDrag: (note: BinderEntry, list: BinderEntry[]) => (event: React.PointerEvent<HTMLElement>) => void;
   onCreateEntry: (title: string, date: string) => Promise<void>;
 }) {
   const [query, setQuery] = useState("");
-  const filtered = notes
-    .filter((note) => (month === "all" ? true : (note.date ?? "").slice(0, 7) === month))
+  const filtered = sortByStoredOrder(
+    notes.filter((note) => (month === "all" ? true : (note.date ?? "").slice(0, 7) === month)),
+  )
     .filter((note) => (query.trim() ? `${note.title} ${note.body}`.toLowerCase().includes(query.trim().toLowerCase()) : true))
     .sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""));
 
@@ -636,8 +705,13 @@ function NotesView({
               <button
                 key={note.id}
                 type="button"
+                data-drop-zone="binder-note"
+                data-drop-id={note.id}
+                data-drag-source="note"
+                onPointerDown={onDrag(note, filtered)}
                 onClick={() => onOpen(note.id)}
-                className="flex flex-col rounded-2xl border border-paper-300 px-3.5 py-3 text-left transition hover:border-paper-400"
+                className="flex cursor-grab flex-col rounded-2xl border border-paper-300 px-3.5 py-3 text-left transition hover:border-paper-400"
+                style={{ touchAction: "pan-y", WebkitTouchCallout: "none" }}
               >
                 <div className="flex items-start justify-between gap-2">
                   <p className="line-clamp-1 text-[0.86rem] font-medium text-ink-900">{note.title}</p>

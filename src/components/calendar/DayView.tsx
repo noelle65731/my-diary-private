@@ -26,6 +26,7 @@ interface DayViewProps {
   onOpenEvent: (id: string) => void;
   onOpenTask: (id: string) => void;
   onCreate: (date: string, time?: string | null) => void;
+  onUpdateEvent: (id: string, patch: Record<string, unknown>) => void;
   onToggleTask: (task: ProjectTask) => void;
   onRoutineCount: (routine: Routine, date: string, count: number) => void;
   /** B5: the day view takes part in dragging events to another time. */
@@ -47,6 +48,7 @@ export function DayView({
   onOpenEvent,
   onOpenTask,
   onCreate,
+  onUpdateEvent,
   onToggleTask,
   onRoutineCount,
   onMoveEvent,

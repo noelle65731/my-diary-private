@@ -6,7 +6,9 @@ import { useSettings } from "@/state/settings";
 import { useTabReset, useUi } from "@/state/ui";
 import { cn, truncate } from "@/lib/utils";
 import { formatShort, todayISO, weekdayKo } from "@/lib/date";
-import { ARCHIVE_KINDS, type ArchiveKind } from "@/lib/types";
+import { ARCHIVE_KINDS, type ArchiveEntry, type ArchiveKind } from "@/lib/types";
+import { applySortValues, reorderSortValues, sortByStoredOrder } from "@/lib/order";
+import { useDnd } from "@/components/common/dnd";
 import { archiveTone } from "@/components/common/tone";
 import { ArchiveIcon, ArrowUpRightIcon, PlusIcon, SearchIcon, StarIcon, TrashIcon } from "@/components/icons";
 import { EmptyState, StarRating } from "@/components/common/primitives";
@@ -16,10 +18,11 @@ import { useArchiveFolders } from "@/lib/folders";
 import { ArchiveDetail } from "@/components/detail/ArchiveDetail";
 import { RichText } from "@/components/common/rich";
 
-type SortKey = "recent" | "rating" | "title";
+type SortKey = "recent" | "rating" | "title" | "manual";
 
 export function ArchiveTab() {
   const { data, create, update, destroy } = useData();
+  const { start } = useDnd();
   const { settings } = useSettings();
   const { focus, clearFocus } = useUi();
 
@@ -71,6 +74,7 @@ export function ArchiveTab() {
       .filter((item) =>
         query.trim() ? `${item.title} ${item.body} ${item.tags.join(" ")}`.toLowerCase().includes(query.trim().toLowerCase()) : true,
       );
+    if (sort === "manual") return sortByStoredOrder(filtered);
     return filtered.sort((a, b) => {
       if (sort === "rating") return (b.rating ?? 0) - (a.rating ?? 0);
       if (sort === "title") return a.title.localeCompare(b.title, "ko");
@@ -93,6 +97,41 @@ export function ArchiveTab() {
     }
     return [...seen.entries()].sort((a, b) => b[1] - a[1]).slice(0, 6);
   }, [data.archive]);
+
+  const handleCardDrag = (item: ArchiveEntry) => (pointerEvent: React.PointerEvent<HTMLElement>) => {
+    start(
+      pointerEvent,
+      { kind: "archive", id: item.id, label: item.title },
+      (target, point) => {
+        if (!target) return;
+        if (target.zone === "archive-kind") {
+          const kind = target.data.kind;
+          if (!kind || kind === item.kind) return;
+          void update("archive", item.id, { kind });
+          return;
+        }
+        if (target.zone === "archive-card") {
+          const targetId = target.data.id;
+          if (!targetId || targetId === item.id) return;
+          const index = items.findIndex((entry) => entry.id === targetId);
+          if (index === -1) return;
+          const dx = point.x - (target.rect.left + target.rect.width / 2);
+          const dy = point.y - (target.rect.top + target.rect.height / 2);
+          const after = Math.abs(dx) > Math.abs(dy) ? dx > 0 : dy > 0;
+          const insert = index + (after ? 1 : 0);
+          if (sort !== "manual") setSort("manual");
+          applySortValues(update, "archive", items, reorderSortValues(items, item.id, insert));
+        }
+      },
+      {
+        getHint: (target) => {
+          if (target.zone === "archive-kind" && target.data.kind) return `${target.data.kind}(으)로 바꾸기`;
+          if (target.zone === "archive-card") return "순서 바꾸기";
+          return null;
+        },
+      },
+    );
+  };
 
   const addQuick = async () => {
     if (!quickTitle.trim() || busy) return;
@@ -158,6 +197,8 @@ export function ArchiveTab() {
             <button
               key={kind}
               type="button"
+              data-drop-zone={kind === "전체" ? undefined : "archive-kind"}
+              data-drop-kind={kind === "전체" ? undefined : kind}
               onClick={() => {
                 setCategory(kind);
                 setTag(null);
@@ -208,6 +249,7 @@ export function ArchiveTab() {
           className="rounded-md bg-transparent py-0.5 text-[0.68rem] text-ink-400 focus:outline-none"
         >
           <option value="recent">최신순</option>
+          <option value="manual">직접 정렬</option>
           <option value="rating">별점순</option>
           <option value="title">제목순</option>
         </select>
@@ -255,7 +297,15 @@ export function ArchiveTab() {
           {items.map((item) => {
             const tone = archiveTone(item.kind);
             return (
-              <article key={item.id} className="group relative flex flex-col rounded-2xl border border-paper-300 px-4 py-3.5 pb-3 transition hover:border-paper-400">
+              <article
+                key={item.id}
+                data-drop-zone="archive-card"
+                data-drop-id={item.id}
+                data-drag-source="archive"
+                onPointerDown={handleCardDrag(item)}
+                className="group relative flex cursor-grab flex-col rounded-2xl border border-paper-300 px-4 py-3.5 pb-3 transition hover:border-paper-400"
+                style={{ touchAction: "pan-y", WebkitTouchCallout: "none" }}
+              >
                 <p className={cn("text-[0.68rem] font-medium", tone.text)}>{item.kind}</p>
                 <div className="mt-1 flex items-start justify-between gap-2">
                   <button type="button" onClick={() => setEditorId(item.id)} className="min-w-0 flex-1 text-left">

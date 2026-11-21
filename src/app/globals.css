@@ -281,3 +281,91 @@
     display: none !important;
   }
 }
+
+/* ─────────────────── drag & drop (pointer events) ─────────────────── */
+
+/* While a card/row is being dragged: no page scroll, no text selection. */
+body.dnd-locked {
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: grabbing;
+}
+
+body.dnd-locked * {
+  cursor: grabbing !important;
+}
+
+/* The item being dragged leaves a faded placeholder behind. */
+[data-dragging="true"] {
+  opacity: 0.35;
+  pointer-events: none;
+  filter: saturate(0.7);
+}
+
+/* Draggable surfaces keep their tap behaviour but allow a long-press drag. */
+[data-drag-source] {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.dnd-handle {
+  touch-action: none;
+}
+
+/* Drop target under the pointer. */
+body[data-dnd-active="true"] [data-drop-zone] {
+  transition: background-color 120ms ease, outline-color 120ms ease;
+}
+
+[data-drop-hover="true"] {
+  outline: 2px solid rgba(17, 24, 39, 0.55);
+  outline-offset: -2px;
+  background-color: rgba(17, 24, 39, 0.06);
+  border-radius: 8px;
+}
+
+/* Floating drag badge that follows the pointer. */
+.dnd-ghost {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 9999;
+  display: flex;
+  max-width: 16rem;
+  flex-direction: column;
+  gap: 2px;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.dnd-ghost-card {
+  overflow: hidden;
+  border-radius: 10px;
+  background: #111827;
+  padding: 5px 9px;
+  font-size: 0.72rem;
+  font-weight: 500;
+  line-height: 1.2;
+  color: #ffffff;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  box-shadow: 0 10px 24px rgba(17, 24, 39, 0.28);
+}
+
+.dnd-ghost-hint {
+  align-self: flex-start;
+  border-radius: 999px;
+  background: #ffffff;
+  padding: 3px 8px;
+  font-size: 0.66rem;
+  font-weight: 500;
+  line-height: 1.1;
+  color: #111827;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(17, 24, 39, 0.14);
+}
+
+.dnd-ghost-hint:empty {
+  display: none;
+}
