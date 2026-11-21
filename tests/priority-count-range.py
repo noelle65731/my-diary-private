@@ -255,11 +255,12 @@ def main():
         check("시작일만 11/20: 긴급·중요 3개", count_of(page, "do") == "3", count_of(page, "do"))
         page.fill("[data-priority-to]", "2026-11-15")
         page.wait_for_timeout(300)
-        check("시작일>종료일이면 시작일도 당겨짐",
-              page.locator("[data-priority-from]").input_value() == "2026-11-15",
+        check("시작일>종료일: 시작일을 몰래 고치지 않음",
+              page.locator("[data-priority-from]").input_value() == "2026-11-20",
               page.locator("[data-priority-from]").input_value())
-        check("당겨진 기간: 긴급·중요 0개(11/15 없음)", count_of(page, "do") == "0", count_of(page, "do"))
-        check("기간: 빈 사분면 안내", "이 기간에 해당하는 할 일이 없습니다" in page.locator('[data-quadrant="do"]').inner_text())
+        check("시작일>종료일: 안내 문구", page.locator("[data-priority-range-invalid]").count() == 1)
+        check("시작일>종료일: 기간을 풀고 전체 표시", count_of(page, "do") == "9", count_of(page, "do"))
+        check("시작일>종료일: 기간 안내 문구는 숨김", page.locator("[data-priority-range-note]").count() == 0)
 
         page.locator("[data-priority-range-clear]").click()
         page.wait_for_timeout(300)

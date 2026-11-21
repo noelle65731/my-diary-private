@@ -1067,17 +1067,15 @@ function PriorityView({
   const { from, to } = range;
   /** 펼쳐 둔 사분면 key 목록 */
   const [expanded, setExpanded] = useState<string[]>([]);
-  const rangeActive = Boolean(from || to);
+  /**
+   * A20: 날짜를 한 글자씩 치는 동안 반대쪽 칸을 몰래 고치지 않습니다 — 시작일이 종료일보다
+   * 늦으면 기간을 잠시 풀고 아래에 다시 골라 달라고 적습니다.
+   */
+  const rangeInvalid = Boolean(from && to && from > to);
+  const rangeActive = Boolean(from || to) && !rangeInvalid;
   const clearRange = () => {
     onRange({ from: "", to: "" });
     setExpanded([]);
-  };
-  /** 시작일이 종료일보다 뒤로 가지 않게 반대쪽 날짜도 끌어 줍니다. */
-  const pickFrom = (next: string) => {
-    onRange({ from: next, to: next && to && to < next ? next : to });
-  };
-  const pickTo = (next: string) => {
-    onRange({ from: next && from && next < from ? next : from, to: next });
   };
 
   /** 기간 비교에 쓰는 하루 — 화면에 보이는 날짜(마감일 우선)와 같습니다. */
@@ -1223,7 +1221,7 @@ function PriorityView({
             aria-label="시작일"
             data-priority-from="true"
             value={from}
-            onChange={(event) => pickFrom(event.target.value)}
+            onChange={(event) => onRange({ from: event.target.value, to })}
             className="rounded-lg bg-paper-200 px-2 py-1 text-[calc(14px*var(--fs))] tabular-nums text-ink-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-paper-200"
           />
           <span className="text-[calc(14px*var(--fs))] text-ink-300">~</span>
@@ -1232,17 +1230,17 @@ function PriorityView({
             aria-label="종료일"
             data-priority-to="true"
             value={to}
-            onChange={(event) => pickTo(event.target.value)}
+            onChange={(event) => onRange({ from, to: event.target.value })}
             className="rounded-lg bg-paper-200 px-2 py-1 text-[calc(14px*var(--fs))] tabular-nums text-ink-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-paper-200"
           />
           <button
             type="button"
             data-priority-range-clear="true"
             onClick={clearRange}
-            disabled={!rangeActive}
+            disabled={!from && !to}
             className={cn(
               "rounded-full px-2 py-1 text-[calc(13.5px*var(--fs))] transition",
-              rangeActive ? "bg-paper-200 text-ink-600 hover:bg-paper-300/70 hover:text-ink-900" : "text-ink-300",
+              from || to ? "bg-paper-200 text-ink-600 hover:bg-paper-300/70 hover:text-ink-900" : "text-ink-300",
             )}
           >
             전체 보기
@@ -1289,6 +1287,12 @@ function PriorityView({
           <span className="text-ink-400">개씩</span>
         </div>
       </div>
+
+      {rangeInvalid ? (
+        <p data-priority-range-invalid="true" className="mt-1.5 text-[calc(13.5px*var(--fs))] leading-relaxed text-rose-600">
+          시작일이 종료일보다 늦습니다. 기간을 다시 골라 주세요 — 지금은 전체를 보여 줍니다.
+        </p>
+      ) : null}
 
       {rangeActive ? (
         <p data-priority-range-note="true" className="mt-1.5 text-[calc(13.5px*var(--fs))] leading-relaxed text-ink-400">
