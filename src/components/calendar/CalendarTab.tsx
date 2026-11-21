@@ -475,7 +475,7 @@ export function CalendarTab() {
 
       {view === "year" ? (
         <>
-          <div className="mt-4 flex items-center gap-1.5">
+          <div className="mt-4 flex flex-wrap items-center gap-1.5">
             {[2026, 2027].map((option) => (
               <button
                 key={option}
@@ -489,7 +489,7 @@ export function CalendarTab() {
                 {option}
               </button>
             ))}
-            <span className="ml-auto text-[calc(13.5px*var(--fs))] text-ink-400">월 이름을 누르면 월간, 날짜를 누르면 하루 보기로 이동합니다</span>
+            <span className="basis-full text-[calc(13.5px*var(--fs))] text-ink-400 sm:ml-auto sm:basis-auto">월 이름을 누르면 월간, 날짜를 누르면 하루 보기로 이동합니다</span>
           </div>
           <div className="mt-3">
             <YearView
