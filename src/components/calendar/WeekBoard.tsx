@@ -8,7 +8,12 @@ import { cn } from "@/lib/utils";
 import { mergeCategories } from "@/state/categories";
 import { categoryTone, priorityOf, projectEmoji, routineTone, taskTone } from "@/components/common/tone";
 import { CheckIcon, ChevronDownIcon, ChevronRightIcon } from "@/components/icons";
-import { eventCoversDay, routineCountForDay } from "@/components/calendar/calendar-utils";
+import {
+  eventCoversDay,
+  eventEndMinutes,
+  eventStartMinutes,
+  routineCountForDay,
+} from "@/components/calendar/calendar-utils";
 import { Timeline, minutesFromDrop } from "@/components/calendar/Timeline";
 import { useDnd } from "@/components/common/dnd";
 
@@ -189,8 +194,9 @@ export function WeekBoard({
     return bars;
   }, [visibleEvents, days]);
 
-  /** 종일 줄은 시간표와 스크롤 창을 나눠 쓰므로, 데스크톱에서는 두 줄까지만 펼쳐 둡니다. */
-  const allDayVisibleCap = narrow ? 3 : 2;
+  /** 종일 줄은 시간표와 스크롤 창을 나눠 쓰므로, 데스크톱에서는 두 줄까지만 펼쳐 둡니다.
+   *  모바일은 일정 영역이 딱 네 칸이라 종일 한 줄만 남기고 나머지는 +N으로 접습니다. */
+  const allDayVisibleCap = narrow ? 1 : 2;
   /** 종일 줄 아래로 보이는 시간표 높이 — 32px 한 줄 × 세 칸(3시간). */
   const timelineWindow = 96;
   const laneCount = allDayBars.length > 0 ? Math.max(...allDayBars.map((bar) => bar.lane)) + 1 : 0;
@@ -209,6 +215,36 @@ export function WeekBoard({
   /** A16: no 분류 header rows — each row carries its own badge, sorted by 분류 first. */
   const routineRows = routineGroups.flatMap((group) => group.items.map((routine) => ({ routine, category: group.category })));
 
+  /**
+   * 모바일 기본 모드: 시간표를 세 칸만 그립니다(종일 한 칸 + 시간 세 칸 = 네 칸).
+   * 지금 한 시간 전부터 세 시간을 보여 주고, 그 안에 아직 끝나지 않은 오늘 일정이 하나도 없으면
+   * 다음 일정이 있는 시간대로 창을 옮깁니다. '전체'를 누르면 하루 전체가 펼쳐집니다.
+   * 세로 스크롤 창을 만들지 않고 그리는 줄 자체를 줄여, 가로 스크롤에서 왼쪽 열이 붙어 있는
+   * sticky 동작이 그대로 남습니다.
+   */
+  const mobileWindow = (() => {
+    if (!narrow || timeExpanded) return null;
+    const span = Math.min(3, Math.max(1, endHour - startHour));
+    const now = new Date();
+    const nowMinutes = now.getHours() * 60 + now.getMinutes();
+    const upcoming = visibleEvents
+      .filter(
+        (event) =>
+          event.kind === "일정" &&
+          !event.allDay &&
+          eventCoversDay(event, today) &&
+          eventEndMinutes(event) > nowMinutes,
+      )
+      .map((event) => eventStartMinutes(event) / 60)
+      .sort((a, b) => a - b);
+    let start = now.getHours() - 1;
+    if (upcoming.length > 0 && !upcoming.some((hour) => hour >= start && hour < start + span)) {
+      start = Math.floor(upcoming[0]!);
+    }
+    start = Math.max(startHour, Math.min(start, endHour - span));
+    return { start, end: start + span };
+  })();
+
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col">
       {/* A2: on a phone the board keeps readable column widths and scrolls sideways a little,
@@ -220,7 +256,7 @@ export function WeekBoard({
           narrow && "-mx-1 overflow-auto overscroll-contain pb-1",
         )}
       >
-        <div className={cn("flex min-h-0 flex-col gap-2 pb-1", narrow && "min-w-[44rem]")}>
+        <div className={cn("flex min-h-0 flex-col pb-1", narrow && "min-w-[44rem]")}>
       {mode === "custom" ? (
         <div className="mb-2 rounded-xl border border-paper-300 bg-paper-50/70 px-2.5 py-2">
           <button
@@ -328,8 +364,15 @@ export function WeekBoard({
         })}
       </div>
 
-      {/* 일정 — its own rounded box, apart from 프로젝트 and 루틴 */}
-      <section className="flex-none overflow-clip rounded-xl border border-paper-400/80 bg-white">
+      {/* 일정·프로젝트·루틴은 한 틀 안에 여백 없이 붙고, 구역 사이는 2px 검정 실선이 나눕니다. */}
+      <div
+        data-week-frame="true"
+        className={cn(
+          "flex min-h-0 min-w-0 flex-col overflow-clip rounded-xl border-2 border-ink-900 bg-white",
+          narrow ? "flex-none" : "flex-1",
+        )}
+      >
+      <section data-week-section="schedule" className="flex-none overflow-clip border-b-2 border-ink-900">
       <div className="flex flex-none items-center justify-between gap-2 border-b border-paper-300/70 bg-paper-50/60 py-[3px] pl-2 pr-1.5">
         <span className="truncate text-[13.5px] font-medium text-ink-500">일정</span>
         <div className="seg-track flex-none p-[2px]">
@@ -369,7 +412,7 @@ export function WeekBoard({
             : { height: timeExpanded ? "62dvh" : `${Math.min(allDayHeight + timelineWindow, 124)}px` }
         }
         className={cn(
-          "relative flex-none border-b border-paper-300/60",
+          "relative flex-none",
           narrow ? "overflow-visible" : "overflow-y-auto overflow-x-clip overscroll-contain",
         )}
       >
@@ -499,8 +542,9 @@ export function WeekBoard({
         <Timeline
           days={days}
           events={visibleEvents.filter((event) => event.kind === "일정")}
-          startHour={startHour}
-          endHour={endHour}
+          startHour={mobileWindow ? mobileWindow.start : startHour}
+          endHour={mobileWindow ? mobileWindow.end : endHour}
+          fixedWindow={!!mobileWindow}
           hourHeight={timeExpanded ? 40 : 32}
           gutterWidth={gutter}
           onOpenEvent={onOpenEvent}
@@ -514,7 +558,10 @@ export function WeekBoard({
 
       {/* attached project rows — on a phone they scroll inside the board sheet, so the
           frozen left column sticks to that one scrollport instead of this box */}
-      <section className={cn("overflow-clip rounded-xl border border-paper-400/80 bg-white", narrow ? "flex-none" : "min-h-0 flex-1 overflow-y-auto")}>
+      <section
+        data-week-section="projects"
+        className={cn("border-b-2 border-ink-900", narrow ? "flex-none overflow-clip" : "min-h-0 flex-1 overflow-y-auto")}
+      >
       <div>
         <div className="flex items-center justify-between border-b border-paper-300/70 bg-paper-50/60 py-[3px] pl-2 pr-1.5">
           <span className="text-[13.5px] font-medium text-ink-500">프로젝트</span>
@@ -535,7 +582,7 @@ export function WeekBoard({
           const project = row.project;
           const tone = project ? taskTone(project.category) : null;
           return (
-            <div key={key} className="grid border-b border-paper-300/80" style={grid}>
+            <div key={key} className="grid border-b border-paper-300/80 last:border-b-0" style={grid}>
               <div className="group/row sticky left-0 z-20 flex min-h-[2rem] items-center gap-1 border-r border-paper-300 bg-white py-0.5 pr-1">
                 {project ? (
                   <span className={cn("h-2 w-2 flex-none rounded-full", tone ? tone.dot : "bg-paper-400")} aria-hidden="true" />
@@ -724,7 +771,7 @@ export function WeekBoard({
       </section>
 
       {/* routine rows — 분류 shows as a small badge in each row, so no extra header lines */}
-      <section className="flex-none overflow-clip rounded-xl border border-paper-400/80 bg-white">
+      <section data-week-section="routines" className="flex-none overflow-clip">
         <div className="flex items-center justify-between gap-2 border-b border-paper-300/70 bg-paper-50/60 py-[3px] pl-2 pr-1.5">
           <span className="text-[13.5px] font-medium text-ink-500">
             루틴{routineTotal > 0 ? ` · ${routineTotal}개` : ""}
@@ -808,6 +855,7 @@ export function WeekBoard({
           })
         )}
       </section>
+      </div>
 
         </div>
       </div>

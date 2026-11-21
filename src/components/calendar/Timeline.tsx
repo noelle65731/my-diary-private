@@ -19,6 +19,9 @@ export interface TimelineProps {
   events: CalendarEvent[];
   startHour: number;
   endHour: number;
+  /** Keeps the drawn hours exactly startHour–endHour, even when an event sits outside them.
+   *  The week board uses this on a phone so the day shows a few hours, not all of them. */
+  fixedWindow?: boolean;
   hourHeight?: number;
   gutterWidth?: string;
   onOpenEvent: (id: string) => void;
@@ -74,6 +77,7 @@ export function Timeline({
   events,
   startHour,
   endHour,
+  fixedWindow = false,
   hourHeight = 34,
   gutterWidth = "3.1rem",
   onOpenEvent,
@@ -95,16 +99,18 @@ export function Timeline({
   const bounds = useMemo(() => {
     let start = startHour * 60;
     let end = endHour * 60;
-    for (const event of active) {
-      if (event.allDay || event.kind !== "일정") continue;
-      for (const day of days) {
-        if (!eventCoversDay(event, day)) continue;
-        start = Math.min(start, Math.floor(eventStartMinutes(event) / 60) * 60);
-        end = Math.max(end, Math.ceil(eventEndMinutes(event) / 60) * 60);
+    if (!fixedWindow) {
+      for (const event of active) {
+        if (event.allDay || event.kind !== "일정") continue;
+        for (const day of days) {
+          if (!eventCoversDay(event, day)) continue;
+          start = Math.min(start, Math.floor(eventStartMinutes(event) / 60) * 60);
+          end = Math.max(end, Math.ceil(eventEndMinutes(event) / 60) * 60);
+        }
       }
     }
     return { start: Math.max(0, start), end: Math.min(24 * 60, Math.max(end, start + 60)) };
-  }, [active, days, endHour, startHour]);
+  }, [active, days, endHour, fixedWindow, startHour]);
 
   const totalHeight = ((bounds.end - bounds.start) / 60) * hourHeight;
   const marks = useMemo(() => {
@@ -321,6 +327,8 @@ export function Timeline({
               ) : null}
 
               {laidOut.map(({ event, start, end, lane, lanes }) => {
+                // A window that does not draw this hour must not leave a stray card below it.
+                if (end <= bounds.start || start >= bounds.end) return null;
                 const live = resize && resize.id === event.id ? resize : null;
                 const shownStart = live ? live.start : start;
                 const shownEnd = live ? live.end : end;

@@ -332,7 +332,7 @@ export function ProjectsTab() {
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[17px] font-semibold tracking-tight text-ink-900">index</p>
-                  <p className="truncate text-[14px] text-ink-500">트랙에 넣지 않은 할 일</p>
+                  <p className="truncate text-[14px] text-ink-500">아직 분류되지 않은 할 일</p>
                 </div>
               </header>
               <ul className="mt-2.5 space-y-1.5">
@@ -729,7 +729,7 @@ function RoutineWeekRow({
           {doneCount}/{days.length}
         </span>
       </div>
-      <div className="mt-1 flex items-center gap-1">
+      <div className="mt-1.5 flex items-center gap-1">
         {days.map((day, index) => {
           const label = WEEKDAY_LETTERS[index]!;
           const scheduled = routine.repeatDays.length === 0 || routine.repeatDays.includes(weekdayKo(day));
@@ -739,20 +739,22 @@ function RoutineWeekRow({
             <button
               key={day}
               type="button"
+              data-routine-day={label}
               disabled={!scheduled}
               onClick={() => onCount(day, done ? 0 : count + 1)}
+              /* 요일 동그라미는 손끝으로도 짚을 수 있게 키웁니다 — 카드 폭(4단 227px)에 일곱 개가 들어가는 한도 */
               className={cn(
-                "relative flex h-[18px] w-[18px] items-center justify-center rounded-full text-[12px] leading-none transition",
+                "relative flex h-[28px] w-[28px] touch-manipulation items-center justify-center rounded-full text-[13.5px] leading-none transition",
                 done
                   ? cn(tone.solid, "font-semibold text-white")
                   : scheduled
-                    ? "bg-paper-200 text-ink-400 hover:bg-paper-300"
+                    ? "bg-paper-200 text-ink-500 hover:bg-paper-300"
                     : "bg-transparent text-ink-300/50",
               )}
             >
               <span>{label}</span>
               {count > 0 && !done ? (
-                <span className="absolute -right-0.5 -top-0.5 rounded-full bg-ink-900 px-[3px] text-[10px] font-semibold leading-[0.7rem] text-white">
+                <span className="absolute -right-[3px] -top-[3px] rounded-full bg-ink-900 px-[3px] text-[10.5px] font-semibold leading-[0.8rem] text-white">
                   {count}
                 </span>
               ) : null}
