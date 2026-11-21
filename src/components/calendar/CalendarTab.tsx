@@ -19,7 +19,6 @@ import {
 } from "@/lib/date";
 import { holidayName } from "@/lib/holidays";
 import { cn, matchesMode } from "@/lib/utils";
-import { applySortValues, reorderSortValues } from "@/lib/order";
 import type { CalendarEvent, CalendarKind, ModeFilter, ProjectTask, Routine } from "@/lib/types";
 import { ChevronLeftIcon, ChevronRightIcon, PlusIcon, SearchIcon } from "@/components/icons";
 import { ModeChips } from "@/components/common/ModeChips";
@@ -218,20 +217,21 @@ export function CalendarTab() {
     void update("calendar", event.id, { done: !event.done });
   };
 
-  const moveEvent = (id: string, patch: Record<string, unknown>) => {
-    void update("calendar", id, patch);
-  };
-
-  const moveTask = (id: string, patch: Record<string, unknown>) => {
-    void update("projects", id, patch);
-  };
-
-  const reorderProjects = (ordered: ProjectTask[], movedId: string, insertIndex: number) => {
-    applySortValues(update, "projects", ordered, reorderSortValues(ordered, movedId, insertIndex));
-  };
-
-  const reorderRoutines = (ordered: Routine[], movedId: string, insertIndex: number) => {
-    applySortValues(update, "routines", ordered, reorderSortValues(ordered, movedId, insertIndex));
+  const moveEvent = (id: string, date: string, time: string | null) => {
+    const item = findItem("calendar", id) as CalendarEvent | undefined;
+    if (!item) return;
+    const duration =
+      item.startTime && item.endTime
+        ? Math.max(15, minutesOf(item.endTime) - minutesOf(item.startTime))
+        : 60;
+    const nextStart = time ?? null;
+    const nextEnd = nextStart ? minutesToTime(minutesOf(nextStart) + duration) : null;
+    void update("calendar", id, {
+      date,
+      startTime: nextStart,
+      endTime: nextEnd,
+      endDate: date,
+    });
   };
 
   /** B5: dragging an event's edge changes its end (or start) time. */
@@ -476,8 +476,6 @@ export function CalendarTab() {
               onReorderAllDay={reorderAllDay}
               onToggleTask={toggleTask}
               onRoutineCount={(routine, date, count) => void setRoutineCount(routine, date, count)}
-              onReorderProjects={reorderProjects}
-              onReorderRoutines={reorderRoutines}
               onCreateTaskForProject={(projectId) => setTaskId(projectId ? `new:${projectId}` : "new:")}
               onCreateRoutine={() => setRoutineId("new")}
               mode={mode}
@@ -510,8 +508,6 @@ export function CalendarTab() {
               onReorderAllDay={reorderAllDay}
               onToggleTask={toggleTask}
               onRoutineCount={(routine, date, count) => void setRoutineCount(routine, date, count)}
-              onReorderProjects={reorderProjects}
-              onReorderRoutines={reorderRoutines}
               onCreateTaskForProject={(projectId) => setTaskId(projectId ? `new:${projectId}` : "new:")}
               onCreateRoutine={() => setRoutineId("new")}
               mode={mode}
@@ -534,7 +530,6 @@ export function CalendarTab() {
               onOpenEvent={openEvent}
               onOpenTask={openTask}
               onCreate={createEvent}
-              onUpdateEvent={moveEvent}
               onToggleTask={toggleTask}
               onRoutineCount={(routine, date, count) => void setRoutineCount(routine, date, count)}
               onMoveEvent={moveEvent}
@@ -626,4 +621,16 @@ export function CalendarTab() {
       />
     </div>
   );
+}
+
+function minutesOf(time: string): number {
+  const parts = time.split(":");
+  return Number(parts[0] ?? 0) * 60 + Number(parts[1] ?? 0);
+}
+
+function minutesToTime(minutes: number): string {
+  const value = Math.max(0, Math.min(1440, minutes));
+  const h = Math.floor(value / 60) % 24;
+  const m = value % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 }

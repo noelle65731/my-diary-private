@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { CalendarEvent, ModeFilter, ProjectTask, Routine } from "@/lib/types";
-import { addDaysISO, daysInMonth, diffDays, formatShort, isSameISO, monthMatrix, todayISO, weekdayKo } from "@/lib/date";
+import { daysInMonth, formatShort, isSameISO, monthMatrix, todayISO, weekdayKo } from "@/lib/date";
 import { holidayName } from "@/lib/holidays";
 import { cn } from "@/lib/utils";
 import { categoryTone, routineTone, taskTone } from "@/components/common/tone";
@@ -67,7 +67,6 @@ export function MonthView({
   onRoutineCount,
   onMoveItem,
 }: MonthViewProps) {
-  const { start } = useDnd();
   const today = todayISO();
   const year = Number(cursor.slice(0, 4));
   const month0 = Number(cursor.slice(5, 7)) - 1;
@@ -222,9 +221,8 @@ export function MonthView({
                               event.dataTransfer.effectAllowed = "move";
                             }}
                             onClick={() => onOpenEvent(item.event.id)}
-                            style={{ touchAction: "pan-y", WebkitTouchCallout: "none" }}
                             className={cn(
-                              "flex w-full cursor-grab items-start gap-1 rounded px-0.5 py-[1px] text-left text-[0.6rem] leading-[1.25] md:px-1 md:text-[0.68rem] md:leading-[1.35]",
+                              "flex w-full items-start gap-1 rounded px-0.5 py-[1px] text-left text-[0.6rem] leading-[1.25] md:px-1 md:text-[0.68rem] md:leading-[1.35]",
                               multiDay ? cn(tone.bg, tone.text) : tone.text,
                               item.event.canceled && "line-through opacity-50",
                               item.event.done && "opacity-60",
@@ -245,7 +243,6 @@ export function MonthView({
                             event.dataTransfer.effectAllowed = "move";
                           }}
                           onClick={() => onOpenTask(item.task.id)}
-                          style={{ touchAction: "pan-y", WebkitTouchCallout: "none" }}
                           className={cn(
                             "flex w-full items-center gap-1 px-0.5 py-[1px] text-left text-[0.6rem] leading-[1.25] text-ink-500 md:px-1 md:text-[0.68rem] md:leading-[1.35]",
                             item.task.status === "완료" && "text-ink-300 line-through",

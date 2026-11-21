@@ -115,12 +115,12 @@ export function ProjectsTab() {
     [data.projects, mode],
   );
   const routines = useMemo(
-    () => sortByStoredOrder(data.routines.filter((routine) => routine.kind === "루틴" && !routine.trash && !routine.history && (mode === "all" || !routine.hidden))),
+    () => data.routines.filter((routine) => routine.kind === "루틴" && !routine.trash && !routine.history && (mode === "all" || !routine.hidden)),
     [data.routines, mode],
   );
 
   const openTasks = tasks.filter((task) => !task.trash && task.status !== "완료" && task.status !== "취소" && !task.history);
-  const inbox = sortTasksNewestFirst(openTasks.filter((task) => task.projectIds.length === 0));
+  const inbox = openTasks.filter((task) => task.projectIds.length === 0);
   const projectCount = data.projects.filter((task) => task.kind === "프로젝트" && !task.trash && task.status !== "완료" && task.status !== "취소").length;
 
   const toggleTask = (task: ProjectTask) =>
@@ -233,11 +233,7 @@ export function ProjectsTab() {
       {view === "tracks" ? (
         <div className="mt-4 space-y-4">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-            <article
-              data-drop-zone="proj-card"
-              data-drop-id=""
-              className="flex min-h-[11rem] flex-col rounded-2xl border border-paper-300 px-3 py-3"
-            >
+            <article className="flex min-h-[11rem] flex-col rounded-2xl border border-paper-300 px-3 py-3">
               <header className="flex items-start gap-2">
                 <span className="flex h-7 w-7 flex-none items-center justify-center rounded-full bg-paper-200 text-ink-500">
                   <InboxIcon size={14} />
@@ -270,7 +266,7 @@ export function ProjectsTab() {
             </article>
 
             {projects.map((project) => {
-              const children = sortTasksNewestFirst(tasks.filter((task) => !task.trash && task.projectIds.includes(project.id)));
+              const children = tasks.filter((task) => !task.trash && task.projectIds.includes(project.id));
               const open = children.filter((task) => task.status !== "완료" && task.status !== "취소");
               const recent = settings.showCompletedTasks
                 ? children
@@ -309,16 +305,7 @@ export function ProjectsTab() {
                   className="flex min-h-[11rem] flex-col rounded-2xl border border-paper-300 px-3 py-3 transition hover:border-paper-400"
                 >
                   <header className="flex items-start gap-2">
-                    <span
-                      role="presentation"
-                      aria-hidden="true"
-                      onPointerDown={handleProjectDrag(project)}
-                      title="끌어서 트랙 순서 바꾸기"
-                      className={cn(
-                        "flex h-7 w-7 flex-none cursor-grab items-center justify-center rounded-full text-[0.8rem]",
-                        tone.soft,
-                      )}
-                    >
+                    <span className={cn("flex h-7 w-7 flex-none items-center justify-center rounded-full text-[0.8rem]", tone.soft)}>
                       {projectEmoji(project.id, project.category)}
                     </span>
                     <button type="button" onClick={() => setProjectId(project.id)} className="min-w-0 flex-1 text-left">
@@ -388,7 +375,7 @@ export function ProjectsTab() {
                 const items = routines.filter((routine) => routine.category === category);
                 if (items.length === 0) return null;
                 return (
-                  <article key={category} data-drop-zone="proj-routine" className="rounded-2xl border border-paper-300 px-3 py-3">
+                  <article key={category} className="rounded-2xl border border-paper-300 px-3 py-3">
                     <header className="flex items-start gap-2">
                       <span className="flex h-7 w-7 flex-none items-center justify-center rounded-full bg-paper-200 text-[0.8rem]">
                         <RepeatIcon size={14} className="text-ink-500" />
@@ -463,7 +450,6 @@ export function ProjectsTab() {
           onOpenTask={(id) => void openTask(id)}
           onOpenProject={setProjectId}
           onToggle={toggleTask}
-          onSetPriority={(task, urgent, important) => void update("projects", task.id, { urgent, important })}
           onCreateTask={(category, urgent, important) => {
             setTaskDraft({ kind: "할 일", category, urgent, important });
           }}
@@ -522,14 +508,10 @@ function TaskLine({
   task,
   onToggle,
   onOpen,
-  drag,
-  drop,
 }: {
   task: ProjectTask;
   onToggle: () => void;
   onOpen: () => void;
-  drag?: (event: ReactPointerEvent<HTMLElement>) => void;
-  drop?: { zone: string; id: string };
 }) {
   const { update } = useData();
   const done = task.status === "완료";
@@ -557,14 +539,7 @@ function TaskLine({
       >
         {done ? <CheckIcon size={9} /> : null}
       </button>
-      <button
-        type="button"
-        data-drag-source="task"
-        onPointerDown={drag}
-        onClick={onOpen}
-        className="min-w-0 flex-1 cursor-grab text-left"
-        style={drag ? { touchAction: "pan-y", WebkitTouchCallout: "none" } : undefined}
-      >
+      <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-left">
         <span className="flex items-center gap-1">
           <span className={cn("truncate text-[0.76rem] leading-[1.3] text-ink-800", done && "text-ink-400 line-through")}>{task.title}</span>
           {priority !== "기타" ? (
@@ -585,14 +560,12 @@ function RoutineWeekRow({
   toneIndex,
   onOpen,
   onCount,
-  onPointerDown,
 }: {
   routine: Routine;
   routines: Routine[];
   toneIndex: number;
   onOpen: () => void;
   onCount: (date: string, count: number) => void;
-  onPointerDown: (event: ReactPointerEvent<HTMLElement>) => void;
 }) {
   const weekStart = startOfWeekISO(todayISO());
   const days = Array.from({ length: 7 }, (_, i) => {
@@ -605,16 +578,9 @@ function RoutineWeekRow({
   const tone = routineTone(toneIndex);
 
   return (
-    <div data-drop-zone="proj-routine" data-drop-id={routine.id}>
+    <div>
       <div className="flex items-center gap-1.5">
-        <button
-          type="button"
-          data-drag-source="routine"
-          onPointerDown={onPointerDown}
-          onClick={onOpen}
-          className="min-w-0 flex-1 cursor-grab truncate text-left text-[0.74rem] text-ink-700 hover:text-ink-900"
-          style={{ touchAction: "pan-y", WebkitTouchCallout: "none" }}
-        >
+        <button type="button" onClick={onOpen} className="min-w-0 flex-1 truncate text-left text-[0.74rem] text-ink-700 hover:text-ink-900">
           {routine.title}
         </button>
         <span className="flex-none text-[0.66rem] font-medium tabular-nums text-ink-700">
@@ -662,7 +628,6 @@ function PriorityView({
   onOpenTask,
   onOpenProject,
   onToggle,
-  onSetPriority,
   onCreateTask,
 }: {
   tasks: ProjectTask[];
@@ -670,7 +635,6 @@ function PriorityView({
   onOpenTask: (id: string) => void;
   onOpenProject: (id: string) => void;
   onToggle: (task: ProjectTask) => void;
-  onSetPriority: (task: ProjectTask, urgent: boolean, important: boolean) => void;
   onCreateTask: (category: TaskCategory, urgent: boolean, important: boolean) => void;
 }) {
   const { update } = useData();
@@ -683,28 +647,6 @@ function PriorityView({
   ] as const;
 
   const projectOf = (task: ProjectTask) => projects.find((project) => project.id === (task.projectIds[0] ?? "")) ?? null;
-
-  const dragTask = (task: ProjectTask) => (pointerEvent: ReactPointerEvent<HTMLElement>) => {
-    start(
-      pointerEvent,
-      { kind: "task", id: task.id, label: task.title },
-      (target) => {
-        if (!target || target.zone !== "proj-quadrant") return;
-        const urgent = target.data.urgent === "true";
-        const important = target.data.important === "true";
-        if (task.urgent === urgent && task.important === important) return;
-        onSetPriority(task, urgent, important);
-      },
-      {
-        getHint: (target) => {
-          if (target.zone !== "proj-quadrant") return null;
-          const urgent = target.data.urgent === "true" ? "긴급" : "안 급함";
-          const important = target.data.important === "true" ? "중요" : "안 중요";
-          return `${urgent} · ${important}로 옮기기`;
-        },
-      },
-    );
-  };
 
   const card = (quadrant: (typeof quadrants)[number]) => {
     const items = open.filter((task) => task.urgent === quadrant.urgent && task.important === quadrant.important);
@@ -745,14 +687,7 @@ function PriorityView({
                 >
                   {task.status === "완료" ? <CheckIcon size={9} /> : null}
                 </button>
-                <button
-                  type="button"
-                  data-drag-source="task"
-                  onPointerDown={dragTask(task)}
-                  onClick={() => onOpenTask(task.id)}
-                  className="min-w-0 flex-1 cursor-grab text-left"
-                  style={{ touchAction: "pan-y", WebkitTouchCallout: "none" }}
-                >
+                <button type="button" onClick={() => onOpenTask(task.id)} className="min-w-0 flex-1 text-left">
                   <span className="flex items-baseline gap-1.5">
                     <span className="truncate text-[0.78rem] text-ink-800">{task.title}</span>
                     {unclassified ? (
@@ -829,7 +764,7 @@ function HistoryView({
 }) {
   const finishedProjects = projects.filter((project) => project.status === "완료" || project.status === "취소" || project.history);
   const pastRoutines = routines.filter((routine) => routine.history || routine.trash);
-  const doneTasks = sortTasksNewestFirst(tasks.filter((task) => task.status === "완료")).slice(0, 40);
+  const doneTasks = tasks.filter((task) => task.status === "완료").slice(0, 40);
   const canceled = tasks.filter((task) => task.status === "취소").slice(0, 20);
 
   return (

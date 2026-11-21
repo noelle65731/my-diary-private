@@ -7,7 +7,6 @@ import { taskTone } from "@/components/common/tone";
 import { CheckIcon, PlusIcon } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { todayISO } from "@/lib/date";
-import { sortTasksNewestFirst } from "@/lib/order";
 import type { ProjectTask } from "@/lib/types";
 import { TaskRow } from "@/components/projects/TaskRow";
 import { RichText } from "@/components/common/rich";
@@ -36,13 +35,11 @@ export function ProjectDrawer({
   const tasks = project ? data.projects.filter((task) => task.kind === "할 일" && task.projectIds.includes(project.id) && !task.trash) : [];
   const done = tasks.filter((task) => task.status === "완료").length;
   const progress = tasks.length > 0 ? Math.round((done / tasks.length) * 100) : 0;
-  const filtered = sortTasksNewestFirst(
-    tasks.filter((task) => {
-      if (filter === "ing") return task.status !== "완료" && task.status !== "취소";
-      if (filter === "done") return task.status === "완료";
-      return true;
-    }),
-  );
+  const filtered = tasks.filter((task) => {
+    if (filter === "ing") return task.status !== "완료" && task.status !== "취소";
+    if (filter === "done") return task.status === "완료";
+    return true;
+  });
 
   const toggle = (task: ProjectTask) =>
     void update("projects", task.id, {
