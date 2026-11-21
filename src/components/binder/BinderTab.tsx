@@ -212,8 +212,8 @@ export function BinderTab() {
             day={cursor}
             entry={dayEntry(cursor)}
             diaries={diaries}
-            tasks={data.projects}
-            events={data.calendar}
+            tasks={settings.nowOnly ? data.projects.filter((task) => !task.hidden) : data.projects}
+            events={settings.nowOnly ? data.calendar.filter((event) => !event.hidden) : data.calendar}
             showSchedule={settings.binderShowSchedule}
             onOpenEntry={openEntry}
             onCreate={openNew}
