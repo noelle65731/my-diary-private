@@ -329,6 +329,13 @@ export function SettingsDialog() {
                 label="오늘의 일정 함께 보기"
                 description="일일 편집 화면 아래에 오늘 일정과 완료한 일을 접어서 보여 줍니다"
               />
+              {/* A24: 위클리 화면의 참고 창은 헤더 버튼으로도 열고 닫습니다 — 열어 둔 상태가 여기 남습니다. */}
+              <Toggle
+                checked={settings.binderWeekSchedule}
+                onChange={(value) => set("binderWeekSchedule", value)}
+                label="주간 일정 창 펼쳐 두기"
+                description="위클리 화면에서 그 주의 일정·할 일을 옆에 띄워 놓고 씁니다"
+              />
             </>
           ) : null}
 

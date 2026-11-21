@@ -22,7 +22,7 @@ import { holidayName } from "@/lib/holidays";
 import { cn, truncate } from "@/lib/utils";
 import type { BinderEntry, ProjectTask } from "@/lib/types";
 import { previewText, renderMarkdown } from "@/lib/markdown";
-import { BookIcon, CheckIcon, ChevronLeftIcon, ChevronRightIcon, PlusIcon, SearchIcon, StarIcon } from "@/components/icons";
+import { BookIcon, CheckIcon, ChevronLeftIcon, ChevronRightIcon, ListIcon, PlusIcon, SearchIcon, StarIcon, XIcon } from "@/components/icons";
 import { EmptyState } from "@/components/common/primitives";
 import { TagInput } from "@/components/editors/shared";
 import { BinderEditor } from "@/components/editors/BinderEditor";
@@ -35,7 +35,7 @@ type BinderView = "weekly" | "daily" | "notes";
 
 export function BinderTab() {
   const { data, update, create } = useData();
-  const { settings } = useSettings();
+  const { settings, set: setSetting } = useSettings();
   const { focus, clearFocus, pendingBinderDate, consumeBinderDate, setSearchOpen, views, setView: setTabView } = useUi();
 
   // A15: weekly / daily / notes is part of the address so 뒤로 가기 returns here.
@@ -47,6 +47,8 @@ export function BinderTab() {
   const [editorDraft, setEditorDraft] = useState<{ date?: string; kind?: "일기" | "노트" } | null>(null);
   /** One row at a time writes in place; a click on another day moves the caret there. */
   const [writingDay, setWritingDay] = useState<string | null>(null);
+  /** A24: 위클리 화면의 참고 창이 어느 주를 보여 줄지 — 쓰기 시작한 날짜를 따라갑니다. */
+  const [scheduleScope, setScheduleScope] = useState<"current" | "last">("current");
 
   const diaries = useMemo(() => data.binder.filter((entry) => entry.kind === "일기" && !entry.trash), [data.binder]);
   const notes = useMemo(() => data.binder.filter((entry) => entry.kind === "노트" && !entry.trash), [data.binder]);
@@ -83,6 +85,14 @@ export function BinderTab() {
   const lastWeekDays = weekDays(lastWeekStart, settings.weekStartsOn);
   const dayEntry = (day: string) => diaries.find((entry) => entry.date === day) ?? null;
 
+  /** A24: 위클리 화면의 일정·할 일 참고 창 — 열어 둔 상태는 설정에 남습니다. */
+  const showWeekSchedule = settings.binderWeekSchedule;
+  const setShowWeekSchedule = (next: boolean) => setSetting("binderWeekSchedule", next);
+  const startWriting = (day: string) => {
+    setWritingDay(day);
+    if (showWeekSchedule) setScheduleScope(day < weekStart ? "last" : "current");
+  };
+
   const openNew = (date: string, kind: "일기" | "노트" = "일기") => {
     setEditorDraft({ date, kind });
     setEditorId(null);
@@ -106,7 +116,7 @@ export function BinderTab() {
       entry={dayEntry(day)}
       lines={settings.binderPreviewLines}
       writing={writingDay === day}
-      onStartWriting={() => setWritingDay(day)}
+      onStartWriting={() => startWriting(day)}
       onStopWriting={() => setWritingDay((current) => (current === day ? null : current))}
       onCreateInline={(body) => createInline(day, body)}
       onSaveInline={(id, patch) => update("binder", id, patch)}
@@ -178,6 +188,18 @@ export function BinderTab() {
             </button>
           </div>
 
+          {view === "weekly" ? (
+            <button
+              type="button"
+              onClick={() => setShowWeekSchedule(!showWeekSchedule)}
+              className={cn("btn-outline btn-xs", showWeekSchedule && "border-binder-sat/60 bg-white text-binder-sat")}
+              aria-expanded={showWeekSchedule}
+              aria-controls={showWeekSchedule ? "week-schedule" : undefined}
+              data-week-schedule-toggle="true"
+            >
+              <ListIcon size={12} /> 일정 · 할 일
+            </button>
+          ) : null}
           <button type="button" onClick={() => setSearchOpen(true)} className="icon-btn bg-paper-200 hover:bg-paper-300/70" aria-label="검색">
             <SearchIcon size={15} />
           </button>
@@ -191,18 +213,40 @@ export function BinderTab() {
       {view === "notes" ? <div className="mt-2 text-[calc(14px*var(--fs))] text-ink-400">{formatMonthKo(cursor)}</div> : null}
 
       {view === "weekly" ? (
-        <div className="relative mt-3 grid gap-6 lg:grid-cols-2 lg:gap-0">
-          <div className="pointer-events-none absolute inset-y-0 left-1/2 hidden w-8 -translate-x-1/2 bg-[linear-gradient(90deg,transparent,rgba(17,24,39,0.06),transparent)] lg:block" />
+        <div
+          className={cn(
+            "mt-3",
+            showWeekSchedule && "lg:grid lg:grid-cols-[minmax(0,1fr)_19.5rem] lg:items-start lg:gap-6",
+          )}
+          data-week-schedule-layout={showWeekSchedule ? "with-panel" : "spread-only"}
+        >
+          {showWeekSchedule ? (
+            <WeekSchedule
+              scope={scheduleScope}
+              onScope={setScheduleScope}
+              weekStart={weekStart}
+              lastWeekStart={lastWeekStart}
+              weekStartsOn={settings.weekStartsOn}
+              events={settings.nowOnly ? data.calendar.filter((event) => !event.hidden) : data.calendar}
+              tasks={settings.nowOnly ? data.projects.filter((task) => !task.hidden) : data.projects}
+              onClose={() => setShowWeekSchedule(false)}
+              className="mb-5 lg:sticky lg:top-3 lg:order-2 lg:mb-0"
+            />
+          ) : null}
 
-          <section className="hidden lg:block lg:pr-8">
-            <SpreadHeader label="지난주" start={lastWeekStart} />
-            {lastWeekDays.map((day) => renderRow(day))}
-          </section>
+          <div className="relative grid gap-6 lg:grid-cols-2 lg:gap-0">
+            <div className="pointer-events-none absolute inset-y-0 left-1/2 hidden w-8 -translate-x-1/2 bg-[linear-gradient(90deg,transparent,rgba(17,24,39,0.06),transparent)] lg:block" />
 
-          <section className="lg:pl-8">
-            <SpreadHeader label="이번 주" start={weekStart} />
-            {days.map((day) => renderRow(day))}
-          </section>
+            <section className="hidden lg:block lg:pr-8">
+              <SpreadHeader label="지난주" start={lastWeekStart} />
+              {lastWeekDays.map((day) => renderRow(day))}
+            </section>
+
+            <section className="lg:pl-8">
+              <SpreadHeader label="이번 주" start={weekStart} />
+              {days.map((day) => renderRow(day))}
+            </section>
+          </div>
         </div>
       ) : null}
 
@@ -422,7 +466,7 @@ function DiaryRow({
         <span
           className={cn(
             "flex h-9 min-w-9 items-center justify-center rounded-full px-1 text-[calc(26px*var(--fs))] font-semibold leading-none tabular-nums tracking-tight",
-            isToday ? "bg-ink-900 text-white" : holiday || dow === 0 ? "text-red-500" : dow === 6 ? "text-blue-600" : "text-ink-900",
+            isToday ? "bg-binder-ink text-white" : holiday || dow === 0 ? "text-binder-sun" : dow === 6 ? "text-binder-sat" : "text-binder-ink",
           )}
         >
           {Number(day.slice(8, 10))}
@@ -430,13 +474,13 @@ function DiaryRow({
         <span
           className={cn(
             "mt-0.5 text-[calc(15px*var(--fs))] font-medium",
-            holiday ? "text-red-500" : dow === 6 ? "text-blue-500" : dow === 0 ? "text-red-400" : "text-ink-500",
+            holiday ? "text-binder-sun" : dow === 6 ? "text-binder-sat" : dow === 0 ? "text-binder-sun/80" : "text-ink-500",
           )}
         >
           {weekdayKo(day)}
         </span>
         {holiday ? (
-          <span className="max-w-[3.4rem] break-keep text-center text-[calc(12px*var(--fs))] leading-[1.2] text-red-500" title={holiday}>
+          <span className="max-w-[3.4rem] break-keep text-center text-[calc(12px*var(--fs))] leading-[1.2] text-binder-sun" title={holiday}>
             {holiday}
           </span>
         ) : null}
@@ -534,6 +578,210 @@ function DiaryRow({
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * A24: 위클리 바인더를 쓰면서 같은 주의 일정과 할 일을 옆(폰에서는 위)에서 봅니다.
+ * 쓰는 칸을 가리지 않도록 화면 위에 띄우지 않고, 접고 펼 수 있는 참고 창으로 둡니다.
+ * 날짜마다 일정(시각·종일)과 할 일(완료 여부·대기·마감)을 한눈에 보여 줍니다.
+ */
+function WeekSchedule({
+  scope,
+  onScope,
+  weekStart,
+  lastWeekStart,
+  weekStartsOn,
+  events,
+  tasks,
+  onClose,
+  className,
+}: {
+  scope: "current" | "last";
+  onScope: (scope: "current" | "last") => void;
+  weekStart: string;
+  lastWeekStart: string;
+  weekStartsOn: 0 | 1;
+  events: CalendarEvent[];
+  tasks: ProjectTask[];
+  onClose: () => void;
+  className?: string;
+}) {
+  const start = scope === "last" ? lastWeekStart : weekStart;
+  const days = weekDays(start, weekStartsOn);
+  const rows = days.map((day) => ({
+    day,
+    events: events
+      .filter((event) => event.kind === "일정" && !event.trash && eventCoversDay(event, day))
+      .sort(
+        (a, b) =>
+          Number(b.allDay) - Number(a.allDay) ||
+          String(a.startTime ?? "99:99").localeCompare(String(b.startTime ?? "99:99")),
+      ),
+    tasks: tasksForDay(
+      tasks.filter((task) => task.kind === "할 일" && !task.trash && task.status !== "취소"),
+      day,
+    ).sort(
+      (a, b) =>
+        Number(a.status === "완료") - Number(b.status === "완료") ||
+        String(a.startTime ?? "99:99").localeCompare(String(b.startTime ?? "99:99")),
+    ),
+  }));
+  const eventCount = rows.reduce((sum, row) => sum + row.events.length, 0);
+  const taskCount = rows.reduce((sum, row) => sum + row.tasks.length, 0);
+  const doneCount = rows.reduce((sum, row) => sum + row.tasks.filter((task) => task.status === "완료").length, 0);
+  const today = todayISO();
+
+  return (
+    <aside
+      id="week-schedule"
+      aria-label={scope === "last" ? "지난주의 일정과 할 일" : "이번 주의 일정과 할 일"}
+      data-week-schedule={scope}
+      className={cn(
+        "flex min-h-0 flex-col overflow-hidden rounded-2xl border border-paper-300 bg-white shadow-soft",
+        "max-h-[56vh] lg:max-h-[calc(100dvh-9rem)]",
+        className,
+      )}
+    >
+      <div className="flex flex-none items-center gap-2 border-b border-paper-300 px-3.5 py-2">
+        <ListIcon size={14} className="flex-none text-ink-500" />
+        <p className="text-[calc(14.5px*var(--fs))] font-semibold text-ink-900">일정 · 할 일</p>
+        <span className="truncate text-[calc(12.5px*var(--fs))] tabular-nums text-ink-400">
+          {formatShort(start)} – {formatShort(addDaysISO(start, 6))}
+        </span>
+        <button type="button" onClick={onClose} className="icon-btn ml-auto h-6 w-6" aria-label="일정 창 닫기">
+          <XIcon size={12} />
+        </button>
+      </div>
+
+      <div className="flex flex-none flex-wrap items-center justify-between gap-x-2 gap-y-1 px-3.5 py-1.5">
+        <div className="seg-track">
+          {(
+            [
+              { value: "current", label: "이번 주" },
+              { value: "last", label: "지난주" },
+            ] as { value: "current" | "last"; label: string }[]
+          ).map((item) => (
+            <button
+              key={item.value}
+              type="button"
+              onClick={() => onScope(item.value)}
+              aria-pressed={scope === item.value}
+              data-week-schedule-scope={item.value}
+              className={cn("seg-item !px-2 !py-0.5 text-[calc(13px*var(--fs))]", scope === item.value && "seg-item-active")}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+        <span className="text-[calc(12.5px*var(--fs))] tabular-nums text-ink-500">
+          일정 {eventCount} · 할 일 {taskCount}
+          {doneCount > 0 ? ` · 완료 ${doneCount}` : ""}
+        </span>
+      </div>
+
+      <div className="scrollbar-quiet scroll-shadow-y min-h-0 flex-1 overflow-y-auto px-3.5 pb-2">
+        {rows.map(({ day, events: dayEvents, tasks: dayTasks }) => {
+          const isToday = isSameISO(day, today);
+          const dow = new Date(`${day}T12:00:00`).getDay();
+          const holiday = holidayName(day);
+          const empty = dayEvents.length === 0 && dayTasks.length === 0;
+          return (
+            <section
+              key={day}
+              data-week-schedule-day={day}
+              className={cn(
+                "border-b border-paper-200 py-1.5 last:border-b-0",
+                isToday && "-mx-1.5 rounded bg-paper-200/40 px-1.5",
+              )}
+            >
+              <div className="flex items-baseline gap-1.5">
+                <span
+                  className={cn(
+                    "flex-none text-[calc(13px*var(--fs))] font-semibold tabular-nums",
+                    isToday
+                      ? "rounded bg-binder-ink px-1 text-white"
+                      : holiday || dow === 0
+                        ? "text-binder-sun"
+                        : dow === 6
+                          ? "text-binder-sat"
+                          : "text-ink-800",
+                  )}
+                >
+                  {formatShort(day)} {weekdayKo(day)}
+                </span>
+                {holiday ? <span className="truncate text-[calc(11.5px*var(--fs))] text-binder-sun/80">{holiday}</span> : null}
+                {empty ? null : (
+                  <span className="ml-auto flex-none text-[calc(11.5px*var(--fs))] tabular-nums text-ink-300">
+                    {dayEvents.length > 0 ? `일정 ${dayEvents.length}` : ""}
+                    {dayEvents.length > 0 && dayTasks.length > 0 ? " · " : ""}
+                    {dayTasks.length > 0 ? `할 일 ${dayTasks.length}` : ""}
+                  </span>
+                )}
+              </div>
+
+              {empty ? <p className="mt-0.5 text-[calc(12.5px*var(--fs))] text-ink-300">예정 없음</p> : null}
+
+              {dayEvents.length > 0 ? (
+                <ul className="mt-0.5 space-y-0.5">
+                  {dayEvents.map((event) => (
+                    <li key={event.id} className="flex items-start gap-1.5 text-[calc(13px*var(--fs))] leading-[1.45]">
+                      <span
+                        className={cn(
+                          "mt-[0.42rem] h-1.5 w-1.5 flex-none rounded-full",
+                          event.allDay ? "bg-sky-500" : "bg-accent-400",
+                        )}
+                      />
+                      <span className="w-[2.6rem] flex-none tabular-nums text-ink-500">
+                        {event.allDay ? "종일" : event.startTime ?? "—"}
+                      </span>
+                      <span
+                        className={cn(
+                          "min-w-0 flex-1 break-words text-ink-700",
+                          (event.canceled || event.done) && "text-ink-400 line-through",
+                        )}
+                      >
+                        {event.title}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+
+              {dayTasks.length > 0 ? (
+                <ul className="mt-0.5 space-y-0.5">
+                  {dayTasks.map((task) => (
+                    <li key={task.id} className="flex items-start gap-1.5 text-[calc(13px*var(--fs))] leading-[1.45]">
+                      <span
+                        className={cn(
+                          "mt-[0.42rem] h-1.5 w-1.5 flex-none rounded-full",
+                          task.status === "완료" ? "bg-sage-400" : task.status === "대기 중" ? "bg-amber-400" : "bg-dusk-500",
+                        )}
+                      />
+                      <span className="w-[2.6rem] flex-none tabular-nums text-ink-500">{task.startTime ?? ""}</span>
+                      <span
+                        className={cn(
+                          "min-w-0 flex-1 break-words text-ink-700",
+                          task.status === "완료" && "text-ink-400 line-through",
+                        )}
+                      >
+                        {task.title}
+                      </span>
+                      {task.status === "대기 중" ? (
+                        <span className="flex-none rounded bg-amber-100 px-1 text-[calc(11px*var(--fs))] text-amber-800">대기</span>
+                      ) : null}
+                      {task.due && task.due !== task.date ? (
+                        <span className="flex-none text-[calc(11px*var(--fs))] tabular-nums text-ink-400">마감 {formatShort(task.due)}</span>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </section>
+          );
+        })}
+      </div>
+    </aside>
   );
 }
 

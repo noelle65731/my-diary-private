@@ -37,6 +37,8 @@ export interface Settings {
   showCompletedTasks: boolean;
   binderPreviewLines: number;
   binderShowSchedule: boolean;
+  /** A24: 위클리 바인더에서 그 주의 일정·할 일 참고 창을 열어 둘지. */
+  binderWeekSchedule: boolean;
   archiveDefaultCategory: "전체" | ArchiveKind;
 }
 
@@ -57,6 +59,7 @@ export const DEFAULT_SETTINGS: Settings = {
   showCompletedTasks: false,
   binderPreviewLines: 3,
   binderShowSchedule: true,
+  binderWeekSchedule: false,
   archiveDefaultCategory: "전체",
 };
 
