@@ -311,6 +311,51 @@ function withTime(date: string, time: string | null | undefined): string {
   return time ? `${date}T${time}:00.000+09:00` : date;
 }
 
+function shiftDay(day: string, delta: number): string {
+  if (!delta) return day;
+  const at = Date.parse(`${day.slice(0, 10)}T12:00:00Z`);
+  if (Number.isNaN(at)) return day;
+  return new Date(at + delta * 86400000).toISOString().slice(0, 10);
+}
+
+function daysBetween(a: string, b: string): number {
+  const first = Date.parse(`${a.slice(0, 10)}T12:00:00Z`);
+  const second = Date.parse(`${b.slice(0, 10)}T12:00:00Z`);
+  if (Number.isNaN(first) || Number.isNaN(second)) return 0;
+  return Math.round((first - second) / 86400000);
+}
+
+/**
+ * A drag that moves a record to another day sends only `date` (and maybe `endDate`).
+ * Notion's `날짜` is replaced whole by one PATCH, so the clock and the end day missing
+ * from the patch must be taken from the page it replaces — otherwise every drag would
+ * silently turn a timed 일정 into a 종일 one. When only `date` arrives, the end day
+ * travels by the same number of days, so a 여러 날 일정 keeps its length.
+ */
+function mergedDate(patch: Patch, current: NotionPage | undefined) {
+  const before = current ? readDate(current.properties as Props, "날짜") : null;
+  const day = has(patch, "date")
+    ? (typeof patch["date"] === "string" ? (patch["date"] as string) : "")
+    : before?.date ?? "";
+  const date = day.slice(0, 10);
+  const clock = (key: string, fallback: string | null) => {
+    if (!has(patch, key)) return fallback;
+    const value = patch[key];
+    return typeof value === "string" && value.trim() ? value : null;
+  };
+  const startTime = clock("startTime", before?.time ?? null);
+  // Clearing the start time makes the record 종일: an end clock left behind would be
+  // an end without a start. (An explicit endTime in the same patch still wins.)
+  const endTime = has(patch, "startTime") && startTime === null ? clock("endTime", null) : clock("endTime", before?.endTime ?? null);
+  const delta = before?.date && date ? daysBetween(date, before.date) : 0;
+  const endDate = has(patch, "endDate")
+    ? (typeof patch["endDate"] === "string" ? (patch["endDate"] as string).slice(0, 10) : null)
+    : before?.endDate
+      ? shiftDay(before.endDate, delta)
+      : null;
+  return { date, startTime, endDate, endTime };
+}
+
 /** '기타' keeps formatting when the client sends `memoRich`; plain `memo` still works. */
 function memoValue(patch: Patch): Record<string, unknown> {
   if (has(patch, "memoRich")) return richTextFromSpans(patch["memoRich"] as RichTextSpan[]);
@@ -518,12 +563,16 @@ export function buildProperties(resource: keyof typeof mappers, patch: Patch, cu
     if (has(patch, "kind")) out["유형"] = select(str(patch, "kind", "일정"));
     if (has(patch, "category")) out["분류"] = select(str(patch, "category", "개인"));
     if (has(patch, "date") || has(patch, "startTime") || has(patch, "endDate") || has(patch, "endTime")) {
-      const start = str(patch, "date");
-      const startTime = typeof patch["startTime"] === "string" ? (patch["startTime"] as string) : null;
-      const endDate = typeof patch["endDate"] === "string" ? (patch["endDate"] as string) : start;
-      const endTime = typeof patch["endTime"] === "string" ? (patch["endTime"] as string) : null;
-      out["날짜"] = start
-        ? { date: { start: withTime(start, startTime), ...(endDate && (endDate !== start || endTime) ? { end: withTime(endDate, endTime) } : {}) } }
+      const next = mergedDate(patch, current);
+      out["날짜"] = next.date
+        ? {
+            date: {
+              start: withTime(next.date, next.startTime),
+              ...(next.endDate && (next.endDate !== next.date || next.endTime)
+                ? { end: withTime(next.endDate, next.endTime) }
+                : {}),
+            },
+          }
         : { date: null };
     }
     if (has(patch, "done")) out["완료"] = checkbox(bool(patch, "done"));
@@ -542,15 +591,16 @@ export function buildProperties(resource: keyof typeof mappers, patch: Patch, cu
     if (has(patch, "date") || has(patch, "startTime") || has(patch, "endTime")) {
       // 시간 지정: `2026-11-21T14:00:00.000+09:00` (end `15:30:00.000+09:00`) — the same
       // KST ISO shape the calendar writes. Without a start time the day is saved alone.
-      const start = typeof patch["date"] === "string" ? (patch["date"] as string) : null;
-      const startTime = typeof patch["startTime"] === "string" && patch["startTime"] ? (patch["startTime"] as string) : null;
-      const endTime = typeof patch["endTime"] === "string" && patch["endTime"] ? (patch["endTime"] as string) : null;
-      const day = start ? start.slice(0, 10) : "";
-      out["날짜"] = start
+      // A date-only move (drag) keeps the clock the row already had.
+      const next = mergedDate(patch, current);
+      const day = next.date;
+      out["날짜"] = day
         ? {
             date: {
-              start: withTime(day, startTime),
-              ...(startTime && endTime && endTime > startTime ? { end: withTime(day, endTime) } : {}),
+              start: withTime(day, next.startTime),
+              ...(next.startTime && next.endTime && next.endTime > next.startTime
+                ? { end: withTime(day, next.endTime) }
+                : {}),
             },
           }
         : { date: null };
@@ -583,12 +633,22 @@ export function buildProperties(resource: keyof typeof mappers, patch: Patch, cu
 
   if (resource === "binder") {
     if (has(patch, "kind")) out["유형"] = select(str(patch, "kind", "일기"));
-    if (has(patch, "date")) out["날짜"] = dateValue(patch["date"] as string | null);
-    if (has(patch, "endDate") || has(patch, "endTime")) {
-      const start = str(patch, "date");
-      const endDate = typeof patch["endDate"] === "string" ? (patch["endDate"] as string) : null;
-      const endTime = typeof patch["endTime"] === "string" ? (patch["endTime"] as string) : null;
-      out["날짜"] = start ? { date: { start, ...(endDate && endDate !== start ? { end: withTime(endDate, endTime) } : endTime ? { end: withTime(start, endTime) } : {}) } } : { date: null };
+    if (has(patch, "date") || has(patch, "endDate") || has(patch, "endTime")) {
+      // A record dragged to another day keeps the days it already spanned.
+      const next = mergedDate(patch, current);
+      const start = next.date;
+      out["날짜"] = start
+        ? {
+            date: {
+              start,
+              ...(next.endDate && next.endDate !== start
+                ? { end: withTime(next.endDate, next.endTime) }
+                : next.endTime
+                  ? { end: withTime(start, next.endTime) }
+                  : {}),
+            },
+          }
+        : { date: null };
     }
     if (has(patch, "link")) out["링크"] = url(str(patch, "link"));
     if (has(patch, "tags")) out["태그"] = multiSelect(strArray(patch, "tags"));

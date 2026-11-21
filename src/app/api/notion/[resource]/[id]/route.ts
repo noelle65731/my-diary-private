@@ -65,7 +65,12 @@ export async function PATCH(
     const expected = typeof patch["expectedUpdatedAt"] === "string" ? (patch["expectedUpdatedAt"] as string) : "";
     delete patch["expectedUpdatedAt"];
     let currentPage: NotionPage | null = null;
-    if (expected || Object.prototype.hasOwnProperty.call(patch, "photos")) {
+    // A drag move sends only `date`; the page is read as well so the clock the row
+    // already had is written back instead of being dropped from `날짜`.
+    const touchesDate = ["date", "startTime", "endTime", "endDate"].some((key) =>
+      Object.prototype.hasOwnProperty.call(patch, key),
+    );
+    if (expected || touchesDate || Object.prototype.hasOwnProperty.call(patch, "photos")) {
       currentPage = await retrievePage(id);
     }
     if (expected && currentPage) {

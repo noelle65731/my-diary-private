@@ -530,7 +530,8 @@ export function WeekBoard({
                           }
                           if (target.zone === "timeline-day") {
                             const minutes = minutesFromDrop(target, point);
-                            if (minutes !== null) onMoveEvent(event.id, nextDay, toClock(snapMinutes(minutes)));
+                            // 다른 날로 옮길 때는 날짜만 — 종일 막대는 종일로 남습니다.
+                            if (minutes !== null && nextDay === event.date) onMoveEvent(event.id, nextDay, toClock(snapMinutes(minutes)));
                             else onMoveEvent(event.id, nextDay, null);
                           }
                         },
@@ -541,7 +542,8 @@ export function WeekBoard({
                             const stamp = nextDay.slice(5).replace("-", "/");
                             if (target.zone === "timeline-day") {
                               const minutes = minutesFromDrop(target, point);
-                              return minutes === null ? `${stamp}로 옮기기` : `${stamp} ${toClock(snapMinutes(minutes))} 일정으로`;
+                              if (minutes === null || nextDay !== event.date) return `${stamp}로 옮기기`;
+                              return `${stamp} ${toClock(snapMinutes(minutes))} 일정으로`;
                             }
                             return target.zone === "allday-day" ? `${stamp} 종일로 옮기기` : null;
                           },
@@ -737,7 +739,8 @@ export function WeekBoard({
                                   }
                                   if (target.zone === "timeline-day") {
                                     const next = target.data.day;
-                                    if (next) onMoveEvent(task.id, next, null);
+                                    // 시간표 칸에 놓아도 할 일은 그 날로만 옮깁니다 — 정해 둔 시각은 그대로.
+                                    if (next) onMoveTask(task.id, next, day);
                                   }
                                 },
                                 {

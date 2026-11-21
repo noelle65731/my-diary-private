@@ -262,33 +262,47 @@ export function CalendarTab() {
     void update("calendar", event.id, { done: !event.done });
   };
 
+  /**
+   * 다른 날로 끌어 옮기기 — 바뀌는 것은 날짜(와, 시간표 위에 놓았을 때의 시각)뿐입니다.
+   * `time` 이 null 이면 원래 시각을 그대로 둡니다(종일 줄·월간 달력에 놓은 경우).
+   * 정해 둔 시작·끝 시각과 길이, 여러 날 일정의 일수는 절대 줄이지 않습니다.
+   */
   const moveEvent = (id: string, date: string, time: string | null) => {
     const item = findItem("calendar", id) as CalendarEvent | undefined;
     if (!item) return;
+    const nextStart = time ?? item.startTime ?? null;
     const duration =
       item.startTime && item.endTime
         ? Math.max(15, minutesOf(item.endTime) - minutesOf(item.startTime))
-        : 60;
-    const nextStart = time ?? null;
-    const nextEnd = nextStart ? minutesToTime(minutesOf(nextStart) + duration) : null;
-    // A16: an all-day item dropped on the timetable becomes a timed event.
+        : null;
+    const nextEnd = nextStart && item.endTime && duration !== null ? minutesToTime(minutesOf(nextStart) + duration) : null;
+    const span = item.endDate && item.date ? Math.max(0, diffDays(item.endDate, item.date)) : 0;
+    const nextEndDate = span > 0 ? addDaysISO(date, span) : date;
+    // A16: an all-day item dropped on the timetable becomes a timed event (same day).
     void update("calendar", id, {
       date,
       startTime: nextStart,
       endTime: nextEnd,
-      endDate: date,
-      ...(nextStart && item.allDay ? { allDay: false } : {}),
+      endDate: nextEndDate,
+      allDay: !nextStart,
     });
   };
 
   /**
    * A18: 종일 칸으로 되돌리면 시간을 지워 다시 종일 일정으로 만듭니다.
-   * (시간표로 뺀 일정을 원래 날짜의 종일 칸에 도로 놓는 경우)
+   * (시간표로 뺀 일정을 같은 날 종일 칸에 도로 놓는 경우 — 여러 날 일정은 일수를 유지)
    */
   const moveEventToAllDay = (id: string, date: string) => {
     const item = findItem("calendar", id) as CalendarEvent | undefined;
     if (!item) return;
-    void update("calendar", id, { date, endDate: date, startTime: null, endTime: null, allDay: true });
+    const span = item.endDate && item.date ? Math.max(0, diffDays(item.endDate, item.date)) : 0;
+    void update("calendar", id, {
+      date,
+      endDate: span > 0 ? addDaysISO(date, span) : date,
+      startTime: null,
+      endTime: null,
+      allDay: true,
+    });
   };
 
   /** A12: a task dropped on another weekday column takes that date (and saves it). */

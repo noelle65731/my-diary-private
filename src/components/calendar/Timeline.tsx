@@ -377,6 +377,14 @@ export function Timeline({
                         return;
                       }
                       if (!onMoveEvent) return;
+                      /* A23: 잡은 곳을 그대로 들고 갑니다 — 같은 높이에서 다른 요일로
+                         놓으면 시각이 한 칸도 움직이지 않고 날짜만 바뀝니다. */
+                      const grabMinutes = (Math.max(0, offset) / hourHeight) * 60;
+                      const startAt = (target: DropTarget, point: { x: number; y: number }) => {
+                        const minutes = minutesAtPoint(target, point, bounds.start, hourHeight);
+                        if (minutes === null) return null;
+                        return toTime(snap(Math.max(0, minutes - grabMinutes)));
+                      };
                       dnd.start(
                         pointerEvent,
                         { kind: "event", id: event.id, label: event.title },
@@ -384,13 +392,14 @@ export function Timeline({
                           if (!target) return;
                           const nextDay = target.data.day;
                           if (!nextDay) return;
-                          // A18: 종일 줄에 다시 놓으면 그 날의 종일 일정으로 돌아갑니다.
+                          // A18: 같은 날 종일 줄에 다시 놓으면 그 날의 종일 일정으로 돌아갑니다.
                           if (target.zone === "allday-day" || target.zone === "allday-bar") {
-                            onMoveAllDayDate?.(event.id, nextDay);
+                            if (onMoveAllDayDate && nextDay === event.date) onMoveAllDayDate(event.id, nextDay);
+                            // 다른 날로 옮길 때는 날짜만 바뀝니다 — 정해 둔 시각은 그대로.
+                            else onMoveEvent?.(event.id, nextDay, null);
                             return;
                           }
-                          const minutes = minutesAtPoint(target, point, bounds.start, hourHeight);
-                          onMoveEvent?.(event.id, nextDay, minutes === null ? event.startTime ?? null : toTime(snap(minutes)));
+                          onMoveEvent?.(event.id, nextDay, startAt(target, point));
                         },
                         {
                           skipZones: ["allday-bar"],
@@ -398,11 +407,12 @@ export function Timeline({
                             const nextDay = target.data.day;
                             if (!nextDay) return null;
                             const stamp = nextDay.slice(5).replace("-", "/");
+                            const keeps = nextDay !== event.date && event.startTime ? ` (${event.startTime} 유지)` : "";
                             if (target.zone === "allday-day" || target.zone === "allday-bar") {
-                              return onMoveAllDayDate ? `${stamp} 종일로 돌리기` : null;
+                              if (nextDay === event.date) return onMoveAllDayDate ? `${stamp} 종일로 돌리기` : null;
+                              return `${stamp}로 옮기기${keeps}`;
                             }
-                            const minutes = minutesAtPoint(target, point, bounds.start, hourHeight);
-                            const time = minutes === null ? event.startTime : toTime(snap(minutes));
+                            const time = startAt(target, point) ?? event.startTime;
                             return `${stamp}${time ? ` ${time}` : ""}`;
                           },
                         },
