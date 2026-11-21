@@ -26,7 +26,7 @@ export interface Settings {
   calendarShowHidden: boolean;
   /** A19: 카드 한 장에 보여 줄 남은 할 일 수 (3~8). */
   projectTaskPreview: number;
-  /** A20: 우선순위 탭 사분면마다 기본으로 보여 줄 할 일 수 (3~10). */
+  /** A24: 우선순위 탭 사분면마다 기본으로 보여 줄 할 일 수 (3~10). */
   priorityTaskPreview: number;
   /** A6/A7: user-made categories shown next to 업무·개인·공부 in the filters. */
   customCategories: string[];

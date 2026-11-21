@@ -30,7 +30,7 @@ const CARD_OPEN_PREVIEW = 5;
 const RECENT_LOG_MAX = 2;
 
 const WEEKDAY_LETTERS = ["월", "화", "수", "목", "금", "토", "일"];
-/** A23: 루틴 카드 한 장에 들어가는 루틴 수. */
+/** A27: 루틴 카드 한 장에 들어가는 루틴 수. */
 const ROUTINES_PER_CARD = 3;
 
 function dateLabel(date: string | null): string {
@@ -38,7 +38,7 @@ function dateLabel(date: string | null): string {
   return `${formatShort(date)} ${weekdayKo(date)}`;
 }
 
-/** A22: 완료한 할 일의 기록 줄 — 끝낸 날(없으면 잡아 둔 날)에 시간이 있으면 시간까지 붙입니다. */
+/** A26: 완료한 할 일의 기록 줄 — 끝낸 날(없으면 잡아 둔 날)에 시간이 있으면 시간까지 붙입니다. */
 function recordDateLabel(task: ProjectTask): string {
   const day = dateLabel(task.doneAt?.slice(0, 10) ?? task.date);
   const time = timeRangeLabel(task.startTime, task.endTime);
@@ -89,7 +89,7 @@ export function ProjectsTab() {
     important?: boolean;
   } | null>(null);
   const [routineId, setRoutineId] = useState<string | null>(null);
-  /** A20: 우선순위 탭에만 걸리는 기간 — 다른 보기를 다녀와도 이 화면에서만 유지됩니다. */
+  /** A24: 우선순위 탭에만 걸리는 기간 — 다른 보기를 다녀와도 이 화면에서만 유지됩니다. */
   const [priorityRange, setPriorityRange] = useState<{ from: string; to: string }>({ from: "", to: "" });
   const [quickTitle, setQuickTitle] = useState("");
   const [quickCategory, setQuickCategory] = useState<TaskCategory>("개인");
@@ -188,7 +188,7 @@ export function ProjectsTab() {
   );
 
   /**
-   * A23: 루틴은 분류별로 카드를 나누지 않고, 지금 필터를 통과한 전체 목록을 순서대로
+   * A27: 루틴은 분류별로 카드를 나누지 않고, 지금 필터를 통과한 전체 목록을 순서대로
    * 세 개씩 묶어 카드로 보여 줍니다 — 네 번째 루틴부터 잘려 보이지 않게.
    */
   const orderedRoutines = useMemo(
@@ -235,7 +235,7 @@ export function ProjectsTab() {
   };
 
   /**
-   * A21: 카드 사이로 할 일을 끌어 옮깁니다 — 드롭한 카드의 프로젝트로 바로 바뀌고,
+   * A25: 카드 사이로 할 일을 끌어 옮깁니다 — 드롭한 카드의 프로젝트로 바로 바뀌고,
    * index 카드에 놓으면 분류 없음(projectIds 빈 값)으로 돌아갑니다.
    * store 의 update 가 먼저 화면을 바꾸고 PATCH 하며, 실패하면 원래 값으로 되돌리고 알립니다.
    */
@@ -293,7 +293,7 @@ export function ProjectsTab() {
     onDragEnd: clearDrop,
   });
 
-  /** A23: 루틴 순서 변경도 카드 경계를 넘어 전체 목록 기준으로 `sort` 를 다시 적습니다. */
+  /** A27: 루틴 순서 변경도 카드 경계를 넘어 전체 목록 기준으로 `sort` 를 다시 적습니다. */
   const reorderRoutines = (dragId: string, targetId: string) => {
     if (!dragId || !targetId || dragId === targetId) return;
     const ids = orderedRoutines.map((routine) => routine.id);
@@ -539,7 +539,7 @@ export function ProjectsTab() {
                       </span>
                       <div className="min-w-0 flex-1">
                         <p className="text-[calc(17px*var(--fs))] font-semibold tracking-tight text-ink-900">루틴</p>
-                        {/* A23: 분류별로 나누지 않고 전체 목록을 순서대로 세 개씩 — 어디까지 보이는지 적습니다. */}
+                        {/* A27: 분류별로 나누지 않고 전체 목록을 순서대로 세 개씩 — 어디까지 보이는지 적습니다. */}
                         <p data-routine-card-range={chunkIndex} className="truncate text-[calc(14px*var(--fs))] text-ink-500">
                           {routineChunks.length === 1
                             ? `전체 · ${orderedRoutines.length}개`
@@ -565,7 +565,7 @@ export function ProjectsTab() {
                             const id = event.dataTransfer.getData("text/diary-routine");
                             if (!id || id === routine.id) return;
                             event.preventDefault();
-                            // A23: 카드가 갈라져 있어도 전체 루틴 목록 기준으로 순서를 다시 적습니다.
+                            // A27: 카드가 갈라져 있어도 전체 루틴 목록 기준으로 순서를 다시 적습니다.
                             reorderRoutines(id, routine.id);
                           }}
                         >
@@ -709,7 +709,7 @@ function ProjectCard({
   restoreLabel?: string;
   drag?: {
     draggable?: boolean;
-    /** A21: 할 일을 이 카드 위로 끌어 왔을 때의 은은한 강조 */
+    /** A25: 할 일을 이 카드 위로 끌어 왔을 때의 은은한 강조 */
     highlight?: boolean;
     onDragStart?: (event: React.DragEvent<HTMLElement>) => void;
     onDragOver?: (event: React.DragEvent<HTMLElement>) => void;
@@ -933,7 +933,7 @@ function RoutineWeekRow({
   routine: Routine;
   routines: Routine[];
   toneIndex: number;
-  /** A23: 전체 루틴을 한 카드에 모아 보여 줄 때 어느 분류인지 작은 배지로 알려 줍니다. */
+  /** A27: 전체 루틴을 한 카드에 모아 보여 줄 때 어느 분류인지 작은 배지로 알려 줍니다. */
   showCategory?: boolean;
   onOpen: () => void;
   onCount: (date: string, count: number) => void;
@@ -1031,7 +1031,7 @@ const PRIORITY_PREVIEW_MIN = 3;
 const PRIORITY_PREVIEW_MAX = 10;
 
 /**
- * A20: 우선순위 탭 — 사분면마다 기본으로 보여 줄 할 일 수(3~10)와 이 탭에만 걸리는
+ * A24: 우선순위 탭 — 사분면마다 기본으로 보여 줄 할 일 수(3~10)와 이 탭에만 걸리는
  * 기간(부터 ~ 까지)을 사용자가 고릅니다. 둘 다 이 화면 안에서만 쓰므로 진행·기록·히스토리
  * 탭의 목록은 그대로입니다.
  */
@@ -1068,7 +1068,7 @@ function PriorityView({
   /** 펼쳐 둔 사분면 key 목록 */
   const [expanded, setExpanded] = useState<string[]>([]);
   /**
-   * A20: 날짜를 한 글자씩 치는 동안 반대쪽 칸을 몰래 고치지 않습니다 — 시작일이 종료일보다
+   * A24: 날짜를 한 글자씩 치는 동안 반대쪽 칸을 몰래 고치지 않습니다 — 시작일이 종료일보다
    * 늦으면 기간을 잠시 풀고 아래에 다시 골라 달라고 적습니다.
    */
   const rangeInvalid = Boolean(from && to && from > to);
@@ -1212,7 +1212,7 @@ function PriorityView({
 
   return (
     <div className="mt-4" data-priority-view="true">
-      {/* A20: 우선순위 탭 전용 도구줄 — 기간(부터~까지)과 사분면 표시 개수(3~10). */}
+      {/* A24: 우선순위 탭 전용 도구줄 — 기간(부터~까지)과 사분면 표시 개수(3~10). */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <div className="flex w-full min-w-0 flex-wrap items-center gap-1.5 sm:w-auto sm:flex-1" data-priority-range="true">
           <span className="hidden text-[calc(14px*var(--fs))] text-ink-500 sm:inline">기간</span>
