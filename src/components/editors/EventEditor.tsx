@@ -9,7 +9,7 @@ import { plainOfSpans, spansFromMarkdown } from "@/lib/richtext";
 import { CalendarIcon, StarIcon } from "@/components/icons";
 import { addDaysISO, memoTitle, startOfWeekISO, todayISO, weekKeyOf } from "@/lib/date";
 import { cn } from "@/lib/utils";
-import { type CalendarCategory, type CalendarEvent, type CalendarKind } from "@/lib/types";
+import { type CalendarCategory, type CalendarEvent, type CalendarKind, currentCalendarCategory } from "@/lib/types";
 
 export interface EventDraft {
   date?: string;
@@ -41,7 +41,8 @@ function formFromEvent(event: CalendarEvent): FormState {
   return {
     title: event.title,
     kind: event.kind,
-    category: event.category,
+    // A10: saving an old record writes the current classification, never the removed one.
+    category: currentCalendarCategory(event.category),
     date: event.date || todayISO(),
     allDay: event.allDay,
     startTime: event.startTime ?? "09:00",

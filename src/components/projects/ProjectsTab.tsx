@@ -8,7 +8,7 @@ import { cn, matchesMode } from "@/lib/utils";
 import { formatShort, startOfWeekISO, todayISO, weekdayKo } from "@/lib/date";
 import { type ModeFilter, type ProjectTask, type Routine, type TaskCategory } from "@/lib/types";
 import { PRIORITY_TONES, priorityOf, projectEmoji, routineTone, taskTone } from "@/components/common/tone";
-import { CheckIcon, ChevronRightIcon, InboxIcon, PlusIcon, RepeatIcon } from "@/components/icons";
+import { CheckIcon, ChevronRightIcon, InboxIcon, PlusIcon, RepeatIcon, TrashIcon } from "@/components/icons";
 import { ModeChips } from "@/components/common/ModeChips";
 import { ProjectDrawer } from "@/components/projects/ProjectDrawer";
 import { TaskEditor } from "@/components/editors/TaskEditor";
@@ -31,7 +31,7 @@ function dateLabel(date: string | null): string {
 export function ProjectsTab() {
   const { data, update, setRoutineCount, create } = useData();
   const { settings, set: setSetting, addCategory } = useSettings();
-  const { focus, clearFocus } = useUi();
+  const { focus, clearFocus, openTrash } = useUi();
 
   const [view, setView] = useState<ProjectView>("tracks");
   // A6: 전체(all) is the default filter on every device.
@@ -191,6 +191,15 @@ export function ProjectsTab() {
               </button>
             ))}
           </div>
+
+          <button
+            type="button"
+            onClick={() => openTrash("projects")}
+            className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[0.74rem] text-ink-500 transition hover:bg-paper-200 hover:text-ink-800"
+            aria-label="휴지통"
+          >
+            <TrashIcon size={13} /> 휴지통
+          </button>
 
           <button
             type="button"

@@ -27,6 +27,7 @@ import {
   type StatusPayload,
 } from "@/lib/types";
 import { coerceSpans } from "@/lib/richtext";
+import { differingKeys } from "@/lib/diff";
 
 type Patch = Record<string, unknown>;
 
@@ -132,6 +133,18 @@ function replaceIn<T extends AnyItem>(items: T[], item: T): T[] {
   const copy = [...items];
   copy[index] = item;
   return copy;
+}
+
+/**
+ * A record must never fall out of both the list and the trash because a flag came
+ * back as `undefined`: the three flags are read as plain booleans everywhere.
+ */
+function normalize<T extends AnyItem>(item: T): T {
+  return { ...item, trash: item.trash === true, hidden: item.hidden === true, favorite: item.favorite === true };
+}
+
+function normalizeList<T extends AnyItem>(items: T[]): T[] {
+  return items.map(normalize);
 }
 
 function sharedDefaults() {
@@ -316,11 +329,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
       }
       setDemo(false);
       setData({
-        calendar: result.data?.calendar ?? [],
-        projects: result.data?.projects ?? [],
-        routines: result.data?.routines ?? [],
-        binder: result.data?.binder ?? [],
-        archive: result.data?.archive ?? [],
+        calendar: normalizeList(result.data?.calendar ?? []),
+        projects: normalizeList(result.data?.projects ?? []),
+        routines: normalizeList(result.data?.routines ?? []),
+        binder: normalizeList(result.data?.binder ?? []),
+        archive: normalizeList(result.data?.archive ?? []),
       });
       setResourceErrors(result.errors ?? {});
     } catch (error) {
@@ -404,7 +417,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           setData((current) => ({
             ...current,
             [entry.resource]: (current[entry.resource] as AnyItem[]).map((item) =>
-              item.id === entry.tempId ? result.data : item,
+              item.id === entry.tempId ? normalize(result.data) : item,
             ),
           }) as AllData);
         } else if (entry.id) {
@@ -487,7 +500,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setData((current) => ({
           ...current,
           [resource]: (current[resource] as AnyItem[]).map((item) =>
-            item.id === optimistic.id ? result.data : item,
+            item.id === optimistic.id ? normalize(result.data) : item,
           ),
         }) as AllData);
         setLastSavedAt(Date.now());
@@ -548,7 +561,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         });
         setData((current) => ({
           ...current,
-          [resource]: replaceIn(current[resource] as AnyItem[], result.data),
+          [resource]: replaceIn(current[resource] as AnyItem[], normalize(result.data)),
         }) as AllData);
         setLastSavedAt(Date.now());
         return true;
@@ -557,6 +570,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
           // Two versions exist: keep both visible and let the user choose.
           const current = error.payload["current"] as AnyItem | undefined;
           if (current) {
+            const mine = { ...previous, ...patch } as AnyItem;
+            // The other side already holds exactly what we asked for (a retry after the
+            // conflict was settled): adopt it, so no empty '동시 수정' sheet appears.
+            if (differingKeys(mine, current).length === 0) {
+              setData((state) => ({
+                ...state,
+                [resource]: replaceIn(state[resource] as AnyItem[], normalize(current)),
+              }) as AllData);
+              setLastSavedAt(Date.now());
+              return true;
+            }
             setConflict({
               resource,
               id,
@@ -608,7 +632,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         });
         setData((current) => ({
           ...current,
-          [open.resource]: replaceIn(current[open.resource] as AnyItem[], result.data),
+          [open.resource]: replaceIn(current[open.resource] as AnyItem[], normalize(result.data)),
         }) as AllData);
         setLastSavedAt(Date.now());
         return true;

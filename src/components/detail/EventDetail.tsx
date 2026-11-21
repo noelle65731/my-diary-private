@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useData } from "@/state/store";
+import { useSettings } from "@/state/settings";
 import {
   DetailSection,
   DetailShell,
@@ -17,6 +18,8 @@ import { editableMemo, plainOfSpans, spansFromMarkdown } from "@/lib/richtext";
 import { formatShort, startOfWeekISO, todayISO, weekKeyOf, weekdayKo } from "@/lib/date";
 import {
   CALENDAR_CATEGORIES,
+  currentCalendarCategory,
+  isLegacyCalendarCategory,
   type CalendarCategory,
   type CalendarEvent,
   type CalendarKind,
@@ -46,7 +49,9 @@ function formFromEvent(event: CalendarEvent): EventForm {
   return {
     title: event.title,
     kind: event.kind,
-    category: event.category,
+    // A10: the old 외부일정·성과·휴먼네트워크 value is never offered again — the sheet
+    // shows its current equivalent, and saving another value replaces it.
+    category: currentCalendarCategory(event.category),
     date: event.date || todayISO(),
     allDay: event.allDay,
     startTime: event.startTime ?? "09:00",
@@ -136,8 +141,18 @@ function EventDetailInner({
   onCloseAll: () => void;
 }) {
   const { data, update, remove } = useData();
+  const { settings } = useSettings();
   const { draft, set, markSaved, changedKeys, isDirty } = useDetailDraft(formFromEvent(event));
   const [field, setField] = useState<string | null>(null);
+  /** A10: 업무 · 개인 · 공부 and the categories the user added — nothing older. */
+  const categoryOptions = useMemo<CalendarCategory[]>(() => {
+    const list: CalendarCategory[] = [...CALENDAR_CATEGORIES];
+    for (const extra of settings.customCategories) {
+      if (!list.includes(extra as CalendarCategory)) list.push(extra as CalendarCategory);
+    }
+    return list;
+  }, [settings.customCategories]);
+  const legacyCategory = isLegacyCalendarCategory(event.category) ? event.category : null;
 
   const invalidField = requiredField(draft);
 
@@ -318,7 +333,17 @@ function EventDetailInner({
 
           <div className="mt-1 grid gap-2 sm:grid-cols-2">
             <InlineChoice label="유형" value={draft.kind} options={KINDS} onChange={(value) => set("kind", value)} />
-            <InlineChoice label="분류" value={draft.category} options={CALENDAR_CATEGORIES} onChange={(value) => set("category", value)} />
+            <InlineChoice
+              label="분류"
+              value={draft.category}
+              options={categoryOptions}
+              onChange={(value) => set("category", value)}
+              hint={
+                legacyCategory
+                  ? `옛 분류 ‘${legacyCategory}’은(는) 지금 분류로 ‘${currentCalendarCategory(legacyCategory)}’에 표시됩니다. 다른 분류를 고르면 그 값으로 저장됩니다.`
+                  : undefined
+              }
+            />
           </div>
         </DetailSection>
 

@@ -20,7 +20,8 @@ import {
 import { holidayName } from "@/lib/holidays";
 import { cn, matchesMode } from "@/lib/utils";
 import type { CalendarEvent, ModeFilter, ProjectTask, Routine } from "@/lib/types";
-import { ChevronLeftIcon, ChevronRightIcon, PlusIcon, SearchIcon } from "@/components/icons";
+import { currentCalendarCategory } from "@/lib/types";
+import { ChevronLeftIcon, ChevronRightIcon, PlusIcon, SearchIcon, TrashIcon } from "@/components/icons";
 import { ModeChips } from "@/components/common/ModeChips";
 import { WeekBoard } from "@/components/calendar/WeekBoard";
 import { WeekPanel } from "@/components/calendar/WeekPanel";
@@ -46,14 +47,14 @@ const VIEWS: { value: CalendarViewKey; label: string }[] = [
 const BASE_CATEGORIES = ["업무", "개인", "공부"];
 
 function eventMode(event: CalendarEvent): "업무" | "개인" | "공부" {
-  if (event.category === "외부일정" || event.category === "성과") return "업무";
-  return "개인";
+  // A10: now 분류 is 업무·개인·공부; an old value is read as its current equivalent.
+  return currentCalendarCategory(event.category);
 }
 
 export function CalendarTab() {
   const { data, update, setRoutineCount, findItem, create } = useData();
   const { settings, addCategory } = useSettings();
-  const { focus, clearFocus, openBinderForDate, setSearchOpen } = useUi();
+  const { focus, clearFocus, openBinderForDate, setSearchOpen, openTrash } = useUi();
 
   const today = todayISO();
   const [view, setView] = useState<CalendarViewKey>(settings.calendarDefaultView);
@@ -350,6 +351,15 @@ export function CalendarTab() {
 
             <button type="button" onClick={() => setSearchOpen(true)} className="icon-btn hidden bg-paper-200 hover:bg-paper-300/70 md:inline-flex" aria-label="검색">
               <SearchIcon size={15} />
+            </button>
+            <button
+              type="button"
+              onClick={() => openTrash("calendar")}
+              className="icon-btn bg-paper-200 hover:bg-paper-300/70"
+              aria-label="휴지통"
+              title="캘린더 휴지통"
+            >
+              <TrashIcon size={15} />
             </button>
           </div>
         </div>

@@ -209,7 +209,7 @@ export function MonthView({
                   </div>
                   {holiday ? <p className="truncate text-[0.58rem] text-red-500">{holiday}</p> : null}
 
-                  <div className="mt-0.5 space-y-[2px] md:space-y-[3px]">
+                  <div className="mt-0.5 space-y-[3px] md:space-y-[4px]">
                     {visibleItems.map((item) => {
                       if (item.type === "event") {
                         const tone = categoryTone(item.event.category);
@@ -225,7 +225,7 @@ export function MonthView({
                             }}
                             onClick={() => onOpenEvent(item.event.id)}
                             className={cn(
-                              "flex w-full items-start gap-1 rounded px-0.5 py-[1px] text-left text-[0.6rem] leading-[1.25] md:px-1 md:text-[0.68rem] md:leading-[1.35]",
+                              "flex w-full items-start gap-1 rounded px-0.5 py-[2px] text-left text-[0.6rem] leading-[1.35] md:px-1 md:text-[0.68rem] md:leading-[1.45]",
                               multiDay ? cn(tone.bg, tone.text) : tone.text,
                               item.event.canceled && "line-through opacity-50",
                               item.event.done && "opacity-60",
@@ -246,7 +246,7 @@ export function MonthView({
                             event.dataTransfer.setData("text/diary-item", `task:${item.task.id}`);
                             event.dataTransfer.effectAllowed = "move";
                           }}
-                          className="flex w-full items-center gap-0.5 px-0.5 py-[1px] md:gap-1 md:px-1"
+                          className="flex min-h-[1.1rem] w-full items-center gap-0.5 px-0.5 py-[2px] md:min-h-[1.2rem] md:gap-1 md:px-1"
                         >
                           <button
                             type="button"
@@ -268,7 +268,7 @@ export function MonthView({
                             type="button"
                             onClick={() => onOpenTask(item.task.id)}
                             className={cn(
-                              "min-w-0 flex-1 truncate text-left text-[0.6rem] leading-[1.25] text-ink-500 md:text-[0.68rem] md:leading-[1.35]",
+                              "min-w-0 flex-1 truncate text-left text-[0.6rem] leading-[1.35] text-ink-500 md:text-[0.68rem] md:leading-[1.45]",
                               taskDone && "text-ink-300 line-through",
                             )}
                           >

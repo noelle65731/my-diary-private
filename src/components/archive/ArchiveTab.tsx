@@ -21,7 +21,7 @@ type SortKey = "recent" | "rating" | "title";
 export function ArchiveTab() {
   const { data, create, update, destroy } = useData();
   const { settings } = useSettings();
-  const { focus, clearFocus } = useUi();
+  const { focus, clearFocus, notify } = useUi();
 
   const [category, setCategory] = useState<"전체" | ArchiveKind>(settings.archiveDefaultCategory);
   const [folder, setFolder] = useState<string | null>(null);
@@ -59,7 +59,7 @@ export function ArchiveTab() {
     clearFocus();
   }, [focus, clearFocus]);
 
-  const base = useMemo(() => data.archive.filter((item) => item.trash === trashMode), [data.archive, trashMode]);
+  const base = useMemo(() => data.archive.filter((item) => Boolean(item.trash) === trashMode), [data.archive, trashMode]);
 
   const items = useMemo(() => {
     const filtered = base
@@ -117,9 +117,13 @@ export function ArchiveTab() {
       <div className="flex items-end justify-between gap-3">
         <div className="min-w-0">
           <p className="truncate text-[0.66rem] text-ink-400">
-            {ARCHIVE_KINDS.filter((kind) => (counts[kind] ?? 0) > 0)
-              .map((kind) => `${kind} ${counts[kind]}`)
-              .join(" · ") || "아직 담긴 것이 없습니다"}
+            {trashMode
+              ? base.length > 0
+                ? `휴지통 ${base.length}개 · 복원하거나 완전 삭제할 수 있습니다`
+                : "휴지통이 비어 있습니다"
+              : ARCHIVE_KINDS.filter((kind) => (counts[kind] ?? 0) > 0)
+                  .map((kind) => `${kind} ${counts[kind]}`)
+                  .join(" · ") || "아직 담긴 것이 없습니다"}
           </p>
           <h1 className="mt-1.5 text-[1.15rem] font-semibold leading-none tracking-[-0.02em] text-ink-900 md:text-[1.2rem]">아카이브</h1>
         </div>
@@ -230,6 +234,25 @@ export function ArchiveTab() {
 
       {items.length === 0 ? (
         <div className="mt-3">
+          {base.length > 0 ? (
+            // Records exist here; only the kind·folder·tag·search filter hides them.
+            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-paper-300 bg-paper-50/60 px-3 py-2 text-[0.76rem] text-ink-500">
+              <span>고른 필터에 맞는 항목이 없습니다. {base.length}개가 다른 분류·폴더에 있습니다.</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setCategory("전체");
+                  setFolder(null);
+                  setTag(null);
+                  setQuery("");
+                  setFavoritesOnly(false);
+                }}
+                className="btn-outline btn-xs"
+              >
+                필터 지우기
+              </button>
+            </div>
+          ) : (
           <EmptyState
             icon={<ArchiveIcon size={22} />}
             title={trashMode ? "휴지통이 비어 있습니다" : "아직 담긴 것이 없습니다"}
@@ -249,6 +272,7 @@ export function ArchiveTab() {
               )
             }
           />
+          )}
         </div>
       ) : (
         <div className="mt-3 grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
@@ -314,14 +338,20 @@ export function ArchiveTab() {
                     <>
                       <button
                         type="button"
-                        onClick={() => void update("archive", item.id, { trash: false })}
+                        onClick={() => {
+                          void update("archive", item.id, { trash: false }).then((ok) => {
+                            if (ok) notify(`‘${item.title}’을(를) 복원했습니다.`, "success");
+                          });
+                        }}
                         className="rounded px-1.5 py-0.5 text-[0.64rem] text-ink-500 hover:bg-paper-200"
                       >
                         복원
                       </button>
                       <button
                         type="button"
-                        onClick={() => void destroy("archive", item.id)}
+                        onClick={() => {
+                          void destroy("archive", item.id).then(() => notify(`‘${item.title}’을(를) 완전히 삭제했습니다.`, "success"));
+                        }}
                         className="rounded px-1.5 py-0.5 text-[0.64rem] text-red-500 hover:bg-red-50"
                       >
                         완전 삭제

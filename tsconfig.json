@@ -36,11 +36,13 @@
     ".next-final/types/**/*.ts",
     ".next-final3/types/**/*.ts",
     ".next-p7/types/**/*.ts",
+    ".next-p8/types/**/*.ts",
     ".next-polish/types/**/*.ts",
+    ".next-v3/types/**/*.ts",
     ".next-verify/types/**/*.ts",
     ".next/types/**/*.ts",
     "next-env.d.ts",
-    ".next-p8/types/**/*.ts"
+    ".next-verify2/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

@@ -8,7 +8,7 @@
 export type Resource = "calendar" | "projects" | "routines" | "binder" | "archive";
 
 export type CalendarKind = "일정" | "주간 목표" | "주간 메모" | "월간 메모";
-export type CalendarCategory = "개인" | "외부일정" | "성과" | "휴먼네트워크";
+export type CalendarCategory = "업무" | "개인" | "공부" | "외부일정" | "성과" | "휴먼네트워크";
 
 export type TaskKind = "프로젝트" | "할 일";
 export type TaskCategory = "업무" | "개인" | "공부";
@@ -173,7 +173,20 @@ export interface StatusPayload {
 }
 
 export const CALENDAR_KINDS: CalendarKind[] = ["일정", "주간 목표", "주간 메모", "월간 메모"];
-export const CALENDAR_CATEGORIES: CalendarCategory[] = ["개인", "외부일정", "성과", "휴먼네트워크"];
+/** A10: the classification the app uses now (the same 업무·개인·공부 as projects). */
+export const CALENDAR_CATEGORIES: CalendarCategory[] = ["업무", "개인", "공부"];/** The old Calendar choices — no longer offered anywhere. */
+export const CALENDAR_LEGACY_CATEGORIES: CalendarCategory[] = ["외부일정", "성과", "휴먼네트워크"];
+
+/** A record still holding an old value is shown (and saved) as its current equivalent. */
+export function currentCalendarCategory(category: string | null | undefined): "업무" | "개인" | "공부" {
+  if (category === "업무" || category === "공부" || category === "개인") return category;
+  if (category === "외부일정" || category === "성과") return "업무";
+  return "개인";
+}
+
+export function isLegacyCalendarCategory(category: string | null | undefined): boolean {
+  return category === "외부일정" || category === "성과" || category === "휴먼네트워크";
+}
 export const TASK_KINDS: TaskKind[] = ["프로젝트", "할 일"];
 export const TASK_CATEGORIES: TaskCategory[] = ["업무", "개인", "공부"];
 export const TASK_STATUSES: TaskStatus[] = ["미완료", "대기 중", "완료", "취소"];

@@ -12,6 +12,15 @@ export interface Tone {
 }
 
 export const CATEGORY_TONES: Record<CalendarCategory, Tone> = {
+  업무: {
+    text: "text-accent-600",
+    bg: "bg-accent-100",
+    border: "border-accent-200",
+    dot: "bg-accent-400",
+    soft: "bg-accent-50",
+    solid: "bg-accent-400",
+    solidText: "text-white",
+  },
   개인: {
     text: "text-accent-600",
     bg: "bg-accent-100",
@@ -19,6 +28,15 @@ export const CATEGORY_TONES: Record<CalendarCategory, Tone> = {
     dot: "bg-accent-400",
     soft: "bg-accent-50",
     solid: "bg-accent-400",
+    solidText: "text-white",
+  },
+  공부: {
+    text: "text-dusk-600",
+    bg: "bg-dusk-100",
+    border: "border-dusk-100",
+    dot: "bg-dusk-500",
+    soft: "bg-dusk-100/60",
+    solid: "bg-dusk-500",
     solidText: "text-white",
   },
   외부일정: {

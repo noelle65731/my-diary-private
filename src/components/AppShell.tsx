@@ -16,12 +16,14 @@ import {
   SearchIcon,
   SettingsIcon,
   SparkIcon,
+  TrashIcon,
   XIcon,
 } from "@/components/icons";
 import { SaveIndicator } from "@/components/SaveIndicator";
 import { ConflictDialog } from "@/components/ConflictDialog";
 import { LoginScreen } from "@/components/LoginScreen";
 import { SearchDialog } from "@/components/SearchDialog";
+import { TrashDialog } from "@/components/TrashDialog";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { CalendarTab } from "@/components/calendar/CalendarTab";
 import { ProjectsTab } from "@/components/projects/ProjectsTab";
@@ -63,7 +65,7 @@ function Splash() {
 
 export function AppShell() {
   const { status, loading, fatalError, demo, resourceErrors, refresh, data } = useData();
-  const { tab, setTab, requestReset, setSearchOpen, setSettingsOpen, toasts, dismissToast } = useUi();
+  const { tab, setTab, requestReset, setSearchOpen, openTrash, setSettingsOpen, toasts, dismissToast } = useUi();
   const [today, setToday] = useState(todayISO());
   const [quickOpen, setQuickOpen] = useState(false);
   const [quick, setQuick] = useState<QuickKind | null>(null);
@@ -143,6 +145,9 @@ export function AppShell() {
             <ConflictDialog />
             <button type="button" className="icon-btn" onClick={() => setSearchOpen(true)} aria-label="검색">
               <SearchIcon size={16} />
+            </button>
+            <button type="button" className="icon-btn" onClick={() => openTrash("all")} aria-label="휴지통">
+              <TrashIcon size={16} />
             </button>
             <button type="button" className="icon-btn" onClick={() => setSettingsOpen(true)} aria-label="설정">
               <SettingsIcon size={16} />
@@ -275,6 +280,7 @@ export function AppShell() {
       </nav>
 
       <SearchDialog />
+      <TrashDialog />
       <SettingsDialog />
 
       <EventEditor open={quick === "event"} onClose={() => setQuick(null)} draft={{ date: todayISO() }} />

@@ -35,6 +35,10 @@ interface UiContextValue {
   clearFocus: () => void;
   searchOpen: boolean;
   setSearchOpen: (open: boolean) => void;
+  /** P0-1: one web trash for every record type — 캘린더·프로젝트·루틴·바인더·아카이브. */
+  trashFilter: Resource | "all" | null;
+  openTrash: (resource?: Resource | "all") => void;
+  closeTrash: () => void;
   settingsOpen: boolean;
   setSettingsOpen: (open: boolean) => void;
   toasts: Toast[];
@@ -65,6 +69,7 @@ export function UiProvider({ children }: { children: ReactNode }) {
   });
   const [focus, setFocus] = useState<FocusTarget | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [trashFilter, setTrashFilter] = useState<Resource | "all" | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [pendingBinderDate, setPendingBinderDate] = useState<string | null>(null);
@@ -117,6 +122,13 @@ export function UiProvider({ children }: { children: ReactNode }) {
 
   const clearFocus = useCallback(() => setFocus(null), []);
 
+  const openTrash = useCallback((resource: Resource | "all" = "all") => {
+    setSearchOpen(false);
+    setTrashFilter(resource);
+  }, []);
+
+  const closeTrash = useCallback(() => setTrashFilter(null), []);
+
   const openBinderForDate = useCallback(
     (date: string) => {
       setPendingBinderDate(date);
@@ -138,6 +150,9 @@ export function UiProvider({ children }: { children: ReactNode }) {
       clearFocus,
       searchOpen,
       setSearchOpen,
+      trashFilter,
+      openTrash,
+      closeTrash,
       settingsOpen,
       setSettingsOpen,
       toasts,
@@ -156,6 +171,9 @@ export function UiProvider({ children }: { children: ReactNode }) {
       openItem,
       clearFocus,
       searchOpen,
+      trashFilter,
+      openTrash,
+      closeTrash,
       settingsOpen,
       toasts,
       notify,

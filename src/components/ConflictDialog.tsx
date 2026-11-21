@@ -4,21 +4,7 @@ import { useState } from "react";
 import { useData } from "@/state/store";
 import { Modal } from "@/components/common/primitives";
 import { cn } from "@/lib/utils";
-import type { AnyItem } from "@/lib/types";
-
-/** Keys whose two versions differ — the ones worth showing side by side. */
-function differingKeys(local: AnyItem, server: AnyItem): string[] {
-  const keys = new Set([...Object.keys(local), ...Object.keys(server)]);
-  const skip = new Set(["updatedAt", "createdAt", "url", "id"]);
-  const out: string[] = [];
-  for (const key of keys) {
-    if (skip.has(key)) continue;
-    const a = (local as unknown as Record<string, unknown>)[key];
-    const b = (server as unknown as Record<string, unknown>)[key];
-    if (JSON.stringify(a) !== JSON.stringify(b)) out.push(key);
-  }
-  return out;
-}
+import { differingKeys } from "@/lib/diff";
 
 const LABELS: Record<string, string> = {
   title: "제목",
@@ -57,6 +43,8 @@ export function ConflictDialog() {
   const [busy, setBusy] = useState(false);
   if (!conflict) return null;
   const keys = differingKeys(conflict.local, conflict.current).slice(0, 8);
+  // Both sides already hold the same values: nothing to choose, so no sheet.
+  if (keys.length === 0) return null;
 
   const choose = async (keepMine: boolean) => {
     setBusy(true);
@@ -75,17 +63,13 @@ export function ConflictDialog() {
           <span>내가 고친 값</span>
           <span>Notion의 값</span>
         </div>
-        {keys.length === 0 ? (
-          <p className="px-3 py-3 text-[0.74rem] text-ink-400">표시할 차이가 없습니다. 둘 중 하나를 골라 주세요.</p>
-        ) : (
-          keys.map((key) => (
-            <div key={key} className="grid grid-cols-[7rem_1fr_1fr] gap-2 border-b border-paper-300/70 px-3 py-1.5 text-[0.74rem] last:border-b-0">
-              <span className="text-ink-400">{LABELS[key] ?? key}</span>
-              <span className="break-words text-ink-900">{show((conflict.local as unknown as Record<string, unknown>)[key])}</span>
-              <span className="break-words text-ink-600">{show((conflict.current as unknown as Record<string, unknown>)[key])}</span>
-            </div>
-          ))
-        )}
+        {keys.map((key) => (
+          <div key={key} className="grid grid-cols-[7rem_1fr_1fr] gap-2 border-b border-paper-300/70 px-3 py-1.5 text-[0.74rem] last:border-b-0">
+            <span className="text-ink-400">{LABELS[key] ?? key}</span>
+            <span className="break-words text-ink-900">{show((conflict.local as unknown as Record<string, unknown>)[key])}</span>
+            <span className="break-words text-ink-600">{show((conflict.current as unknown as Record<string, unknown>)[key])}</span>
+          </div>
+        ))}
       </div>
       <div className="mt-4 flex flex-wrap justify-end gap-2">
         <button type="button" disabled={busy} onClick={() => void choose(false)} className={cn("btn-outline btn-sm")}>

@@ -39,6 +39,9 @@ function ensureEscapeListener() {
   });
 
   window.addEventListener("popstate", () => {
+    // Our own cleanup step below pops the shared entry; that is not a gesture, so a
+    // layer opened in the same commit (search result → detail) must stay open.
+    if (unwinding) return;
     if (hasLayerState()) return;
     const top = layers[layers.length - 1];
     if (!top) return;
@@ -75,6 +78,11 @@ export function useOverlay(open: boolean, onClose: () => void) {
           window.history.back();
           window.setTimeout(() => {
             unwinding = false;
+            // A layer that opened while that entry was leaving still needs the entry,
+            // or the browser's back gesture would not close it.
+            if (layers.length > 0 && !hasLayerState()) {
+              window.history.pushState({ ...(window.history.state ?? {}), diaryLayer: true }, "");
+            }
           }, 80);
         }
       }, 0);
