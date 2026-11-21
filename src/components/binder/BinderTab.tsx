@@ -33,6 +33,20 @@ import { useDnd } from "@/components/common/dnd";
 
 type BinderView = "weekly" | "daily" | "notes";
 
+/** A31: 위클리 날짜 칸에 바로 붙는 한 줄 — 그날 일정과 할 일을 창 없이 보면서 씁니다. */
+interface AgendaItem {
+  id: string;
+  kind: "일정" | "할 일";
+  title: string;
+  /** "종일", "09:00", 또는 시간이 없으면 빈 문자열 */
+  time: string;
+  allDay: boolean;
+  done: boolean;
+  waiting: boolean;
+  /** 마감이 이 날이거나 다른 날인 할 일 */
+  dueNote: string;
+}
+
 export function BinderTab() {
   const { data, update, create } = useData();
   const { settings, set: setSetting } = useSettings();
@@ -85,6 +99,28 @@ export function BinderTab() {
   const lastWeekDays = weekDays(lastWeekStart, settings.weekStartsOn);
   const dayEntry = (day: string) => diaries.find((entry) => entry.date === day) ?? null;
 
+  /** A31: 위클리에서 날짜마다 그날 일정·할 일을 세어 둡니다(14칸 × 전체 훑기라 한 번만 계산). */
+  const agendaEvents = useMemo(
+    () => data.calendar.filter((event) => event.kind === "일정" && !event.trash && (!settings.nowOnly || !event.hidden)),
+    [data.calendar, settings.nowOnly],
+  );
+  const agendaTasks = useMemo(
+    () =>
+      data.projects.filter(
+        (task) => task.kind === "할 일" && !task.trash && task.status !== "취소" && (!settings.nowOnly || !task.hidden),
+      ),
+    [data.projects, settings.nowOnly],
+  );
+  /** 폭에 따라 한 줄에 보여 줄 칩 수 — 넓은 화면은 스프레드가 두 단이라 칸이 좁습니다. */
+  const [wideAgenda, setWideAgenda] = useState(false);
+  useEffect(() => {
+    const query = window.matchMedia("(min-width: 1024px)");
+    const sync = () => setWideAgenda(query.matches);
+    sync();
+    query.addEventListener("change", sync);
+    return () => query.removeEventListener("change", sync);
+  }, []);
+
   /** A24: 위클리 화면의 일정·할 일 참고 창 — 열어 둔 상태는 설정에 남습니다. */
   const showWeekSchedule = settings.binderWeekSchedule;
   const setShowWeekSchedule = (next: boolean) => setSetting("binderWeekSchedule", next);
@@ -114,6 +150,8 @@ export function BinderTab() {
       key={day}
       day={day}
       entry={dayEntry(day)}
+      agenda={agendaForDay(day, agendaEvents, agendaTasks)}
+      wideAgenda={wideAgenda}
       lines={settings.binderPreviewLines}
       writing={writingDay === day}
       onStartWriting={() => startWriting(day)}
@@ -197,7 +235,7 @@ export function BinderTab() {
               aria-controls={showWeekSchedule ? "week-schedule" : undefined}
               data-week-schedule-toggle="true"
             >
-              <ListIcon size={12} /> 일정 · 할 일
+              <ListIcon size={12} /> 주간 한눈에
             </button>
           ) : null}
           <button type="button" onClick={() => setSearchOpen(true)} className="icon-btn bg-paper-200 hover:bg-paper-300/70" aria-label="검색">
@@ -335,6 +373,8 @@ function isAutoTitle(title: string | null | undefined, day: string): boolean {
 function DiaryRow({
   day,
   entry,
+  agenda,
+  wideAgenda,
   lines,
   writing,
   onStartWriting,
@@ -346,6 +386,8 @@ function DiaryRow({
 }: {
   day: string;
   entry: BinderEntry | null;
+  agenda: AgendaItem[];
+  wideAgenda: boolean;
   lines: number;
   writing: boolean;
   onStartWriting: () => void;
@@ -486,99 +528,221 @@ function DiaryRow({
         ) : null}
       </button>
 
-      {writing ? (
-        <div className="min-w-0 py-2.5 pl-1">
-          <textarea
-            ref={area}
-            value={text}
-            onChange={(event) => {
-              setText(event.target.value);
-              const node = event.target;
-              node.style.height = "auto";
-              node.style.height = `${node.scrollHeight}px`;
-              schedule(event.target.value);
-            }}
-            onBlur={() => {
-              if (timer.current) {
-                clearTimeout(timer.current);
-                timer.current = null;
-              }
-              void flush();
-              onStopWriting();
-            }}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") {
-                event.preventDefault();
+      <div className="min-w-0 py-1.5 pl-1 pr-2">
+        {/* A31: 그날 일정·할 일은 늘 이 자리에 — 날짜를 눌러 쓰기 시작해도 그대로 보입니다. */}
+        <DayAgenda day={day} items={agenda} wide={wideAgenda} active={writing} />
+
+        {writing ? (
+          <div className="min-w-0">
+            <textarea
+              ref={area}
+              value={text}
+              onChange={(event) => {
+                setText(event.target.value);
+                const node = event.target;
+                node.style.height = "auto";
+                node.style.height = `${node.scrollHeight}px`;
+                schedule(event.target.value);
+              }}
+              onBlur={() => {
                 if (timer.current) {
                   clearTimeout(timer.current);
                   timer.current = null;
                 }
                 void flush();
                 onStopWriting();
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  if (timer.current) {
+                    clearTimeout(timer.current);
+                    timer.current = null;
+                  }
+                  void flush();
+                  onStopWriting();
+                }
+              }}
+              rows={3}
+              autoFocus
+              placeholder="바로 적어 보세요"
+              className="binder-input min-h-[4.4rem]"
+            />
+            <div className="mt-1 flex items-center justify-between text-[calc(12px*var(--fs))] text-ink-400">
+              <span>{saved === "saving" ? "저장 중…" : saved === "saved" ? "저장됨" : "자동 저장 (잠시 멈추면)"}</span>
+              <button
+                type="button"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={onStopWriting}
+                className="hover:text-ink-800"
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={onStartWriting}
+            onPointerDown={startDrag}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onStartWriting();
               }
             }}
-            rows={3}
-            autoFocus
-            placeholder="바로 적어 보세요"
-            className="binder-input min-h-[4.4rem]"
-          />
-          <div className="mt-1 flex items-center justify-between text-[calc(12px*var(--fs))] text-ink-400">
-            <span>{saved === "saving" ? "저장 중…" : saved === "saved" ? "저장됨" : "자동 저장 (잠시 멈추면)"}</span>
-            <button
-              type="button"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={onStopWriting}
-              className="hover:text-ink-800"
-            >
-              닫기
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div
-          role="button"
-          tabIndex={0}
-          onClick={onStartWriting}
-          onPointerDown={startDrag}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" || event.key === " ") {
-              event.preventDefault();
-              onStartWriting();
-            }
-          }}
-          className="min-h-[4.7rem] min-w-0 cursor-text overflow-hidden py-2 pl-1 pr-2 text-left outline-none focus-visible:bg-paper-200/40"
-        >
-          {entry ? (
-            <>
-              {preview.map((line, index) => (
-                <p key={index} className="mt-0.5 line-clamp-1 text-[calc(14px*var(--fs))] leading-[1.6] text-ink-600">
-                  {truncate(line, 90)}
-                </p>
-              ))}
-              <span className="mt-1 hidden items-center gap-2 text-[calc(12px*var(--fs))] text-ink-400 group-hover:flex">
-                <span>이어 쓰기</span>
-                <button
-                  type="button"
-                  onPointerDown={(event) => event.stopPropagation()}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onOpenEntry(entry.id);
-                  }}
-                  className="underline decoration-paper-400 underline-offset-2 hover:text-ink-800"
-                >
-                  자세히
-                </button>
+            className="min-h-[4.7rem] min-w-0 cursor-text overflow-hidden pb-0.5 pt-1 text-left outline-none focus-visible:bg-paper-200/40"
+          >
+            {entry ? (
+              <>
+                {preview.map((line, index) => (
+                  <p key={index} className="mt-0.5 line-clamp-1 text-[calc(14px*var(--fs))] leading-[1.6] text-ink-600">
+                    {truncate(line, 90)}
+                  </p>
+                ))}
+                <span className="mt-1 hidden items-center gap-2 text-[calc(12px*var(--fs))] text-ink-400 group-hover:flex">
+                  <span>이어 쓰기</span>
+                  <button
+                    type="button"
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onOpenEntry(entry.id);
+                    }}
+                    className="underline decoration-paper-400 underline-offset-2 hover:text-ink-800"
+                  >
+                    자세히
+                  </button>
+                </span>
+              </>
+            ) : (
+              <span className="flex h-full min-h-[3.8rem] items-center text-[calc(13.5px*var(--fs))] text-ink-400 opacity-0 transition group-hover:opacity-100">
+                + 눌러서 바로 쓰기
               </span>
-            </>
-          ) : (
-            <span className="flex h-full min-h-[3.8rem] items-center text-[calc(13.5px*var(--fs))] text-ink-400 opacity-0 transition group-hover:opacity-100">
-              + 눌러서 바로 쓰기
-            </span>
-          )}
-        </div>
-      )}
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
+}
+
+/**
+ * A31: 위클리의 한 날짜 칸에 붙는 그날 일정·할 일 줄.
+ * 입력 칸을 밀어내지 않도록 기본은 한 줄(넓은 화면 4개, 폰 2개)만 보여 주고,
+ * 나머지는 +N 으로 펼칩니다. 그 날짜를 눌러 쓰기 시작하면 처음부터 모두 보입니다.
+ */
+function DayAgenda({ day, items, wide, active }: { day: string; items: AgendaItem[]; wide: boolean; active: boolean }) {
+  const [open, setOpen] = useState(false);
+  if (items.length === 0) return null;
+
+  const limit = wide ? 3 : 2;
+  const expanded = active || open;
+  const shown = expanded ? items : items.slice(0, limit);
+  const hidden = items.length - shown.length;
+
+  return (
+    <div data-day-agenda={day} className="mb-0.5 flex flex-wrap items-center gap-1">
+      {shown.map((item) => (
+        <AgendaChip key={`${item.kind}-${item.id}`} item={item} />
+      ))}
+      {hidden > 0 ? (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="flex-none rounded-full border border-line-soft bg-white px-1.5 py-px text-[calc(12px*var(--fs))] leading-[1.5] tabular-nums text-ink-500 hover:text-ink-800"
+          aria-label={`${formatShort(day)} 일정·할 일 ${items.length}개 모두 보기`}
+        >
+          +{hidden}
+        </button>
+      ) : null}
+      {open && !active && items.length > limit ? (
+        <button
+          type="button"
+          onClick={() => setOpen(false)}
+          className="flex-none rounded-full px-1 py-px text-[calc(12px*var(--fs))] leading-[1.5] text-ink-400 hover:text-ink-700"
+          aria-label={`${formatShort(day)} 일정·할 일 접기`}
+        >
+          접기
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function AgendaChip({ item }: { item: AgendaItem }) {
+  const muted = item.done;
+  return (
+    <span
+      data-agenda-item={item.kind}
+      title={`${item.kind} · ${item.time ? `${item.time} ` : ""}${item.title}${item.waiting ? " (대기 중)" : ""}${item.dueNote ? ` · ${item.dueNote}` : ""}`}
+      className={cn(
+        "flex min-w-0 max-w-[9.5rem] flex-none items-center gap-1 rounded-full border px-1.5 py-px text-[calc(12.5px*var(--fs))] leading-[1.55] sm:max-w-[11rem]",
+        item.kind === "일정" ? "border-line-soft bg-white" : "border-paper-200 bg-paper-200/60",
+        muted ? "text-ink-400" : "text-ink-700",
+      )}
+    >
+      <span
+        className={cn(
+          "h-[5px] w-[5px] flex-none rounded-full",
+          item.kind === "일정"
+            ? item.allDay
+              ? "bg-sky-500"
+              : "bg-accent-400"
+            : item.done
+              ? "bg-sage-400"
+              : item.waiting
+                ? "bg-amber-400"
+                : "bg-dusk-500",
+        )}
+      />
+      {item.time ? <span className="flex-none tabular-nums text-ink-500">{item.time}</span> : null}
+      <span className={cn("truncate", muted && "line-through")}>{item.title}</span>
+      {item.waiting && !item.done ? <span className="flex-none text-amber-700">대기</span> : null}
+      {item.dueNote ? <span className="flex-none text-ink-400">{item.dueNote}</span> : null}
+    </span>
+  );
+}
+
+/** A31: 그날의 일정(시각·종일)과 할 일(완료·대기·마감)을 칸에 붙일 순서로 모읍니다. */
+function agendaForDay(day: string, events: CalendarEvent[], tasks: ProjectTask[]): AgendaItem[] {
+  const dayEvents = events
+    .filter((event) => eventCoversDay(event, day))
+    .sort(
+      (a, b) =>
+        Number(b.allDay) - Number(a.allDay) ||
+        String(a.startTime ?? "99:99").localeCompare(String(b.startTime ?? "99:99")),
+    )
+    .map<AgendaItem>((event) => ({
+      id: event.id,
+      kind: "일정",
+      title: event.title,
+      time: event.allDay ? "종일" : event.startTime ?? "",
+      allDay: event.allDay,
+      done: event.done || event.canceled,
+      waiting: false,
+      dueNote: event.canceled ? "취소" : "",
+    }));
+
+  const dayTasks = tasksForDay(tasks, day)
+    .sort(
+      (a, b) =>
+        Number(a.status === "완료") - Number(b.status === "완료") ||
+        String(a.startTime ?? "99:99").localeCompare(String(b.startTime ?? "99:99")),
+    )
+    .map<AgendaItem>((task) => ({
+      id: task.id,
+      kind: "할 일",
+      title: task.title,
+      time: task.startTime ?? "",
+      allDay: false,
+      done: task.status === "완료",
+      waiting: task.status === "대기 중",
+      dueNote: task.date !== day ? "마감" : task.due && task.due !== task.date ? `마감 ${formatShort(task.due)}` : "",
+    }));
+
+  return [...dayEvents, ...dayTasks];
 }
 
 /**

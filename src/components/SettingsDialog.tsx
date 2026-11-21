@@ -351,7 +351,7 @@ export function SettingsDialog() {
                 checked={settings.binderWeekSchedule}
                 onChange={(value) => set("binderWeekSchedule", value)}
                 label="주간 일정 창 펼쳐 두기"
-                description="위클리 화면에서 그 주의 일정·할 일을 옆에 띄워 놓고 씁니다"
+                description="위클리 날짜 칸에 그날 일정·할 일이 늘 붙어 있습니다. 이 창은 그 주 전체를 한 번에 볼 때만 엽니다"
               />
             </>
           ) : null}
