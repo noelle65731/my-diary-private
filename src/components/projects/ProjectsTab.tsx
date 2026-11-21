@@ -7,7 +7,8 @@ import { useTabReset, useUi } from "@/state/ui";
 import { cn, matchesMode } from "@/lib/utils";
 import { formatShort, startOfWeekISO, todayISO, weekdayKo } from "@/lib/date";
 import { type ModeFilter, type ProjectTask, type Routine, type TaskCategory } from "@/lib/types";
-import { PRIORITY_TONES, priorityOf, projectEmoji, routineTone, taskTone } from "@/components/common/tone";
+import { PRIORITY_TONES, priorityOf, routineTone, taskTone } from "@/components/common/tone";
+import { ProjectIcon } from "@/components/common/ProjectIcon";
 import { CheckIcon, ChevronRightIcon, InboxIcon, PlusIcon, RepeatIcon, TrashIcon } from "@/components/icons";
 import { ModeChips } from "@/components/common/ModeChips";
 import { ProjectDrawer } from "@/components/projects/ProjectDrawer";
@@ -31,9 +32,24 @@ function dateLabel(date: string | null): string {
 export function ProjectsTab() {
   const { data, update, setRoutineCount, create } = useData();
   const { settings, set: setSetting, addCategory } = useSettings();
-  const { focus, clearFocus, openTrash } = useUi();
+  const { focus, clearFocus, openTrash, views, setView: setTabView } = useUi();
 
-  const [view, setView] = useState<ProjectView>("tracks");
+  // A15: tracks / priority / history is kept in the shared UI state for 뒤로 가기.
+  const view = ((views.projects || "tracks") as ProjectView);
+  const setView = (next: ProjectView) => setTabView("projects", next);
+  /** A12: 3~4 cards per row — the user picks how wide each card reads. */
+  const [cols, setCols] = useState<3 | 4>(() => {
+    if (typeof window === "undefined") return 4;
+    return window.localStorage.getItem("my-diary:project-cols:v1") === "3" ? 3 : 4;
+  });
+  const pickCols = (next: 3 | 4) => {
+    setCols(next);
+    try {
+      window.localStorage.setItem("my-diary:project-cols:v1", String(next));
+    } catch {
+      /* ignore */
+    }
+  };
   // A6: 전체(all) is the default filter on every device.
   const [mode, setMode] = useState<ModeFilter>("all");
   const [projectId, setProjectId] = useState<string | null>(null);
@@ -166,10 +182,10 @@ export function ProjectsTab() {
     <div>
       <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
         <div className="min-w-0">
-          <p className="text-[0.66rem] text-ink-400">
+          <p className="text-[13.5px] text-ink-400">
             트랙 {projectCount} · 남은 할 일 {openTasks.length}
           </p>
-          <h1 className="mt-1.5 text-[1.15rem] font-semibold leading-none tracking-[-0.02em] text-ink-900 md:text-[1.2rem]">프로젝트</h1>
+          <h1 className="mt-1.5 text-[20px] font-semibold leading-none tracking-[-0.02em] text-ink-900 md:text-[21px]">프로젝트</h1>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
@@ -195,16 +211,30 @@ export function ProjectsTab() {
           <button
             type="button"
             onClick={() => openTrash("projects")}
-            className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[0.74rem] text-ink-500 transition hover:bg-paper-200 hover:text-ink-800"
+            className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[14.5px] text-ink-500 transition hover:bg-paper-200 hover:text-ink-800"
             aria-label="휴지통"
           >
             <TrashIcon size={13} /> 휴지통
           </button>
 
+          <div className="seg-track" aria-label="카드 칸 수">
+            {([3, 4] as const).map((option) => (
+              <button
+                key={option}
+                type="button"
+                onClick={() => pickCols(option)}
+                aria-pressed={cols === option}
+                className={cn("seg-item", cols === option && "seg-item-active")}
+              >
+                {option}칸
+              </button>
+            ))}
+          </div>
+
           <button
             type="button"
             onClick={() => setSetting("showCompletedTasks", !settings.showCompletedTasks)}
-            className="inline-flex items-center gap-2 text-[0.74rem] text-ink-500"
+            className="inline-flex items-center gap-2 text-[14.5px] text-ink-500"
           >
             완료 보기
             <span
@@ -234,7 +264,7 @@ export function ProjectsTab() {
         <button
           type="button"
           onClick={() => setTaskDraft({ kind: "프로젝트", category: quickCategory })}
-          className="ml-auto rounded-full bg-paper-200 px-3 py-1 text-[0.76rem] font-medium text-ink-700 transition hover:bg-paper-300/70"
+          className="ml-auto rounded-full bg-paper-200 px-3 py-1 text-[15px] font-medium text-ink-700 transition hover:bg-paper-300/70"
         >
           + 트랙
         </button>
@@ -242,22 +272,22 @@ export function ProjectsTab() {
 
       {view === "tracks" ? (
         <div className="mt-4 space-y-4">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
-            <article className="flex min-h-[11rem] flex-col rounded-2xl border border-paper-300 px-3 py-3">
+          <div className="cards-grid" style={{ "--proj-cols": cols } as React.CSSProperties}>
+            <article className="flex min-h-[10rem] flex-col rounded-2xl border border-paper-300 px-3.5 py-3">
               <header className="flex items-start gap-2">
                 <span className="flex h-7 w-7 flex-none items-center justify-center rounded-full bg-paper-200 text-ink-500">
                   <InboxIcon size={14} />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-[0.88rem] font-semibold text-ink-900">받은함</p>
-                  <p className="truncate text-[0.64rem] text-ink-400">트랙에 넣지 않은 할 일 · 프로젝트를 골라 주세요</p>
+                  <p className="truncate text-[17px] font-semibold tracking-tight text-ink-900">받은함</p>
+                  <p className="truncate text-[14px] text-ink-500">트랙에 넣지 않은 할 일</p>
                 </div>
               </header>
               <ul className="mt-2.5 space-y-1.5">
                 {inbox.slice(0, 4).map((task) => (
                   <TaskLine key={task.id} task={task} onToggle={() => toggleTask(task)} onOpen={() => void openTask(task.id)} />
                 ))}
-                {inbox.length === 0 ? <li className="text-[0.7rem] text-ink-300">비어 있습니다.</li> : null}
+                {inbox.length === 0 ? <li className="text-[14px] text-ink-300">비어 있습니다.</li> : null}
               </ul>
               <form
                 onSubmit={(event) => {
@@ -270,7 +300,7 @@ export function ProjectsTab() {
                   value={quickTitle}
                   onChange={(event) => setQuickTitle(event.target.value)}
                   placeholder="+ 할 일"
-                  className="w-full rounded-lg bg-paper-200/70 px-2 py-1 text-[0.72rem] text-ink-900 placeholder:text-ink-400 focus:bg-paper-200 focus:outline-none"
+                  className="w-full rounded-lg bg-paper-200/70 px-2 py-1 text-[14px] text-ink-900 placeholder:text-ink-400 focus:bg-paper-200 focus:outline-none"
                 />
               </form>
             </article>
@@ -313,15 +343,15 @@ export function ProjectsTab() {
                     event.dataTransfer.setData("text/diary-project", project.id);
                     event.dataTransfer.effectAllowed = "move";
                   }}
-                  className="flex min-h-[11rem] flex-col rounded-2xl border border-paper-300 px-3 py-3 transition hover:border-paper-400"
+                  className="flex min-h-[10rem] flex-col rounded-2xl border border-paper-300 px-3.5 py-3 transition hover:border-paper-400"
                 >
                   <header className="flex items-start gap-2">
-                    <span className={cn("flex h-7 w-7 flex-none items-center justify-center rounded-full text-[0.8rem]", tone.soft)}>
-                      {projectEmoji(project.id, project.category)}
+                    <span className={cn("flex h-8 w-8 flex-none items-center justify-center overflow-hidden rounded-lg text-[18px]", tone.soft)}>
+                      <ProjectIcon icon={project.icon} seed={project.id} category={project.category} className="h-full w-full" />
                     </span>
                     <button type="button" onClick={() => setProjectId(project.id)} className="min-w-0 flex-1 text-left">
-                      <p className="truncate text-[0.88rem] font-semibold text-ink-900">{project.title}</p>
-                      <p className="truncate text-[0.64rem] text-ink-400">
+                      <p className="truncate text-[17px] font-semibold tracking-tight text-ink-900">{project.title}</p>
+                      <p className="truncate text-[14px] text-ink-500">
                         {last?.doneAt || last?.date ? `${dateLabel(last.doneAt?.slice(0, 10) ?? last.date)} 기록` : "아직 기록 없음"}
                       </p>
                     </button>
@@ -335,7 +365,7 @@ export function ProjectsTab() {
                     </button>
                   </header>
 
-                  <p className="mt-2 text-[0.64rem] text-ink-400">남은 할 일 {open.length}</p>
+                  <p className="mt-1.5 text-[14px] text-ink-500">남은 할 일 {open.length}</p>
                   <ul className="mt-1 space-y-1.5">
                     {orderedOpen.slice(0, 4).map((task) => (
                       <TaskLine
@@ -345,23 +375,23 @@ export function ProjectsTab() {
                         onOpen={() => void openTask(task.id)}
                       />
                     ))}
-                    {open.length === 0 ? <li className="text-[0.7rem] text-ink-300">남은 할 일이 없습니다.</li> : null}
+                    {open.length === 0 ? <li className="text-[14px] text-ink-300">남은 할 일이 없습니다.</li> : null}
                   </ul>
 
                   {recent.length > 0 ? (
                     <div className="mt-2 border-t border-paper-300/70 pt-1.5">
-                      <p className="text-[0.62rem] text-ink-400">최근 기록</p>
+                      <p className="text-[13px] text-ink-400">최근 기록</p>
                       <ul className="mt-0.5 space-y-0.5">
                         {recent.map((task) => (
                           <li key={task.id} className="flex items-center gap-1.5">
                             <button
                               type="button"
                               onClick={() => void openTask(task.id)}
-                              className="min-w-0 flex-1 truncate text-left text-[0.7rem] text-ink-500"
+                              className="min-w-0 flex-1 truncate text-left text-[14px] text-ink-500"
                             >
                               {task.title}
                             </button>
-                            <span className="flex-none text-[0.62rem] text-ink-400">{dateLabel(task.doneAt?.slice(0, 10) ?? task.date)}</span>
+                            <span className="flex-none text-[13px] text-ink-400">{dateLabel(task.doneAt?.slice(0, 10) ?? task.date)}</span>
                           </li>
                         ))}
                       </ul>
@@ -371,7 +401,7 @@ export function ProjectsTab() {
                   <button
                     type="button"
                     onClick={() => setTaskDraft({ kind: "할 일", category: project.category, projectId: project.id })}
-                    className="mt-auto pt-1.5 text-left text-[0.7rem] text-ink-400 transition hover:text-ink-700"
+                    className="mt-auto pt-1.5 text-left text-[14px] text-ink-400 transition hover:text-ink-700"
                   >
                     + 할 일
                   </button>
@@ -381,19 +411,19 @@ export function ProjectsTab() {
           </div>
 
           {routines.length > 0 ? (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5">
+            <div className="cards-grid" style={{ "--proj-cols": cols } as React.CSSProperties}>
               {(["개인", "공부"] as const).map((category) => {
                 const items = routines.filter((routine) => routine.category === category);
                 if (items.length === 0) return null;
                 return (
                   <article key={category} className="rounded-2xl border border-paper-300 px-3 py-3">
                     <header className="flex items-start gap-2">
-                      <span className="flex h-7 w-7 flex-none items-center justify-center rounded-full bg-paper-200 text-[0.8rem]">
+                      <span className="flex h-7 w-7 flex-none items-center justify-center rounded-full bg-paper-200 text-[15px]">
                         <RepeatIcon size={14} className="text-ink-500" />
                       </span>
                       <div className="min-w-0 flex-1">
-                        <p className="text-[0.88rem] font-semibold text-ink-900">루틴</p>
-                        <p className="text-[0.64rem] text-ink-400">루틴 · {category} · 이번 주</p>
+                        <p className="text-[17px] font-semibold tracking-tight text-ink-900">루틴</p>
+                        <p className="text-[14px] text-ink-500">루틴 · {category} · 이번 주</p>
                       </div>
                     </header>
 
@@ -442,7 +472,7 @@ export function ProjectsTab() {
                     <button
                       type="button"
                       onClick={() => setRoutineId("new")}
-                      className="mt-2 text-[0.7rem] text-ink-400 transition hover:text-ink-700"
+                      className="mt-2 text-[14px] text-ink-400 transition hover:text-ink-700"
                     >
                       + 루틴
                     </button>
@@ -544,7 +574,7 @@ function TaskLine({
         onClick={onToggle}
         aria-label={done ? "완료 취소" : "완료"}
         className={cn(
-          "mt-[2px] flex h-[15px] w-[15px] flex-none items-center justify-center rounded-[4px] border transition",
+          "mt-[3px] flex h-[16px] w-[16px] flex-none items-center justify-center rounded-[4px] border transition",
           done ? cn(tone.solid, "border-transparent text-white") : "border-paper-400 hover:border-ink-500",
         )}
       >
@@ -552,15 +582,15 @@ function TaskLine({
       </button>
       <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-left">
         <span className="flex items-center gap-1">
-          <span className={cn("truncate text-[0.76rem] leading-[1.3] text-ink-800", done && "text-ink-400 line-through")}>{task.title}</span>
+          <span className={cn("truncate text-[15.5px] leading-[1.35] text-ink-900", done && "text-ink-400 line-through")}>{task.title}</span>
           {priority !== "기타" ? (
-            <span className={cn("flex-none rounded px-1 text-[0.58rem] font-medium leading-4", PRIORITY_TONES[priority].badge)}>
+            <span className={cn("flex-none rounded px-1 text-[12.5px] font-medium leading-4", PRIORITY_TONES[priority].badge)}>
               {PRIORITY_TONES[priority].label}
             </span>
           ) : null}
         </span>
       </button>
-      <span className="flex-none text-[0.62rem] tabular-nums text-ink-400">{dateLabel(task.due ?? task.date)}</span>
+      <span className="flex-none text-[13px] tabular-nums text-ink-400">{dateLabel(task.due ?? task.date)}</span>
     </li>
   );
 }
@@ -591,10 +621,10 @@ function RoutineWeekRow({
   return (
     <div>
       <div className="flex items-center gap-1.5">
-        <button type="button" onClick={onOpen} className="min-w-0 flex-1 truncate text-left text-[0.74rem] text-ink-700 hover:text-ink-900">
+        <button type="button" onClick={onOpen} className="min-w-0 flex-1 truncate text-left text-[14.5px] text-ink-700 hover:text-ink-900">
           {routine.title}
         </button>
-        <span className="flex-none text-[0.66rem] font-medium tabular-nums text-ink-700">
+        <span className="flex-none text-[13.5px] font-medium tabular-nums text-ink-700">
           {doneCount}/{days.length}
         </span>
       </div>
@@ -611,7 +641,7 @@ function RoutineWeekRow({
               disabled={!scheduled}
               onClick={() => onCount(day, done ? 0 : count + 1)}
               className={cn(
-                "relative flex h-[18px] w-[18px] items-center justify-center rounded-full text-[0.56rem] leading-none transition",
+                "relative flex h-[18px] w-[18px] items-center justify-center rounded-full text-[12px] leading-none transition",
                 done
                   ? cn(tone.solid, "font-semibold text-white")
                   : scheduled
@@ -621,7 +651,7 @@ function RoutineWeekRow({
             >
               <span>{label}</span>
               {count > 0 && !done ? (
-                <span className="absolute -right-0.5 -top-0.5 rounded-full bg-ink-900 px-[3px] text-[0.44rem] font-semibold leading-[0.7rem] text-white">
+                <span className="absolute -right-0.5 -top-0.5 rounded-full bg-ink-900 px-[3px] text-[10px] font-semibold leading-[0.7rem] text-white">
                   {count}
                 </span>
               ) : null}
@@ -676,10 +706,10 @@ function PriorityView({
         className="min-h-[10.5rem] rounded-xl border border-paper-300 px-3 py-2.5"
       >
         <header className="flex items-baseline gap-1.5">
-          <h3 className={cn("rounded px-1 text-[0.78rem] font-semibold leading-5", PRIORITY_TONES[quadrant.label].badge)}>
+          <h3 className={cn("rounded px-1 text-[15px] font-semibold leading-5", PRIORITY_TONES[quadrant.label].badge)}>
             {quadrant.label}
           </h3>
-          <span className="text-[0.7rem] text-ink-400">{items.length}</span>
+          <span className="text-[14px] text-ink-400">{items.length}</span>
         </header>
 
         <ul className="mt-1.5 space-y-1.5">
@@ -701,26 +731,26 @@ function PriorityView({
                 </button>
                 <button type="button" onClick={() => onOpenTask(task.id)} className="min-w-0 flex-1 text-left">
                   <span className="flex items-baseline gap-1.5">
-                    <span className="truncate text-[0.78rem] text-ink-800">{task.title}</span>
+                    <span className="truncate text-[15px] text-ink-800">{task.title}</span>
                     {unclassified ? (
-                      <span className="flex-none text-[0.56rem] font-normal leading-4 tracking-tight text-ink-300">분류 전</span>
+                      <span className="flex-none text-[12px] font-normal leading-4 tracking-tight text-ink-300">분류 전</span>
                     ) : null}
                     {project ? (
-                      <span className={cn("flex-none text-[0.64rem]", tone.text)}>{project.title}</span>
+                      <span className={cn("flex-none text-[13.5px]", tone.text)}>{project.title}</span>
                     ) : null}
                   </span>
                 </button>
-                <span className="flex-none text-[0.64rem] tabular-nums text-ink-400">{dateLabel(task.due ?? task.date)}</span>
+                <span className="flex-none text-[13.5px] tabular-nums text-ink-400">{dateLabel(task.due ?? task.date)}</span>
               </li>
             );
           })}
-          {items.length === 0 ? <li className="py-2 text-[0.7rem] text-ink-300">비어 있습니다.</li> : null}
+          {items.length === 0 ? <li className="py-2 text-[14px] text-ink-300">비어 있습니다.</li> : null}
         </ul>
 
         <button
           type="button"
           onClick={() => onCreateTask("개인", quadrant.urgent, quadrant.important)}
-          className="mt-1 w-full rounded-lg bg-paper-200/50 px-2 py-1 text-left text-[0.7rem] text-ink-400 transition hover:bg-paper-200 hover:text-ink-700"
+          className="mt-1 w-full rounded-lg bg-paper-200/50 px-2 py-1 text-left text-[14px] text-ink-400 transition hover:bg-paper-200 hover:text-ink-700"
         >
           + 할 일
         </button>
@@ -731,18 +761,18 @@ function PriorityView({
   return (
     <div className="mt-4 overflow-x-auto">
       <div className="min-w-[42rem]">
-        <div className="grid grid-cols-[2.2rem_1fr_1fr] items-center gap-2 pb-1.5 text-center text-[0.7rem] text-ink-400">
+        <div className="grid grid-cols-[2.2rem_1fr_1fr] items-center gap-2 pb-1.5 text-center text-[14px] text-ink-400">
           <span />
           <span>급함</span>
           <span>안 급함</span>
         </div>
         <div className="grid grid-cols-[2.2rem_1fr_1fr] gap-2">
-          <div className="flex items-center justify-center text-[0.7rem] text-ink-400">
+          <div className="flex items-center justify-center text-[14px] text-ink-400">
             <span className="writing-vertical">중요</span>
           </div>
           {card(quadrants[0])}
           {card(quadrants[1])}
-          <div className="flex items-center justify-center text-[0.7rem] text-ink-400">
+          <div className="flex items-center justify-center text-[14px] text-ink-400">
             <span className="writing-vertical">안 중요</span>
           </div>
           {card(quadrants[2])}
@@ -782,9 +812,9 @@ function HistoryView({
   return (
     <div className="mt-4 grid gap-4 lg:grid-cols-2">
       <section className="rounded-2xl border border-paper-300 px-3.5 py-3">
-        <h3 className="mb-2 text-[0.8rem] font-semibold text-ink-900">지난 프로젝트</h3>
+        <h3 className="mb-2 text-[15px] font-semibold text-ink-900">지난 프로젝트</h3>
         {finishedProjects.length === 0 ? (
-          <p className="text-[0.74rem] text-ink-400">완료했거나 접은 프로젝트가 아직 없습니다.</p>
+          <p className="text-[14.5px] text-ink-400">완료했거나 접은 프로젝트가 아직 없습니다.</p>
         ) : (
           <ul className="divide-y divide-paper-300/60">
             {finishedProjects.map((project) => {
@@ -793,15 +823,15 @@ function HistoryView({
               return (
                 <li key={project.id} className="flex items-center gap-2 py-1.5">
                   <button type="button" onClick={() => onOpenProject(project.id)} className="min-w-0 flex-1 text-left">
-                    <span className="block truncate text-[0.78rem] text-ink-700">{project.title}</span>
-                    <span className="text-[0.62rem] text-ink-400">
+                    <span className="block truncate text-[15px] text-ink-700">{project.title}</span>
+                    <span className="text-[13px] text-ink-400">
                       {project.category} · {project.status} · {done}/{children.length}
                     </span>
                   </button>
                   <button
                     type="button"
                     onClick={() => onRestoreProject(project)}
-                    className="rounded px-1.5 py-0.5 text-[0.62rem] text-ink-400 hover:bg-paper-200 hover:text-ink-700"
+                    className="rounded px-1.5 py-0.5 text-[13px] text-ink-400 hover:bg-paper-200 hover:text-ink-700"
                   >
                     되살리기
                   </button>
@@ -813,23 +843,23 @@ function HistoryView({
       </section>
 
       <section className="rounded-2xl border border-paper-300 px-3.5 py-3">
-        <h3 className="mb-2 text-[0.8rem] font-semibold text-ink-900">지난 루틴</h3>
+        <h3 className="mb-2 text-[15px] font-semibold text-ink-900">지난 루틴</h3>
         {pastRoutines.length === 0 ? (
-          <p className="text-[0.74rem] text-ink-400">기록으로 보낸 루틴이 여기에 모입니다.</p>
+          <p className="text-[14.5px] text-ink-400">기록으로 보낸 루틴이 여기에 모입니다.</p>
         ) : (
           <ul className="divide-y divide-paper-300/60">
             {pastRoutines.map((routine) => (
               <li key={routine.id} className="flex items-center gap-2 py-1.5">
                 <button type="button" onClick={() => onOpenRoutine(routine.id)} className="min-w-0 flex-1 text-left">
-                  <span className="block truncate text-[0.78rem] text-ink-700">{routine.title}</span>
-                  <span className="text-[0.62rem] text-ink-400">
+                  <span className="block truncate text-[15px] text-ink-700">{routine.title}</span>
+                  <span className="text-[13px] text-ink-400">
                     {routine.category} · {routine.unit || "루틴"}
                   </span>
                 </button>
                 <button
                   type="button"
                   onClick={() => onRestoreRoutine(routine)}
-                  className="rounded px-1.5 py-0.5 text-[0.62rem] text-ink-400 hover:bg-paper-200 hover:text-ink-700"
+                  className="rounded px-1.5 py-0.5 text-[13px] text-ink-400 hover:bg-paper-200 hover:text-ink-700"
                 >
                   되살리기
                 </button>
@@ -840,18 +870,18 @@ function HistoryView({
       </section>
 
       <section className="rounded-2xl border border-paper-300 px-3.5 py-3">
-        <h3 className="mb-2 text-[0.8rem] font-semibold text-ink-900">최근 완료한 할 일</h3>
+        <h3 className="mb-2 text-[15px] font-semibold text-ink-900">최근 완료한 할 일</h3>
         {doneTasks.length === 0 ? (
-          <p className="text-[0.74rem] text-ink-400">완료한 할 일이 아직 없습니다.</p>
+          <p className="text-[14.5px] text-ink-400">완료한 할 일이 아직 없습니다.</p>
         ) : (
           <ul className="space-y-1">
             {doneTasks.map((task) => (
               <li key={task.id} className="flex items-center gap-1.5">
                 <CheckIcon size={11} className="flex-none text-sage-500" />
-                <button type="button" onClick={() => onOpenTask(task.id)} className="min-w-0 flex-1 truncate text-left text-[0.76rem] text-ink-600">
+                <button type="button" onClick={() => onOpenTask(task.id)} className="min-w-0 flex-1 truncate text-left text-[15px] text-ink-600">
                   {task.title}
                 </button>
-                <button type="button" onClick={() => onRestoreTask(task)} className="text-[0.6rem] text-ink-400 hover:text-ink-700">
+                <button type="button" onClick={() => onRestoreTask(task)} className="text-[13px] text-ink-400 hover:text-ink-700">
                   되살리기
                 </button>
               </li>
@@ -861,21 +891,21 @@ function HistoryView({
       </section>
 
       <section className="rounded-2xl border border-paper-300 px-3.5 py-3">
-        <h3 className="mb-2 text-[0.8rem] font-semibold text-ink-900">접어 둔 할 일</h3>
+        <h3 className="mb-2 text-[15px] font-semibold text-ink-900">접어 둔 할 일</h3>
         {canceled.length === 0 ? (
-          <p className="text-[0.74rem] text-ink-400">취소한 할 일이 없습니다.</p>
+          <p className="text-[14.5px] text-ink-400">취소한 할 일이 없습니다.</p>
         ) : (
           <ul className="divide-y divide-paper-300/60">
             {canceled.map((task) => (
               <li key={task.id} className="flex items-center gap-2 py-1.5">
                 <button type="button" onClick={() => onOpenTask(task.id)} className="min-w-0 flex-1 text-left">
-                  <span className="block truncate text-[0.78rem] text-ink-500 line-through">{task.title}</span>
-                  {task.cancelReason ? <span className="text-[0.62rem] text-ink-400">{task.cancelReason}</span> : null}
+                  <span className="block truncate text-[15px] text-ink-500 line-through">{task.title}</span>
+                  {task.cancelReason ? <span className="text-[13px] text-ink-400">{task.cancelReason}</span> : null}
                 </button>
                 <button
                   type="button"
                   onClick={() => onRestoreTask(task)}
-                  className="rounded px-1.5 py-0.5 text-[0.62rem] text-ink-400 hover:bg-paper-200 hover:text-ink-700"
+                  className="rounded px-1.5 py-0.5 text-[13px] text-ink-400 hover:bg-paper-200 hover:text-ink-700"
                 >
                   되살리기
                 </button>

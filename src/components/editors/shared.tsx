@@ -47,7 +47,7 @@ export function TagInput({
           }}
           onBlur={commit}
           placeholder={tags.length === 0 ? placeholder : ""}
-          className="min-w-[6rem] flex-1 border-none bg-transparent px-1 py-0.5 text-[0.84rem] outline-none placeholder:text-ink-400"
+          className="min-w-[6rem] flex-1 border-none bg-transparent px-1 py-0.5 text-[15px] outline-none placeholder:text-ink-400"
         />
       </div>
     </div>
@@ -58,18 +58,37 @@ export function ProjectPicker({
   projects,
   value,
   onChange,
+  onCreate,
 }: {
   projects: ProjectTask[];
   value: string[];
   onChange: (ids: string[]) => void;
+  /** Notion에 프로젝트를 새로 만들고 바로 연결합니다. */
+  onCreate?: (title: string) => Promise<string | null>;
 }) {
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
   // A6: a project in History is not offered for new tasks.
   const available = projects.filter((project) => !project.history);
-  if (available.length === 0) {
-    return <p className="text-[0.76rem] text-ink-400">연결할 프로젝트가 아직 없습니다.</p>;
-  }
+
+  const commit = async () => {
+    const title = draft.trim();
+    if (!title) {
+      setAdding(false);
+      return;
+    }
+    setBusy(true);
+    const id = await onCreate?.(title);
+    setBusy(false);
+    setAdding(false);
+    setDraft("");
+    if (id) onChange([...value.filter((item) => item !== id), id]);
+  };
+
   return (
-    <div className="flex flex-wrap gap-1.5">
+    <div className="flex flex-wrap items-center gap-1.5">
+      {available.length === 0 && !onCreate ? <p className="text-[15px] text-ink-400">연결할 프로젝트가 아직 없습니다.</p> : null}
       {available.map((project) => {
         const active = value.includes(project.id);
         return (
@@ -86,6 +105,39 @@ export function ProjectPicker({
           </button>
         );
       })}
+      {onCreate ? (
+        adding ? (
+          <input
+            autoFocus
+            value={draft}
+            disabled={busy}
+            onChange={(event) => setDraft(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                void commit();
+              }
+              if (event.key === "Escape") {
+                setAdding(false);
+                setDraft("");
+              }
+            }}
+            onBlur={() => void commit()}
+            placeholder={busy ? "만드는 중…" : "새 프로젝트 이름"}
+            aria-label="새 프로젝트 만들기"
+            className="input h-7 w-[8.5rem] py-0 text-[14px]"
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => setAdding(true)}
+            aria-label="새 프로젝트 만들기"
+            className="inline-flex h-[26px] items-center gap-0.5 rounded-full border border-dashed border-paper-400 px-2 text-[14px] text-ink-500 transition hover:border-ink-500 hover:text-ink-900"
+          >
+            <span className="text-[15px] leading-none">+</span> 새 프로젝트
+          </button>
+        )
+      ) : null}
     </div>
   );
 }
@@ -136,5 +188,5 @@ export function EditorFooter({
 
 export function ErrorNote({ message }: { message: string | null }) {
   if (!message) return null;
-  return <p className="rounded-lg bg-rose-50 px-2.5 py-1.5 text-[0.74rem] text-rose-600">{message}</p>;
+  return <p className="rounded-lg bg-rose-50 px-2.5 py-1.5 text-[14.5px] text-rose-600">{message}</p>;
 }

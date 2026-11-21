@@ -5,6 +5,7 @@ import { useData } from "@/state/store";
 import { useSettings } from "@/state/settings";
 import { Modal, Segmented, TextInput, Toggle } from "@/components/common/primitives";
 import { EditorFooter, ErrorNote, ProjectPicker } from "@/components/editors/shared";
+import { ProjectIconPicker } from "@/components/common/ProjectIcon";
 import { MemoEditor } from "@/components/editors/MemoField";
 import { plainOfSpans, spansFromMarkdown } from "@/lib/richtext";
 import { todayISO } from "@/lib/date";
@@ -12,6 +13,7 @@ import { cn } from "@/lib/utils";
 import {
   TASK_CATEGORIES,
   TASK_STATUSES,
+  type ItemIcon,
   type ProjectTask,
   type TaskCategory,
   type TaskKind,
@@ -43,6 +45,7 @@ interface FormState {
   waitNote: string;
   cancelReason: string;
   projectIds: string[];
+  icon: ItemIcon | null;
 }
 
 function formFromTask(task: ProjectTask): FormState {
@@ -62,6 +65,7 @@ function formFromTask(task: ProjectTask): FormState {
     waitNote: task.waitNote,
     cancelReason: task.cancelReason,
     projectIds: task.projectIds,
+    icon: task.icon ?? null,
   };
 }
 
@@ -82,6 +86,7 @@ function formFromDraft(draft?: TaskDraft): FormState {
     waitNote: "",
     cancelReason: "",
     projectIds: draft?.projectId ? [draft.projectId] : [],
+    icon: null,
   };
 }
 
@@ -117,7 +122,7 @@ function TaskEditorInner({
   onClose: () => void;
 }) {
   const { data, create, update, remove } = useData();
-  const { settings } = useSettings();
+  const { settings, addCategory } = useSettings();
   const existing = taskId ? data.projects.find((item) => item.id === taskId) ?? null : null;
   const [form, setForm] = useState<FormState>(existing ? formFromTask(existing) : formFromDraft(draft));
   const [error, setError] = useState<string | null>(null);
@@ -125,6 +130,20 @@ function TaskEditorInner({
   const projects = data.projects.filter((item) => item.kind === "프로젝트" && !item.trash && !item.history && item.id !== existing?.id);
   // A7: 업무·개인·공부 plus the categories the user added.
   const categories = [...TASK_CATEGORIES, ...settings.customCategories.filter((item) => !TASK_CATEGORIES.includes(item as never))];
+  // A11: 분류와 프로젝트는 여기서 바로 새로 만들 수 있습니다.
+  const [newCategory, setNewCategory] = useState<string | null>(null);
+  const [newProject, setNewProject] = useState<string | null>(null);
+  const addNewCategory = () => {
+    const name = (newCategory ?? "").trim();
+    setNewCategory(null);
+    if (!name) return;
+    addCategory(name);
+    patch("category", name as TaskCategory);
+  };
+  const createProject = async (title: string): Promise<string | null> => {
+    const created = await create("projects", { title, kind: "프로젝트", category: form.category, status: "미완료", date: todayISO() });
+    return created?.id ?? null;
+  };
 
   const patch = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((current) => ({ ...current, [key]: value }));
@@ -166,6 +185,7 @@ function TaskEditorInner({
       cancelReason: form.status === "취소" ? form.cancelReason : "",
       cancelAt: form.status === "취소" ? existing?.cancelAt ?? todayISO() : null,
       projectIds: form.kind === "프로젝트" ? [] : form.projectIds,
+      icon: form.kind === "프로젝트" ? form.icon : null,
     };
     if (existing) {
       const ok = await update("projects", existing.id, payload);
@@ -206,7 +226,7 @@ function TaskEditorInner({
           value={form.title}
           onChange={(event) => patch("title", event.target.value)}
           placeholder={form.kind === "프로젝트" ? "프로젝트 이름" : "무엇을 해야 하나요?"}
-          className="border-0 border-b border-paper-300 bg-transparent px-0 text-[1.06rem] font-medium focus:ring-0"
+          className="border-0 border-b border-paper-300 bg-transparent px-0 text-[18px] font-medium focus:ring-0"
         />
 
         <div className="flex flex-wrap items-center gap-3">
@@ -225,7 +245,45 @@ function TaskEditorInner({
             size="sm"
             options={categories.map((category) => ({ value: category as TaskCategory, label: category }))}
           />
+          {newCategory === null ? (
+            <button
+              type="button"
+              onClick={() => setNewCategory("")}
+              aria-label="분류 새로 추가"
+              className="inline-flex h-7 items-center gap-0.5 rounded-full border border-dashed border-paper-400 px-2 text-[14px] text-ink-500 transition hover:border-ink-500 hover:text-ink-900"
+            >
+              <span className="text-[15px] leading-none">+</span> 분류
+            </button>
+          ) : (
+            <input
+              autoFocus
+              value={newCategory}
+              onChange={(event) => setNewCategory(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  addNewCategory();
+                }
+                if (event.key === "Escape") setNewCategory(null);
+              }}
+              onBlur={addNewCategory}
+              placeholder="새 분류 이름"
+              aria-label="새 분류 이름"
+              className="input h-7 w-[7.5rem] py-0 text-[14px]"
+            />
+          )}
         </div>
+
+        {isProject ? (
+          <div className="rounded-xl border border-paper-300 px-3 py-2">
+            <ProjectIconPicker
+              value={form.icon}
+              onChange={(next) => patch("icon", next)}
+              seed={existing?.id ?? form.title ?? "project"}
+              category={form.category}
+            />
+          </div>
+        ) : null}
 
         <div>
           <p className="label">상태</p>
@@ -296,7 +354,7 @@ function TaskEditorInner({
         {form.kind === "할 일" ? (
           <div>
             <p className="label">연결 프로젝트</p>
-            <ProjectPicker projects={projects} value={form.projectIds} onChange={(ids) => patch("projectIds", ids)} />
+            <ProjectPicker projects={projects} value={form.projectIds} onChange={(ids) => patch("projectIds", ids)} onCreate={createProject} />
           </div>
         ) : null}
 

@@ -149,8 +149,8 @@ export function Modal({
         >
           <div className="flex items-start gap-3 border-b border-paper-300/80 px-5 pb-3 pt-4">
             <div className="min-w-0 flex-1">
-              {title ? <h2 className="truncate text-[1.02rem] font-semibold text-ink-900">{title}</h2> : null}
-              {subtitle ? <p className="mt-0.5 truncate text-[0.78rem] text-ink-500">{subtitle}</p> : null}
+              {title ? <h2 className="truncate text-[17px] font-semibold text-ink-900">{title}</h2> : null}
+              {subtitle ? <p className="mt-0.5 truncate text-[15px] text-ink-500">{subtitle}</p> : null}
             </div>
             <button type="button" onClick={onClose} className="icon-btn -mr-1 -mt-1" aria-label="닫기">
               <XIcon size={18} />
@@ -209,8 +209,8 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
         >
           <div className="flex items-start gap-3 border-b border-paper-300/80 px-5 py-3.5">
             <div className="min-w-0 flex-1">
-              {title ? <div className="truncate text-[0.98rem] font-semibold text-ink-900">{title}</div> : null}
-              {subtitle ? <div className="mt-0.5 truncate text-[0.76rem] text-ink-500">{subtitle}</div> : null}
+              {title ? <div className="truncate text-[16.5px] font-semibold text-ink-900">{title}</div> : null}
+              {subtitle ? <div className="mt-0.5 truncate text-[15px] text-ink-500">{subtitle}</div> : null}
             </div>
             <button type="button" onClick={onClose} className="icon-btn -mr-1" aria-label="닫기">
               <XIcon size={18} />
@@ -241,7 +241,7 @@ export function Field({
     <label className={cn("block", className)}>
       {label ? <span className="label">{label}</span> : null}
       {children}
-      {hint ? <span className="mt-1 block text-[0.7rem] text-ink-400">{hint}</span> : null}
+      {hint ? <span className="mt-1 block text-[14px] text-ink-400">{hint}</span> : null}
     </label>
   );
 }
@@ -309,8 +309,8 @@ export function Toggle({
       aria-pressed={checked}
     >
       <span className="min-w-0">
-        <span className="block text-[0.86rem] text-ink-800">{label}</span>
-        {description ? <span className="mt-0.5 block text-[0.72rem] text-ink-400">{description}</span> : null}
+        <span className="block text-[15.5px] text-ink-800">{label}</span>
+        {description ? <span className="mt-0.5 block text-[14px] text-ink-400">{description}</span> : null}
       </span>
       <span
         className={cn(
@@ -352,7 +352,7 @@ export function Segmented<T extends string>({
           aria-pressed={value === option.value}
           className={cn(
             "rounded-full font-medium transition",
-            size === "sm" ? "px-2.5 py-1 text-[0.72rem]" : "px-3 py-1.5 text-[0.8rem]",
+            size === "sm" ? "px-2.5 py-1 text-[14px]" : "px-3 py-1.5 text-[15px]",
             value === option.value ? "bg-ink-900 text-paper-50 shadow-sm" : "text-ink-600 hover:text-ink-900",
           )}
         >
@@ -446,8 +446,8 @@ export function EmptyState({
   return (
     <div className="flex flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-paper-300 bg-paper-50/50 px-6 py-10 text-center">
       {icon ? <div className="text-ink-400">{icon}</div> : null}
-      <p className="text-[0.9rem] font-medium text-ink-700">{title}</p>
-      {description ? <p className="max-w-xs text-[0.76rem] leading-relaxed text-ink-500">{description}</p> : null}
+      <p className="text-[16px] font-medium text-ink-700">{title}</p>
+      {description ? <p className="max-w-xs text-[15px] leading-relaxed text-ink-500">{description}</p> : null}
       {action ? <div className="mt-1">{action}</div> : null}
     </div>
   );
@@ -489,7 +489,7 @@ export function ConfirmDialog({
         </div>
       }
     >
-      <p className="text-[0.86rem] leading-relaxed text-ink-600">{description}</p>
+      <p className="text-[15.5px] leading-relaxed text-ink-600">{description}</p>
     </Modal>
   );
 }

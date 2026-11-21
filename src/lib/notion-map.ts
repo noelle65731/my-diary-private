@@ -361,11 +361,26 @@ function extraPropertyValue(type: string, value: unknown): Record<string, unknow
   }
 }
 
+/** A14: the page's own icon — an emoji or a picture URL. */
+function readIcon(page: NotionPage): { kind: "emoji" | "image"; value: string } | null {
+  const raw = page.icon as
+    | { type?: string; emoji?: string; external?: { url?: string }; file?: { url?: string }; custom_emoji?: { url?: string } }
+    | null
+    | undefined;
+  if (!raw || !raw.type) return null;
+  if (raw.type === "emoji" && raw.emoji) return { kind: "emoji", value: raw.emoji };
+  if (raw.type === "external" && raw.external?.url) return { kind: "image", value: raw.external.url };
+  if (raw.type === "file" && raw.file?.url) return { kind: "image", value: raw.file.url };
+  if (raw.type === "custom_emoji" && raw.custom_emoji?.url) return { kind: "image", value: raw.custom_emoji.url };
+  return null;
+}
+
 function baseOf(page: NotionPage, props: Props, resource: keyof typeof KNOWN) {
   return {
     id: page.id,
     url: page.url ?? page.id.replace(/-/g, ""),
     title: readTitle(props),
+    icon: readIcon(page),
     hidden: readCheckbox(props, "NOW 숨김"),
     trash: readCheckbox(props, "휴지통"),
     favorite: readCheckbox(props, "즐겨찾기"),

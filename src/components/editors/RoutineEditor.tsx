@@ -126,7 +126,7 @@ function RoutineEditorInner({ routineId, onClose }: { routineId: string | null; 
           value={form.title}
           onChange={(event) => patch("title", event.target.value)}
           placeholder="예: 물 마시기, 스트레칭"
-          className="border-0 border-b border-paper-300 bg-transparent px-0 text-[1.04rem] font-medium focus:ring-0"
+          className="border-0 border-b border-paper-300 bg-transparent px-0 text-[18px] font-medium focus:ring-0"
         />
 
         <div>
@@ -159,7 +159,7 @@ function RoutineEditorInner({ routineId, onClose }: { routineId: string | null; 
                 type="button"
                 onClick={() => toggleDay(day)}
                 className={cn(
-                  "h-8 w-8 rounded-full text-[0.76rem] font-medium transition",
+                  "h-8 w-8 rounded-full text-[15px] font-medium transition",
                   form.repeatDays.includes(day) ? "bg-ink-900 text-paper-50" : "bg-paper-200 text-ink-500 hover:bg-paper-300",
                 )}
               >
@@ -167,7 +167,7 @@ function RoutineEditorInner({ routineId, onClose }: { routineId: string | null; 
               </button>
             ))}
           </div>
-          <p className="mt-1 text-[0.68rem] text-ink-400">요일을 모두 끄면 '언제든' 루틴이 됩니다.</p>
+          <p className="mt-1 text-[14px] text-ink-400">요일을 모두 끄면 '언제든' 루틴이 됩니다.</p>
         </div>
 
         <div className="grid grid-cols-2 gap-3">

@@ -136,7 +136,7 @@ function BinderDetailInner({
               </button>
             )}
           </div>
-          <span className="text-[0.66rem] text-ink-400">
+          <span className="text-[13.5px] text-ink-400">
             {invalidField ? <span className="text-rose-500">필수값을 입력해 주세요</span> : isDirty ? "바뀐 값은 자동으로 저장됩니다" : "변경 없음"}
           </span>
         </>
@@ -153,8 +153,8 @@ function BinderDetailInner({
           onActivate={() => setField("title")}
           onDone={() => setField(null)}
           placeholder="제목 없음"
-          valueClassName="border-none px-0 text-[1.18rem] font-semibold tracking-tight text-ink-900"
-          inputClassName="text-[1rem] font-medium"
+          valueClassName="border-none px-0 text-[20px] font-semibold tracking-tight text-ink-900"
+          inputClassName="text-[16px] font-medium"
         />
 
         <div className="flex flex-wrap items-center gap-2 pt-1">
@@ -173,7 +173,7 @@ function BinderDetailInner({
             display={draft.date ? `${formatShort(draft.date)} ${weekdayKo(draft.date)}` : undefined}
           />
           <div>
-            <p className="text-[0.64rem] text-ink-400">표시</p>
+            <p className="text-[13.5px] text-ink-400">표시</p>
             <InlineFlags
               flags={[
                 { key: "favorite", label: "즐겨찾기", on: draft.favorite },
@@ -191,7 +191,7 @@ function BinderDetailInner({
           title="본문"
           action={
             field === "body" ? (
-              <button type="button" onClick={() => setField(null)} aria-label="본문 입력 마침" className="text-[0.66rem] text-ink-500 hover:text-ink-800">
+              <button type="button" onClick={() => setField(null)} aria-label="본문 입력 마침" className="text-[13.5px] text-ink-500 hover:text-ink-800">
                 입력 마침
               </button>
             ) : null
@@ -205,7 +205,7 @@ function BinderDetailInner({
               onChange={(event) => set("body", event.target.value)}
               aria-label="본문 입력"
               placeholder={"# 오늘\n\n있었던 일을 적어 보세요."}
-              className="input min-h-[220px] resize-y text-[0.9rem] leading-[1.75]"
+              className="input min-h-[220px] resize-y text-[16px] leading-[1.75]"
             />
           ) : (
             <button
@@ -215,9 +215,9 @@ function BinderDetailInner({
               className="w-full rounded-lg border-b border-dashed border-paper-300 px-1 py-1.5 text-left transition hover:border-ink-400 hover:bg-paper-100/50"
             >
               {draft.body.trim() ? (
-                <span className="doc-body block text-[0.9rem] text-ink-700">{renderMarkdown(draft.body)}</span>
+                <span className="doc-body block text-[16px] text-ink-700">{renderMarkdown(draft.body)}</span>
               ) : (
-                <span className="text-[0.8rem] text-ink-300">눌러서 본문 쓰기</span>
+                <span className="text-[15px] text-ink-300">눌러서 본문 쓰기</span>
               )}
             </button>
           )}

@@ -42,19 +42,27 @@ const config: Config = {
         paper: {
           50: "#ffffff",
           100: "#ffffff",
-          200: "#f3f4f6",
-          300: "#e7e9ee",
-          400: "#d6dae1",
-          500: "#9ca3af",
+          200: "#f4f5f7",
+          300: "#cbd5e1",
+          400: "#94a3b8",
+          500: "#64748b",
         },
-        /* text scale */
+        /* text scale — body copy stays #111827–#374151, meta at least #6b7280 */
         ink: {
           900: "#111827",
           800: "#111827",
           700: "#374151",
           600: "#4b5563",
-          500: "#6b7280",
-          400: "#9ca3af",
+          500: "#5b6472",
+          400: "#6b7280",
+          300: "#9ca3af",
+          200: "#cbd5e1",
+        },
+        /* one crisp hairline for every table-like border */
+        line: {
+          DEFAULT: "#cbd5e1",
+          soft: "#dbe1e8",
+          strong: "#94a3b8",
         },
         /* primary accent — crisp pink (events, work) */
         accent: {

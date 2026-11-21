@@ -20,12 +20,19 @@ export interface NotionRichText {
   text?: { content?: string; link?: { url?: string } | null };
 }
 
+export type NotionIcon =
+  | { type: "emoji"; emoji: string }
+  | { type: "external"; external: { url: string } }
+  | { type: "file_upload"; file_upload: { id: string } }
+  | null;
+
 export interface NotionPage {
   id: string;
   url?: string;
   created_time?: string;
   last_edited_time?: string;
   archived?: boolean;
+  icon?: NotionIcon | { type: string; [key: string]: unknown } | null;
   properties: Record<string, NotionProperty>;
 }
 
@@ -195,10 +202,11 @@ export async function createPage(
 export async function updatePage(
   pageId: string,
   properties: Record<string, unknown>,
+  icon?: NotionIcon,
 ): Promise<NotionPage> {
   return request<NotionPage>(`/pages/${pageId}`, {
     method: "PATCH",
-    body: JSON.stringify({ properties }),
+    body: JSON.stringify(icon === undefined ? { properties } : { properties, icon }),
   });
 }
 

@@ -59,8 +59,8 @@ export function DetailShell({
               <ChevronLeftIcon size={18} />
             </button>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-[0.78rem] font-medium text-ink-700">{label}</p>
-              {subtitle ? <p className="truncate text-[0.66rem] text-ink-400">{subtitle}</p> : null}
+              <p className="truncate text-[15px] font-medium text-ink-700">{label}</p>
+              {subtitle ? <p className="truncate text-[13.5px] text-ink-400">{subtitle}</p> : null}
             </div>
             <button type="button" onClick={onClose} className="icon-btn" aria-label="전체 닫기" title="전체 닫기">
               <XIcon size={18} />
@@ -92,7 +92,7 @@ export function DetailSection({
   return (
     <section className="border-t border-paper-300/70 py-2.5 first:border-t-0 first:pt-0">
       <div className="mb-1 flex items-center justify-between gap-2">
-        <h3 className="text-[0.66rem] font-medium tracking-[0.02em] text-ink-400">{title}</h3>
+        <h3 className="text-[13.5px] font-medium tracking-[0.02em] text-ink-400">{title}</h3>
         {action}
       </div>
       {children}
@@ -151,7 +151,7 @@ export function InlineText({
 }) {
   return (
     <div className="py-0.5">
-      <p className="flex items-center text-[0.64rem] text-ink-400">
+      <p className="flex items-center text-[13.5px] text-ink-400">
         {label}
         <RequiredMark required={required} invalid={invalid} />
       </p>
@@ -195,7 +195,7 @@ export function InlineText({
           onClick={onActivate}
           aria-label={`${label} 수정`}
           className={cn(
-            "min-h-[1.9rem] w-full rounded-lg border-b border-dashed border-paper-300 px-1 py-1 text-left text-[0.9rem] text-ink-800 transition hover:border-ink-400 hover:bg-paper-100/60",
+            "min-h-[1.9rem] w-full rounded-lg border-b border-dashed border-paper-300 px-1 py-1 text-left text-[16px] text-ink-800 transition hover:border-ink-400 hover:bg-paper-100/60",
             invalid && "border-rose-300",
             valueClassName,
           )}
@@ -204,17 +204,17 @@ export function InlineText({
             (value.trim() ? (
               <span className="whitespace-pre-wrap break-words">{value}</span>
             ) : (
-              <span className="text-[0.82rem] text-ink-300">{placeholder ?? "눌러서 입력"}</span>
+              <span className="text-[15px] text-ink-300">{placeholder ?? "눌러서 입력"}</span>
             ))}
         </button>
       )}
       {invalid ? (
-        <p className="mt-0.5 text-[0.68rem] text-rose-500" role="alert">
+        <p className="mt-0.5 text-[14px] text-rose-500" role="alert">
           <RequiredMark required invalid />
           <span className="ml-0.5">{invalidMessage}</span>
         </p>
       ) : hint ? (
-        <p className="mt-0.5 text-[0.66rem] text-ink-400">{hint}</p>
+        <p className="mt-0.5 text-[13.5px] text-ink-400">{hint}</p>
       ) : null}
     </div>
   );
@@ -232,17 +232,34 @@ export function InlineChoice<T extends string>({
   options,
   onChange,
   hint,
+  onCreate,
+  addLabel = "새로 추가",
 }: {
   label: string;
   value: T;
   options: readonly T[];
   onChange: (value: T) => void;
   hint?: string;
+  /** Notion select 옵션이 늘어날 수 있는 항목 — 새 값을 바로 적고 고를 수 있습니다. */
+  onCreate?: (value: string) => void;
+  addLabel?: string;
 }) {
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState("");
+
+  const commit = () => {
+    const name = draft.trim();
+    setAdding(false);
+    setDraft("");
+    if (!name) return;
+    if (!options.includes(name as T)) onCreate?.(name);
+    onChange(name as T);
+  };
+
   return (
     <div className="py-0.5">
-      <p className="text-[0.64rem] text-ink-400">{label}</p>
-      <div className="mt-0.5 flex flex-wrap gap-1.5">
+      <p className="text-[13.5px] text-ink-400">{label}</p>
+      <div className="mt-1 flex flex-wrap items-center gap-1.5">
         {options.map((option) => (
           <button
             key={option}
@@ -254,14 +271,51 @@ export function InlineChoice<T extends string>({
             {option}
           </button>
         ))}
+        {onCreate && !options.includes(value) ? (
+          <button type="button" onClick={() => onChange(value)} aria-pressed className={choiceClass(true)}>
+            {value}
+          </button>
+        ) : null}
+        {onCreate ? (
+          adding ? (
+            <input
+              autoFocus
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  commit();
+                }
+                if (event.key === "Escape") {
+                  setAdding(false);
+                  setDraft("");
+                }
+              }}
+              onBlur={commit}
+              placeholder={`${label} 이름`}
+              aria-label={`${label} 새로 추가`}
+              className="input h-7 w-[7.5rem] py-0 text-[14px]"
+            />
+          ) : (
+            <button
+              type="button"
+              onClick={() => setAdding(true)}
+              aria-label={`${label} ${addLabel}`}
+              className="inline-flex h-[26px] items-center gap-0.5 rounded-full border border-dashed border-paper-400 px-2 text-[14px] text-ink-500 transition hover:border-ink-500 hover:text-ink-900"
+            >
+              <span className="text-[15px] leading-none">+</span> {addLabel}
+            </button>
+          )
+        ) : null}
       </div>
-      {hint ? <p className="mt-0.5 text-[0.66rem] text-ink-400">{hint}</p> : null}
+      {hint ? <p className="mt-0.5 text-[13.5px] text-ink-400">{hint}</p> : null}
     </div>
   );
 }
 
 /**
- * A4: one tap on the current status opens every other choice right there.
+ * A4 → A11: every status choice stays on screen, so one click changes 미완료 · 대기 중 · 완료 · 취소.
  */
 export function InlineStatus<T extends string>({
   value,
@@ -275,38 +329,30 @@ export function InlineStatus<T extends string>({
   /** A10: 대기 중 and 취소 wear their own colour, so the state reads at a glance. */
   toneOf?: (value: T) => string;
 }) {
-  const [open, setOpen] = useState(false);
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      <button
-        type="button"
-        onClick={() => setOpen((current) => !current)}
-        aria-label="상태 변경"
-        aria-expanded={open}
-        className={cn(
-          "inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[0.78rem] font-medium transition",
-          toneOf ? toneOf(value) : "border-ink-900 bg-ink-900 text-paper-50 hover:bg-ink-800",
-        )}
-      >
-        {value}
-        <ChevronDownIcon size={11} className={cn("transition", open && "rotate-180")} />
-      </button>
-      {open
-        ? options.map((option) => (
-            <button
-              key={option}
-              type="button"
-              aria-label={`상태: ${option}`}
-              onClick={() => {
-                onChange(option);
-                setOpen(false);
-              }}
-              className={cn(choiceClass(option === value), option === value && "border-ink-900 bg-ink-900 text-paper-50")}
-            >
-              {option}
-            </button>
-          ))
-        : null}
+    <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="상태">
+      {options.map((option) => {
+        const active = option === value;
+        return (
+          <button
+            key={option}
+            type="button"
+            aria-label={`상태: ${option}`}
+            aria-pressed={active}
+            onClick={() => onChange(option)}
+            className={cn(
+              "rounded-full border px-2.5 py-1 text-[15px] font-medium transition",
+              active
+                ? toneOf
+                  ? toneOf(option)
+                  : "border-ink-900 bg-ink-900 text-paper-50"
+                : "border-paper-400 bg-white text-ink-600 hover:border-ink-500 hover:text-ink-900",
+            )}
+          >
+            {option}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -350,10 +396,10 @@ export function EmptyEditable({
     <button
       type="button"
       onClick={onClick}
-      className="w-full rounded-xl border border-dashed border-paper-300 px-3 py-2.5 text-left text-[0.8rem] text-ink-400 transition hover:border-ink-300 hover:text-ink-700"
+      className="w-full rounded-xl border border-dashed border-paper-300 px-3 py-2.5 text-left text-[15px] text-ink-400 transition hover:border-ink-300 hover:text-ink-700"
     >
       {label}
-      {hint ? <span className="mt-0.5 block text-[0.66rem] text-ink-300">{hint}</span> : null}
+      {hint ? <span className="mt-0.5 block text-[13.5px] text-ink-300">{hint}</span> : null}
     </button>
   );
 }

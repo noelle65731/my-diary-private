@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useData } from "@/state/store";
 import { useSettings, type CalendarViewKey } from "@/state/settings";
 import { useTabReset, useUi } from "@/state/ui";
@@ -35,13 +35,13 @@ import { TaskDetail } from "@/components/detail/TaskDetail";
 import { TaskEditor } from "@/components/editors/TaskEditor";
 import { RoutineEditor } from "@/components/editors/RoutineEditor";
 
+/** A12: the view switch reads 연간 → 월간 → 주간 → 3일 → 일간; 루틴 sits apart. */
 const VIEWS: { value: CalendarViewKey; label: string }[] = [
+  { value: "year", label: "연간" },
   { value: "month", label: "월간" },
   { value: "week", label: "주간" },
   { value: "three", label: "3일" },
   { value: "day", label: "일간" },
-  { value: "year", label: "연간" },
-  { value: "habit", label: "루틴" },
 ];
 
 const BASE_CATEGORIES = ["업무", "개인", "공부"];
@@ -54,10 +54,12 @@ function eventMode(event: CalendarEvent): "업무" | "개인" | "공부" {
 export function CalendarTab() {
   const { data, update, setRoutineCount, findItem, create } = useData();
   const { settings, addCategory } = useSettings();
-  const { focus, clearFocus, openBinderForDate, setSearchOpen, openTrash } = useUi();
+  const { focus, clearFocus, openBinderForDate, setSearchOpen, openTrash, views, setView: setTabView } = useUi();
 
   const today = todayISO();
-  const [view, setView] = useState<CalendarViewKey>(settings.calendarDefaultView);
+  // A15: the view lives in the shared UI state, so the browser's back button returns to it.
+  const view = ((views.calendar || settings.calendarDefaultView) as CalendarViewKey) ?? "week";
+  const setView = (next: CalendarViewKey, opts?: { replace?: boolean }) => setTabView("calendar", next, opts);
   const [cursor, setCursor] = useState(today);
   // A6: every device opens on 전체(all).
   const [mode, setMode] = useState<ModeFilter>("all");
@@ -102,9 +104,15 @@ export function CalendarTab() {
     setDayListSignal((current) => current + 1);
   };
 
+  const firstViewPass = useRef(true);
   useEffect(() => {
-    setView(settings.calendarDefaultView);
-  }, [settings.calendarDefaultView]);
+    // Only a real settings change moves the view; a back-navigation keeps its own.
+    if (firstViewPass.current) {
+      firstViewPass.current = false;
+      return;
+    }
+    setTabView("calendar", settings.calendarDefaultView, { replace: true });
+  }, [settings.calendarDefaultView, setTabView]);
 
   useTabReset("calendar", () => {
     setView(settings.calendarDefaultView);
@@ -237,12 +245,25 @@ export function CalendarTab() {
         : 60;
     const nextStart = time ?? null;
     const nextEnd = nextStart ? minutesToTime(minutesOf(nextStart) + duration) : null;
+    // A16: an all-day item dropped on the timetable becomes a timed event.
     void update("calendar", id, {
       date,
       startTime: nextStart,
       endTime: nextEnd,
       endDate: date,
+      ...(nextStart && item.allDay ? { allDay: false } : {}),
     });
+  };
+
+  /** A12: a task dropped on another weekday column takes that date (and saves it). */
+  const moveTaskToDay = (id: string, date: string, fromDay: string) => {
+    const task = findItem("projects", id) as ProjectTask | undefined;
+    if (!task) return;
+    const patch: Record<string, unknown> = {};
+    if (task.date === fromDay) patch.date = date;
+    if (task.due === fromDay && task.due !== task.date) patch.due = date;
+    if (Object.keys(patch).length === 0) patch.date = date;
+    void update("projects", id, patch);
   };
 
   /** B5: dragging an event's edge changes its end (or start) time. */
@@ -314,13 +335,13 @@ export function CalendarTab() {
     <div className="flex items-start gap-6 xl:gap-8">
       <div className="min-w-0 flex-1">
       {/* toolbar */}
-      <div className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
-          <div className="min-w-0">
-            <p className="text-[0.66rem] tracking-[0.02em] text-ink-400">{meta}</p>
-            <h1 className="mt-1.5 truncate text-[1.15rem] font-semibold leading-none tracking-[-0.02em] text-ink-900 md:text-[1.2rem]">
+      <div className="flex flex-col gap-2">
+        <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
+          <div className="flex min-w-0 items-baseline gap-2.5">
+            <h1 className="truncate text-[22px] font-semibold leading-none tracking-[-0.02em] text-ink-900">
               {title}
             </h1>
+            <p className="truncate text-[13px] tracking-[0.02em] text-ink-500">{meta}</p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -336,12 +357,22 @@ export function CalendarTab() {
                 </button>
               ))}
             </div>
+            <div className="seg-track">
+              <button
+                type="button"
+                onClick={() => setView("habit")}
+                aria-pressed={view === "habit"}
+                className={cn("seg-item", view === "habit" && "seg-item-active")}
+              >
+                루틴
+              </button>
+            </div>
 
             <div className="flex items-center gap-0.5 rounded-full bg-paper-200 p-0.5">
               <button type="button" onClick={() => step(-1)} className="icon-btn h-7 w-7" aria-label="이전">
                 <ChevronLeftIcon size={14} />
               </button>
-              <button type="button" onClick={() => setCursor(todayISO())} className="px-2 py-1 text-[0.76rem] font-medium text-ink-700 hover:text-ink-900">
+              <button type="button" onClick={() => setCursor(todayISO())} className="px-2 py-1 text-[15px] font-medium text-ink-700 hover:text-ink-900">
                 오늘
               </button>
               <button type="button" onClick={() => step(1)} className="icon-btn h-7 w-7" aria-label="다음">
@@ -376,7 +407,7 @@ export function CalendarTab() {
             <button
               type="button"
               onClick={() => setMode("all")}
-              className="ml-1 text-[0.68rem] text-ink-400 underline-offset-2 hover:text-ink-700 hover:underline"
+              className="ml-1 text-[14px] text-ink-400 underline-offset-2 hover:text-ink-700 hover:underline"
             >
               숨긴 항목 포함
             </button>
@@ -398,8 +429,8 @@ export function CalendarTab() {
             aria-expanded={weekPanelOpen}
             className="flex w-full items-center justify-between gap-2 px-3.5 py-2.5 text-left"
           >
-            <span className="text-[0.84rem] font-semibold text-ink-900">이번 주 꼭 · 목표 · 메모</span>
-            <span className="text-[0.68rem] text-ink-400">{weekPanelOpen ? "접기" : "열기"}</span>
+            <span className="text-[15px] font-semibold text-ink-900">이번 주 꼭 · 목표 · 메모</span>
+            <span className="text-[14px] text-ink-400">{weekPanelOpen ? "접기" : "열기"}</span>
           </button>
           {weekPanelOpen ? <div className="border-t border-paper-300/70 px-3.5 py-3">{renderWeekPanel()}</div> : null}
         </div>
@@ -414,14 +445,14 @@ export function CalendarTab() {
                 type="button"
                 onClick={() => setYear(option)}
                 className={cn(
-                  "rounded-full px-3 py-1 text-[0.76rem] font-medium transition",
+                  "rounded-full px-3 py-1 text-[15px] font-medium transition",
                   year === option ? "bg-ink-900 text-white" : "bg-paper-200 text-ink-500 hover:text-ink-800",
                 )}
               >
                 {option}
               </button>
             ))}
-            <span className="ml-auto text-[0.64rem] text-ink-400">날짜를 누르면 하루 보기로 이동합니다</span>
+            <span className="ml-auto text-[13.5px] text-ink-400">날짜를 누르면 하루 보기로 이동합니다</span>
           </div>
           <div className="mt-3">
             <YearView
@@ -438,8 +469,13 @@ export function CalendarTab() {
         </>
       ) : null}
 
-      <div className="mt-4">
-        <div className="min-w-0">
+      <div className="mt-3 min-h-0">
+        <div
+          className={cn(
+            "min-w-0",
+            (view === "month" || view === "week" || view === "three" || view === "day") && "h-[calc(100dvh-11.5rem)] min-h-[26rem]",
+          )}
+        >
           {view === "month" ? (
             <MonthView
               cursor={cursor}
@@ -493,6 +529,8 @@ export function CalendarTab() {
               onOpenRoutine={(id) => setRoutineId(id)}
               onCreate={createEvent}
               onMoveEvent={moveEvent}
+              onMoveTask={moveTaskToDay}
+              onMoveAllDayDate={(id, day) => void update("calendar", id, { date: day, endDate: day })}
               onResizeEvent={resizeEvent}
               onReorderAllDay={reorderAllDay}
               onToggleTask={toggleTask}
@@ -525,6 +563,8 @@ export function CalendarTab() {
               onOpenRoutine={(id) => setRoutineId(id)}
               onCreate={createEvent}
               onMoveEvent={moveEvent}
+              onMoveTask={moveTaskToDay}
+              onMoveAllDayDate={(id, day) => void update("calendar", id, { date: day, endDate: day })}
               onResizeEvent={resizeEvent}
               onReorderAllDay={reorderAllDay}
               onToggleTask={toggleTask}
@@ -583,15 +623,15 @@ export function CalendarTab() {
       {view === "month" ? (
         <aside className="side-panel sticky top-12 hidden max-h-[calc(100dvh-6.5rem)] w-[19rem] flex-none overflow-y-auto pb-8 pl-5 xl:block">
             <div className="flex items-center justify-between">
-              <h3 className="text-[1.05rem] font-semibold text-ink-900">루틴</h3>
-              <span className="text-[0.66rem] text-ink-400">칸을 눌러 체크</span>
+              <h3 className="text-[18px] font-semibold text-ink-900">루틴</h3>
+              <span className="text-[13.5px] text-ink-400">칸을 눌러 체크</span>
             </div>
             <div className="mt-3 space-y-2.5">
               {routineTemplates.length === 0 ? (
                 <button
                   type="button"
                   onClick={() => setRoutineId("new")}
-                  className="w-full rounded-2xl border border-dashed border-paper-300 px-3 py-8 text-[0.72rem] text-ink-400 hover:border-ink-300 hover:text-ink-600"
+                  className="w-full rounded-2xl border border-dashed border-paper-300 px-3 py-8 text-[14px] text-ink-400 hover:border-ink-300 hover:text-ink-600"
                 >
                   + 루틴 추가
                 </button>

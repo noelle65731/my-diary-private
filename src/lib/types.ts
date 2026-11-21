@@ -36,10 +36,18 @@ export interface ExtraProperty {
   options?: string[];
 }
 
+/** A project's own icon — an emoji or a picture that fills the cell. */
+export interface ItemIcon {
+  kind: "emoji" | "image";
+  value: string;
+}
+
 export interface BaseItem {
   id: string;
   url: string;
   title: string;
+  /** Notion page icon (emoji · external URL · uploaded file) */
+  icon?: ItemIcon | null;
   /** NOW 숨김 */
   hidden: boolean;
   /** 휴지통 */

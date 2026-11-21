@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 import { todayISO } from "@/lib/date";
 import type { ProjectTask } from "@/lib/types";
 import { TaskRow } from "@/components/projects/TaskRow";
+import { ProjectIcon } from "@/components/common/ProjectIcon";
 import { RichText } from "@/components/common/rich";
 import { reorderSameDate, sortProjectTaskList, taskSortDate } from "@/lib/order";
 
@@ -84,7 +85,18 @@ export function ProjectDrawer({
     <Drawer
       open={!!project}
       onClose={onClose}
-      title={project?.title ?? ""}
+      title={
+        project ? (
+          <span className="flex items-center gap-2">
+            <span className="flex h-7 w-7 flex-none items-center justify-center overflow-hidden rounded-lg bg-paper-200 text-[16px]">
+              <ProjectIcon icon={project.icon} seed={project.id} category={project.category} className="h-full w-full" />
+            </span>
+            <span className="truncate">{project.title}</span>
+          </span>
+        ) : (
+          ""
+        )
+      }
       subtitle={project ? `${project.category} · ${project.status}` : ""}
       width="lg"
       showBackdrop={showBackdrop}
@@ -116,13 +128,13 @@ export function ProjectDrawer({
       {project ? (
         <div className="space-y-4">
           {project.memo ? (
-            <p className="rounded-xl bg-paper-100/70 px-3 py-2 text-[0.8rem] leading-relaxed text-ink-600">
+            <p className="rounded-xl bg-paper-100/70 px-3 py-2 text-[15px] leading-relaxed text-ink-600">
               <RichText spans={project.memoRich} value={project.memo} />
             </p>
           ) : null}
 
           <div>
-            <div className="mb-1 flex items-center justify-between text-[0.68rem] text-ink-500">
+            <div className="mb-1 flex items-center justify-between text-[14px] text-ink-500">
               <span>
                 완료 {done} / 전체 {tasks.length}
               </span>
@@ -186,21 +198,21 @@ export function ProjectDrawer({
               value={draft}
               onChange={(event) => setDraft(event.target.value)}
               placeholder="할 일을 적고 Enter"
-              className="min-w-0 flex-1 border-none bg-transparent px-1 py-1 text-[0.78rem] outline-none placeholder:text-ink-400"
+              className="min-w-0 flex-1 border-none bg-transparent px-1 py-1 text-[15px] outline-none placeholder:text-ink-400"
             />
             <button type="submit" disabled={!draft.trim() || busy} className="btn-primary btn-xs flex-none whitespace-nowrap">
               추가
             </button>
           </form>
 
-          <div className="flex flex-wrap gap-1.5 text-[0.64rem] text-ink-400">
+          <div className="flex flex-wrap gap-1.5 text-[13.5px] text-ink-400">
             {project.due ? <span>마감 {project.due}</span> : null}
             {project.hidden ? <span className="chip bg-paper-200 text-ink-500">숨김</span> : null}
             {project.history ? <span className="chip bg-paper-200 text-ink-500">History</span> : null}
           </div>
 
           {tasks.length > 0 && tasks.every((task) => task.status === "완료") ? (
-            <p className="flex items-center gap-1 text-[0.7rem] text-sage-500">
+            <p className="flex items-center gap-1 text-[14px] text-sage-500">
               <CheckIcon size={12} /> 모든 할 일을 마쳤습니다.
             </p>
           ) : null}

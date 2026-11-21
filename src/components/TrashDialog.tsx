@@ -103,13 +103,13 @@ export function TrashDialog() {
                 onClick={() => openTrash(filter.key)}
                 aria-pressed={active}
                 className={cn(
-                  "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[0.74rem] font-medium transition",
+                  "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[14.5px] font-medium transition",
                   active ? "bg-ink-900 text-white" : "bg-paper-200 text-ink-500 hover:bg-paper-300/70 hover:text-ink-800",
                 )}
               >
                 {filter.label}
                 {counts[filter.key] ? (
-                  <span className={cn("text-[0.64rem]", active ? "text-white/70" : "text-ink-400")}>{counts[filter.key]}</span>
+                  <span className={cn("text-[13.5px]", active ? "text-white/70" : "text-ink-400")}>{counts[filter.key]}</span>
                 ) : null}
               </button>
             );
@@ -132,13 +132,13 @@ export function TrashDialog() {
                 const date = dateOf(resource, item);
                 return (
                   <li key={`${resource}-${item.id}`} className="flex items-center gap-2.5 px-4 py-2.5">
-                    <span className="flex-none rounded-md border border-paper-300 bg-white/80 px-1.5 py-0.5 text-[0.62rem] font-medium text-ink-500">
+                    <span className="flex-none rounded-md border border-paper-300 bg-white/80 px-1.5 py-0.5 text-[13px] font-medium text-ink-500">
                       {badgeOf(resource, item)}
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[0.86rem] font-medium text-ink-900">{item.title}</span>
+                      <span className="block truncate text-[15.5px] font-medium text-ink-900">{item.title}</span>
                       {date ? (
-                        <span className="block text-[0.68rem] text-ink-400">
+                        <span className="block text-[14px] text-ink-400">
                           {formatShort(date)} {weekdayKo(date)}
                         </span>
                       ) : null}
@@ -147,7 +147,7 @@ export function TrashDialog() {
                       type="button"
                       disabled={busyRow}
                       onClick={() => void restore(resource, item)}
-                      className="flex-none rounded-full bg-ink-900 px-2.5 py-1 text-[0.72rem] font-medium text-white transition hover:bg-ink-800 disabled:opacity-50"
+                      className="flex-none rounded-full bg-ink-900 px-2.5 py-1 text-[14px] font-medium text-white transition hover:bg-ink-800 disabled:opacity-50"
                     >
                       복원
                     </button>
@@ -155,7 +155,7 @@ export function TrashDialog() {
                       type="button"
                       disabled={busyRow}
                       onClick={() => setConfirm({ resource, item })}
-                      className="flex-none rounded-full border border-paper-300 px-2.5 py-1 text-[0.72rem] text-ink-500 transition hover:border-rose-300 hover:bg-rose-50 hover:text-rose-500 disabled:opacity-50"
+                      className="flex-none rounded-full border border-paper-300 px-2.5 py-1 text-[14px] text-ink-500 transition hover:border-rose-300 hover:bg-rose-50 hover:text-rose-500 disabled:opacity-50"
                     >
                       완전 삭제
                     </button>
@@ -166,7 +166,7 @@ export function TrashDialog() {
           )}
         </div>
 
-        <p className="border-t border-paper-300/70 px-4 py-2 text-[0.68rem] text-ink-400">
+        <p className="border-t border-paper-300/70 px-4 py-2 text-[14px] text-ink-400">
           복원한 항목은 원래 화면과 Notion에 바로 되돌아갑니다. ‘완전 삭제’는 Notion 페이지까지 지웁니다.
         </p>
       </Modal>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useData } from "@/state/store";
 import {
   DetailSection,
@@ -21,13 +21,16 @@ import {
   TASK_CATEGORIES,
   TASK_STATUSES,
   type ExtraProperty,
+  type ItemIcon,
   type ProjectTask,
   type TaskCategory,
   type TaskKind,
   type TaskStatus,
 } from "@/lib/types";
 import { DynamicProperties, type SchemaMap } from "@/components/detail/DynamicProperties";
+import { ProjectIconPicker } from "@/components/common/ProjectIcon";
 import { cn } from "@/lib/utils";
+import { useSettings } from "@/state/settings";
 
 interface TaskForm {
   title: string;
@@ -46,6 +49,7 @@ interface TaskForm {
   checkedAt: string;
   cancelReason: string;
   projectIds: string[];
+  icon: ItemIcon | null;
   /** B2: properties added to the Notion DB later. */
   extra: ExtraProperty[];
 }
@@ -68,6 +72,7 @@ function formFromTask(task: ProjectTask): TaskForm {
     checkedAt: task.checkedAt ?? "",
     cancelReason: task.cancelReason,
     projectIds: task.projectIds,
+    icon: task.icon ?? null,
     extra: task.extra ?? [],
   };
 }
@@ -111,6 +116,7 @@ function buildPatch(task: ProjectTask, draft: TaskForm, changed: string[]): Reco
     patch.memo = plainOfSpans(spans);
   }
   if (has("projectIds")) patch.projectIds = draft.projectIds;
+  if (has("icon")) patch.icon = draft.icon;
   return patch;
 }
 
@@ -173,7 +179,8 @@ function TaskDetailInner({
   onCloseAll: () => void;
   registerFlush?: (flush: (() => Promise<boolean>) | null) => void;
 }) {
-  const { data, update, remove, fetchBody, saveBody, fetchSchema, demo } = useData();
+  const { data, update, remove, fetchBody, saveBody, fetchSchema, demo, create } = useData();
+  const { settings, addCategory } = useSettings();
   const [schema, setSchema] = useState<SchemaMap>({});
   const { draft, set, markSaved, reset, changedKeys, isDirty } = useDetailDraft(formFromTask(task));
   const [field, setField] = useState<string | null>(null);
@@ -253,7 +260,23 @@ function TaskDetailInner({
   };
 
   const project = task.projectIds.length > 0 ? data.projects.find((item) => item.id === task.projectIds[0]) ?? null : null;
-  const categories = TASK_CATEGORIES;
+  const categories = useMemo(
+    () => [...TASK_CATEGORIES, ...settings.customCategories.filter((item) => !(TASK_CATEGORIES as string[]).includes(item))],
+    [settings.customCategories],
+  );
+  /** 새 프로젝트를 만들고 이 할 일에 바로 연결합니다 (Notion DB에 생성). */
+  const createProject = async (title: string): Promise<string | null> => {
+    const created = await create("projects", {
+      title,
+      kind: "프로젝트",
+      category: draft.category,
+      status: "미완료",
+      date: todayISO(),
+    });
+    if (!created) return null;
+    setSchema((current) => current);
+    return created.id;
+  };
   /** A10: a project itself carries no 대기/긴급/중요 — only its tasks do. */
   const isProject = draft.kind === "프로젝트";
   const statusOptions = isProject ? TASK_STATUSES.filter((status) => status !== "대기 중") : TASK_STATUSES;
@@ -286,7 +309,7 @@ function TaskDetailInner({
               </button>
             )}
           </div>
-          <span className="text-[0.66rem] text-ink-400">
+          <span className="text-[13.5px] text-ink-400">
             {invalidField ? (
               <span className="text-rose-500">필수값을 입력해 주세요</span>
             ) : isDirty || bodyDirty ? (
@@ -309,9 +332,20 @@ function TaskDetailInner({
           onActivate={() => setField("title")}
           onDone={() => setField(null)}
           placeholder="제목 없음"
-          inputClassName="text-[1rem] font-medium"
-          valueClassName="border-none px-0 text-[1.22rem] font-semibold tracking-tight text-ink-900"
+          inputClassName="text-[16px] font-medium"
+          valueClassName="border-none px-0 text-[22px] font-semibold tracking-tight text-ink-900"
         />
+
+        {isProject ? (
+          <div className="pt-1">
+            <ProjectIconPicker
+              value={draft.icon}
+              onChange={(next) => set("icon", next)}
+              seed={task.id}
+              category={draft.category}
+            />
+          </div>
+        ) : null}
 
         <div className="flex flex-wrap items-center gap-2 pt-1">
           <InlineStatus
@@ -323,7 +357,7 @@ function TaskDetailInner({
               setField(null);
             }}
           />
-          <span className="text-[0.7rem] text-ink-400">{formatShort(draft.date || task.createdAt.slice(0, 10) || todayISO())}</span>
+          <span className="text-[14px] text-ink-400">{formatShort(draft.date || task.createdAt.slice(0, 10) || todayISO())}</span>
         </div>
 
         {draft.status === "대기 중" && !isProject ? (
@@ -347,7 +381,7 @@ function TaskDetailInner({
               placeholder="다음에 할 일"
             />
             <div className="sm:col-span-2">
-              <p className="text-[0.64rem] text-ink-400">재확인 일정 (원할 때만)</p>
+              <p className="text-[13.5px] text-ink-400">재확인 일정 (원할 때만)</p>
               <div className="mt-1 flex flex-wrap items-center gap-1.5">
                 <InlineText
                   label="확인일"
@@ -432,7 +466,13 @@ function TaskDetailInner({
           </div>
           <div className="mt-1 grid gap-2 sm:grid-cols-2">
             <InlineChoice label="유형" value={draft.kind} options={["할 일", "프로젝트"]} onChange={(value) => set("kind", value)} />
-            <InlineChoice label="분류" value={draft.category} options={categories} onChange={(value) => set("category", value)} />
+            <InlineChoice<string>
+              label="분류"
+              value={draft.category}
+              options={categories}
+              onChange={(value) => set("category", value as TaskCategory)}
+              onCreate={(name) => addCategory(name)}
+            />
           </div>
         </DetailSection>
 
@@ -453,16 +493,16 @@ function TaskDetailInner({
           title="내용 (Notion 페이지 본문)"
           action={
             bodyText === null ? (
-              <span className="text-[0.64rem] text-ink-300">불러오는 중…</span>
+              <span className="text-[13.5px] text-ink-300">불러오는 중…</span>
             ) : bodyEditing ? (
-              <button type="button" onClick={() => setBodyEditing(false)} aria-label="내용 입력 마침" className="text-[0.66rem] text-ink-500 hover:text-ink-800">
+              <button type="button" onClick={() => setBodyEditing(false)} aria-label="내용 입력 마침" className="text-[13.5px] text-ink-500 hover:text-ink-800">
                 입력 마침
               </button>
             ) : null
           }
         >
           {bodyText === null ? (
-            <p className="rounded-lg bg-paper-100/60 px-2 py-2 text-[0.76rem] text-ink-400">페이지 본문을 불러오는 중입니다.</p>
+            <p className="rounded-lg bg-paper-100/60 px-2 py-2 text-[15px] text-ink-400">페이지 본문을 불러오는 중입니다.</p>
           ) : bodyEditing ? (
             <div>
               <textarea
@@ -474,7 +514,7 @@ function TaskDetailInner({
                 placeholder="페이지 본문에 적을 내용"
                 className="input min-h-[110px] resize-y leading-relaxed"
               />
-              <p className="mt-1 text-[0.64rem] text-ink-400">
+              <p className="mt-1 text-[13.5px] text-ink-400">
                 문단만 바뀌고 토글·목록 같은 다른 블록은 그대로 남습니다.
                 {preserved.length > 0 ? ` (보존: ${preserved.slice(0, 3).join(", ")})` : ""}
               </p>
@@ -484,7 +524,7 @@ function TaskDetailInner({
               type="button"
               onClick={() => setBodyEditing(true)}
               aria-label="내용 수정"
-              className="w-full whitespace-pre-wrap rounded-lg border-b border-dashed border-paper-300 px-1 py-1.5 text-left text-[0.84rem] leading-relaxed text-ink-700 transition hover:border-ink-400 hover:bg-paper-100/60"
+              className="w-full whitespace-pre-wrap rounded-lg border-b border-dashed border-paper-300 px-1 py-1.5 text-left text-[15px] leading-relaxed text-ink-700 transition hover:border-ink-400 hover:bg-paper-100/60"
             >
               {bodyText}
             </button>
@@ -502,6 +542,7 @@ function TaskDetailInner({
             projects={data.projects.filter((item) => item.kind === "프로젝트" && !item.trash && item.id !== task.id)}
             value={draft.projectIds}
             onChange={(ids) => set("projectIds", ids)}
+            onCreate={createProject}
           />
         </DetailSection>
 
@@ -535,7 +576,7 @@ function TaskDetailInner({
           />
         </DetailSection>
 
-        <p className="pt-1 text-[0.62rem] text-ink-300">
+        <p className="pt-1 text-[13px] text-ink-300">
           이전·바깥 클릭은 한 단계, X는 전체 닫기입니다. 바뀐 값이 없으면 저장하지 않습니다.
         </p>
       </div>

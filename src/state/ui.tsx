@@ -28,6 +28,9 @@ interface Toast {
 interface UiContextValue {
   tab: TabKey;
   setTab: (tab: TabKey) => void;
+  /** A15: the sub-view of every tab lives here so 뒤로 가기 restores it. */
+  views: Record<TabKey, string>;
+  setView: (tab: TabKey, view: string, opts?: { replace?: boolean }) => void;
   resetSignal: Record<TabKey, number>;
   requestReset: (tab: TabKey) => void;
   focus: FocusTarget | null;
@@ -73,6 +76,13 @@ export function UiProvider({ children }: { children: ReactNode }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [pendingBinderDate, setPendingBinderDate] = useState<string | null>(null);
+  const [views, setViews] = useState<Record<TabKey, string>>({ calendar: "week", projects: "tracks", binder: "weekly", archive: "" });
+  const viewsRef = useRef(views);
+  viewsRef.current = views;
+  const tabRef = useRef(tab);
+  tabRef.current = tab;
+  /** True while a popstate is being applied, so it never pushes again. */
+  const fromHistory = useRef(false);
 
   // A4: a layer unwind can re-render the shell; the tab the user was on is kept.
   useEffect(() => {
@@ -98,13 +108,67 @@ export function UiProvider({ children }: { children: ReactNode }) {
     setToasts((current) => current.filter((toast) => toast.id !== id));
   }, []);
 
-  const setTab = useCallback((next: TabKey) => {
-    setTabState(next);
-    try {
-      window.localStorage.setItem("my-diary:tab", next);
-    } catch {
-      /* ignore */
+  const writeRoute = useCallback((next: { tab?: TabKey; view?: string }, mode: "push" | "replace") => {
+    if (typeof window === "undefined") return;
+    const state = (window.history.state ?? {}) as Record<string, unknown>;
+    const current = (state.diaryRoute ?? {}) as { tab?: TabKey; view?: string };
+    const route = { tab: next.tab ?? tabRef.current, view: next.view ?? viewsRef.current[(next.tab ?? tabRef.current)] };
+    const merged = { ...state, diaryRoute: { ...current, ...route } };
+    if (mode === "push") window.history.pushState(merged, "");
+    else window.history.replaceState(merged, "");
+  }, []);
+
+  const setTab = useCallback(
+    (next: TabKey) => {
+      setTabState(next);
+      try {
+        window.localStorage.setItem("my-diary:tab", next);
+      } catch {
+        /* ignore */
+      }
+      if (!fromHistory.current) writeRoute({ tab: next, view: viewsRef.current[next] }, "push");
+    },
+    [writeRoute],
+  );
+
+  const setView = useCallback(
+    (target: TabKey, view: string, opts?: { replace?: boolean }) => {
+      setViews((current) => (current[target] === view ? current : { ...current, [target]: view }));
+      if (!fromHistory.current) writeRoute({ tab: target, view }, opts?.replace ? "replace" : "push");
+    },
+    [writeRoute],
+  );
+
+  /** A15: the browser's back button walks the tabs and views the user visited. */
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const state = (window.history.state ?? {}) as Record<string, unknown>;
+    if (!state.diaryRoute) {
+      window.history.replaceState({ ...state, diaryRoute: { tab: tabRef.current, view: viewsRef.current[tabRef.current] } }, "");
     }
+    const onPop = () => {
+      const route = ((window.history.state ?? {}) as Record<string, unknown>).diaryRoute as
+        | { tab?: TabKey; view?: string }
+        | undefined;
+      if (!route) return;
+      fromHistory.current = true;
+      if (route.tab) {
+        setTabState(route.tab);
+        try {
+          window.localStorage.setItem("my-diary:tab", route.tab);
+        } catch {
+          /* ignore */
+        }
+      }
+      if (route.tab && route.view) {
+        setViews((current) => (current[route.tab as TabKey] === route.view ? current : { ...current, [route.tab as TabKey]: route.view as string }));
+      }
+      window.setTimeout(() => {
+        fromHistory.current = false;
+      }, 0);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
   }, []);
 
   const requestReset = useCallback((target: TabKey) => {
@@ -143,6 +207,8 @@ export function UiProvider({ children }: { children: ReactNode }) {
     () => ({
       tab,
       setTab,
+      views,
+      setView,
       resetSignal,
       requestReset,
       focus,
@@ -165,6 +231,8 @@ export function UiProvider({ children }: { children: ReactNode }) {
     [
       tab,
       setTab,
+      views,
+      setView,
       resetSignal,
       requestReset,
       focus,

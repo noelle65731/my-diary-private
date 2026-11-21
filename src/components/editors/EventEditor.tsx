@@ -206,7 +206,7 @@ function EventEditorInner({
           value={form.title}
           onChange={(event) => patch("title", event.target.value)}
           placeholder="무엇을 기록할까요?"
-          className="border-0 border-b border-paper-300 bg-transparent px-0 text-[1.06rem] font-medium focus:ring-0"
+          className="border-0 border-b border-paper-300 bg-transparent px-0 text-[18px] font-medium focus:ring-0"
         />
 
         <div>
@@ -245,10 +245,10 @@ function EventEditorInner({
                 onChange={(event) => patch("endDate", event.target.value)}
                 className="input"
               />
-              <span className="mt-1 block text-[0.66rem] text-ink-400">여러 날이면 종료 날짜를 넣어 주세요.</span>
+              <span className="mt-1 block text-[13.5px] text-ink-400">여러 날이면 종료 날짜를 넣어 주세요.</span>
               {multiDayDraft ? (
                 <div className="mt-2">
-                  <span className="text-[0.64rem] text-ink-400">저장 방식</span>
+                  <span className="text-[13.5px] text-ink-400">저장 방식</span>
                   <div className="mt-1 flex gap-1.5">
                     {([
                       { value: "days", label: "날짜마다" },
@@ -270,14 +270,14 @@ function EventEditorInner({
                       </button>
                     ))}
                   </div>
-                  <span className="mt-1 block text-[0.64rem] text-ink-400">
+                  <span className="mt-1 block text-[13.5px] text-ink-400">
                     {multiMode === "days" ? "하루씩 따로 저장됩니다." : "하나의 일정으로 이어집니다."}
                   </span>
                 </div>
               ) : null}
             </label>
           ) : (
-            <div className="flex items-end pb-2 text-[0.72rem] text-ink-400">주간 키에 자동으로 묶입니다</div>
+            <div className="flex items-end pb-2 text-[14px] text-ink-400">주간 키에 자동으로 묶입니다</div>
           )}
         </div>
 
@@ -352,7 +352,7 @@ function EventEditorInner({
         <ErrorNote message={error} />
 
         {existing ? (
-          <p className="flex items-center gap-1 text-[0.68rem] text-ink-400">
+          <p className="flex items-center gap-1 text-[14px] text-ink-400">
             <CalendarIcon size={12} />
             {existing.weekKey ? `주간 키 ${existing.weekKey}` : "일정"}
           </p>

@@ -15,10 +15,7 @@ export interface ModeChipsProps {
   onAddCategory?: (name: string) => void;
 }
 
-const BASE = [
-  { value: "all", label: "전체" },
-  { value: "now", label: "NOW" },
-] as const;
+const BASE = [{ value: "all", label: "전체" }] as const;
 
 /** A6: 전체(all) · NOW · 분류 · 주간 맞춤(custom) chips, shared by both tabs. */
 export function ModeChips({ mode, onChange, categories, showCustom, onAddCategory }: ModeChipsProps) {
@@ -41,7 +38,7 @@ export function ModeChips({ mode, onChange, categories, showCustom, onAddCategor
           onClick={() => onChange(item.value)}
           aria-label={item.label}
           className={cn(
-            "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[0.76rem] font-medium transition",
+            "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[15px] font-medium transition",
             mode === item.value ? "bg-ink-900 text-white" : "bg-paper-200 text-ink-500 hover:bg-paper-300/70 hover:text-ink-800",
           )}
         >
@@ -55,7 +52,7 @@ export function ModeChips({ mode, onChange, categories, showCustom, onAddCategor
           type="button"
           onClick={() => onChange(category)}
           className={cn(
-            "rounded-full px-3 py-1 text-[0.76rem] font-medium transition",
+            "rounded-full px-3 py-1 text-[15px] font-medium transition",
             mode === category ? "bg-ink-900 text-white" : "bg-paper-200 text-ink-500 hover:bg-paper-300/70 hover:text-ink-800",
           )}
         >
@@ -67,7 +64,7 @@ export function ModeChips({ mode, onChange, categories, showCustom, onAddCategor
           type="button"
           onClick={() => onChange("custom")}
           className={cn(
-            "rounded-full px-3 py-1 text-[0.76rem] font-medium transition",
+            "rounded-full px-3 py-1 text-[15px] font-medium transition",
             mode === "custom" ? "bg-ink-900 text-white" : "bg-paper-200 text-ink-500 hover:bg-paper-300/70 hover:text-ink-800",
           )}
         >
@@ -88,7 +85,7 @@ export function ModeChips({ mode, onChange, categories, showCustom, onAddCategor
               onBlur={submit}
               placeholder="분류 이름"
               aria-label="새 분류 이름"
-              className="w-[6.5rem] bg-transparent text-[0.74rem] outline-none"
+              className="w-[6.5rem] bg-transparent text-[14.5px] outline-none"
             />
           </span>
         ) : (

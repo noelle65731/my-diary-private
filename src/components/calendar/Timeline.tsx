@@ -5,6 +5,7 @@ import type { CalendarEvent } from "@/lib/types";
 import { todayISO } from "@/lib/date";
 import { cn } from "@/lib/utils";
 import { categoryTone } from "@/components/common/tone";
+import { useDnd, type DropTarget } from "@/components/common/dnd";
 import {
   eventCoversDay,
   eventEndMinutes,
@@ -45,6 +46,29 @@ function toTime(minutes: number): string {
 
 const snap = (minutes: number) => Math.round(minutes / 15) * 15;
 
+/** Minutes under the pointer inside a dropped timeline column (null when outside one). */
+export function minutesFromDrop(target: DropTarget, point: { x: number; y: number }): number | null {
+  if (target.zone !== "timeline-day") return null;
+  const start = Number(target.element.dataset.startMinute ?? "0") || 0;
+  const height = Number(target.element.dataset.hourHeight ?? "34") || 34;
+  const offset = point.y - target.rect.top;
+  if (offset < 0 || offset > target.rect.height) return null;
+  return Math.max(0, Math.min(24 * 60 - 15, start + (offset / height) * 60));
+}
+
+/** Minutes under the pointer inside a dropped day column (null when outside one). */
+function minutesAtPoint(
+  target: DropTarget,
+  point: { x: number; y: number },
+  boundsStart: number,
+  hourHeight: number,
+): number | null {
+  if (target.zone !== "timeline-day") return null;
+  const offset = point.y - target.rect.top;
+  if (offset < 0 || offset > target.rect.height) return null;
+  return Math.max(0, Math.min(24 * 60 - 15, boundsStart + (offset / hourHeight) * 60));
+}
+
 export function Timeline({
   days,
   events,
@@ -59,6 +83,7 @@ export function Timeline({
   compact = false,
 }: TimelineProps) {
   const today = todayISO();
+  const dnd = useDnd();
   const active = useMemo(() => events.filter((event) => !event.trash), [events]);
   /** B5: the current-time line keeps moving without a reload. */
   const [nowTick, setNowTick] = useState(() => Date.now());
@@ -198,7 +223,7 @@ export function Timeline({
           {marks.map((minutes) => (
             <div
               key={minutes}
-              className="absolute right-1.5 -translate-y-1/2 whitespace-nowrap text-[0.6rem] tabular-nums text-ink-400 md:right-2 md:text-[0.64rem]"
+              className="absolute right-1.5 -translate-y-1/2 whitespace-nowrap text-[13px] tabular-nums text-ink-400 md:right-2 md:text-[13.5px]"
               style={{ top: ((minutes - bounds.start) / 60) * hourHeight }}
             >
               {hourLabel(minutes)}
@@ -206,7 +231,7 @@ export function Timeline({
           ))}
           {showNow ? (
             <span
-              className="absolute left-0 z-20 flex -translate-y-1/2 items-center rounded-full border border-red-300 bg-white px-1.5 py-0.5 text-[0.58rem] font-medium text-red-500"
+              className="absolute left-0 z-20 flex -translate-y-1/2 items-center rounded-full border border-red-300 bg-white px-1.5 py-0.5 text-[12.5px] font-medium text-red-500"
               style={{ top: Math.max(6, ((nowMinutes - bounds.start) / 60) * hourHeight) }}
             >
               <span className="mr-0.5 inline-block h-1.5 w-1.5 flex-none rounded-full bg-red-500" />
@@ -223,7 +248,11 @@ export function Timeline({
             <div
               key={day}
               data-timeline-column={dayIndex}
+              data-drop-zone="timeline-day"
+              data-drop-day={day}
               data-day={day}
+              data-start-minute={bounds.start}
+              data-hour-height={hourHeight}
               ref={(node) => {
                 columns.current[dayIndex] = node;
               }}
@@ -253,7 +282,7 @@ export function Timeline({
             >
               {drag && drag.day === day ? (
                 <div
-                  className="pointer-events-none absolute inset-x-1 z-10 rounded-md border border-accent-400 bg-accent-100/70 px-1 text-[0.58rem] font-medium text-accent-600"
+                  className="pointer-events-none absolute inset-x-1 z-10 rounded-md border border-accent-400 bg-accent-100/70 px-1 text-[12.5px] font-medium text-accent-600"
                   style={{
                     top: ((Math.min(drag.anchor, drag.current) - bounds.start) / 60) * hourHeight,
                     height: Math.max(14, (Math.abs(drag.current - drag.anchor) / 60) * hourHeight),
@@ -284,15 +313,38 @@ export function Timeline({
                       dragEvent.dataTransfer.effectAllowed = "move";
                     }}
                     onPointerDown={(pointerEvent) => {
-                      // Edge handles resize; the middle of the card opens the detail.
+                      // Edge handles resize; the middle of the card drags it to another day/time.
                       const box = pointerEvent.currentTarget.getBoundingClientRect();
                       const offset = pointerEvent.clientY - box.top;
                       const edge = onResizeEvent && offset < 7 ? "top" : onResizeEvent && offset > box.height - 7 ? "bottom" : null;
-                      if (!edge) return;
-                      pointerEvent.stopPropagation();
-                      pointerEvent.preventDefault();
-                      moved.current = false;
-                      setResize({ id: event.id, edge, start, end, dayIndex });
+                      if (edge) {
+                        pointerEvent.stopPropagation();
+                        pointerEvent.preventDefault();
+                        moved.current = false;
+                        setResize({ id: event.id, edge, start, end, dayIndex });
+                        return;
+                      }
+                      if (!onMoveEvent) return;
+                      dnd.start(
+                        pointerEvent,
+                        { kind: "event", id: event.id, label: event.title },
+                        (target, point) => {
+                          if (!target) return;
+                          const nextDay = target.data.day;
+                          if (!nextDay) return;
+                          const minutes = minutesAtPoint(target, point, bounds.start, hourHeight);
+                          onMoveEvent(event.id, nextDay, minutes === null ? event.startTime ?? null : toTime(snap(minutes)));
+                        },
+                        {
+                          getHint: (target, point) => {
+                            const nextDay = target.data.day;
+                            if (!nextDay) return null;
+                            const minutes = minutesAtPoint(target, point, bounds.start, hourHeight);
+                            const time = minutes === null ? event.startTime : toTime(snap(minutes));
+                            return `${nextDay.slice(5).replace("-", "/")}${time ? ` ${time}` : ""}`;
+                          },
+                        },
+                      );
                     }}
                     onClick={(clickEvent) => {
                       clickEvent.stopPropagation();
@@ -313,27 +365,27 @@ export function Timeline({
                       <span
                         className={cn(
                           "flex items-center gap-1 tabular-nums opacity-85",
-                          compactCard ? "text-[0.56rem] leading-[1.1]" : "text-[0.58rem] leading-[1.15]",
+                          compactCard ? "text-[12px] leading-[1.1]" : "text-[12.5px] leading-[1.15]",
                           tone.text,
                         )}
                       >
                         <span className={cn("flex-none", compactCard && "font-semibold")}>{timeLabel}</span>
                         {compactCard ? (
-                          <span className={cn("line-clamp-2 min-w-0 break-words text-[0.56rem] font-medium leading-[1.1]", event.canceled && "line-through")}>
+                          <span className={cn("line-clamp-2 min-w-0 break-words text-[12px] font-medium leading-[1.1]", event.canceled && "line-through")}>
                             {event.title}
                           </span>
                         ) : null}
                       </span>
                     ) : null}
                     {compactCard && !timeLabel ? (
-                      <span className={cn("block truncate text-[0.56rem] font-medium leading-[1.1]", tone.text, event.canceled && "line-through")}>
+                      <span className={cn("block truncate text-[12px] font-medium leading-[1.1]", tone.text, event.canceled && "line-through")}>
                         {event.title}
                       </span>
                     ) : null}
                     {compactCard ? null : (
                       <span
                         className={cn(
-                          "mt-0.5 line-clamp-2 block whitespace-normal break-words text-[0.6rem] font-medium leading-[1.2] md:text-[0.66rem]",
+                          "mt-0.5 line-clamp-2 block whitespace-normal break-words text-[13px] font-medium leading-[1.2] md:text-[13.5px]",
                           tone.text,
                           event.canceled && "line-through",
                         )}
@@ -352,7 +404,7 @@ export function Timeline({
                     event.stopPropagation();
                     onCreate?.(day, null);
                   }}
-                  className="absolute inset-x-0 bottom-0 hidden items-center justify-center py-0.5 text-[0.6rem] text-ink-300 hover:text-ink-500 lg:flex"
+                  className="absolute inset-x-0 bottom-0 hidden items-center justify-center py-0.5 text-[13px] text-ink-300 hover:text-ink-500 lg:flex"
                   aria-label="일정 추가"
                 >
                   +

@@ -206,7 +206,7 @@ function EventDetailInner({
               </button>
             )}
           </div>
-          <span className="text-[0.66rem] text-ink-400">
+          <span className="text-[13.5px] text-ink-400">
             {invalidField ? <span className="text-rose-500">필수값을 입력해 주세요</span> : isDirty ? "바뀐 값은 자동으로 저장됩니다" : "변경 없음"}
           </span>
         </>
@@ -223,8 +223,8 @@ function EventDetailInner({
           onActivate={() => setField("title")}
           onDone={() => setField(null)}
           placeholder="제목 없음"
-          valueClassName="border-none px-0 text-[1.22rem] font-semibold tracking-tight text-ink-900"
-          inputClassName="text-[1rem] font-medium"
+          valueClassName="border-none px-0 text-[22px] font-semibold tracking-tight text-ink-900"
+          inputClassName="text-[16px] font-medium"
         />
 
         <div className="flex flex-wrap items-center gap-1.5 pt-1">
@@ -274,7 +274,7 @@ function EventDetailInner({
               placeholder="날짜를 정해 주세요"
             />
             <div>
-              <p className="text-[0.64rem] text-ink-400">종일</p>
+              <p className="text-[13.5px] text-ink-400">종일</p>
               <button
                 type="button"
                 aria-pressed={draft.allDay}
@@ -282,8 +282,8 @@ function EventDetailInner({
                 onClick={() => set("allDay", !draft.allDay)}
                 className={
                   draft.allDay
-                    ? "mt-0.5 rounded-full border border-ink-900 bg-ink-900 px-3 py-1 text-[0.8rem] text-paper-50"
-                    : "mt-0.5 rounded-full border border-paper-400 bg-white px-3 py-1 text-[0.8rem] text-ink-600"
+                    ? "mt-0.5 rounded-full border border-ink-900 bg-ink-900 px-3 py-1 text-[15px] text-paper-50"
+                    : "mt-0.5 rounded-full border border-paper-400 bg-white px-3 py-1 text-[15px] text-ink-600"
                 }
               >
                 {draft.allDay ? "종일" : "시간 지정"}

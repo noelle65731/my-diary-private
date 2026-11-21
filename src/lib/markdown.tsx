@@ -93,7 +93,7 @@ export function renderMarkdown(text: string): ReactNode {
       const level = heading[1]?.length ?? 1;
       const content = inline(heading[2] ?? "", `h${key}`);
       const cls =
-        level === 1 ? "mt-5 mb-2 text-[1.2rem] font-semibold" : level === 2 ? "mt-4 mb-1.5 text-[1.06rem] font-semibold" : "mt-3 mb-1 text-[0.96rem] font-semibold";
+        level === 1 ? "mt-5 mb-2 text-[21px] font-semibold" : level === 2 ? "mt-4 mb-1.5 text-[18px] font-semibold" : "mt-3 mb-1 text-[16px] font-semibold";
       blocks.push(
         <p key={`b${key++}`} className={cls}>
           {content}

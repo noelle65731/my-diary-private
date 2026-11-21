@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { isAuthorized } from "@/lib/auth";
-import { archivePage, hasNotionToken, NotionError, retrievePage, updatePage, isNotionPageId } from "@/lib/notion";
+import { archivePage, hasNotionToken, NotionError, retrievePage, updatePage, isNotionPageId, type NotionIcon } from "@/lib/notion";
 import type { NotionPage } from "@/lib/notion";
 import { buildProperties, mappers } from "@/lib/notion-map";
 import { DB_ENV_KEYS, DB_IDS, DB_LABELS, dbSetupMessage, isResourceKey, type ResourceKey } from "@/lib/db-config";
@@ -83,7 +83,26 @@ export async function PATCH(
         );
       }
     }
-    const page = await updatePage(id, buildProperties(resource, patch, currentPage ?? undefined));
+    // A14: a page icon (emoji or picture) travels with the same PATCH.
+    const rawIcon = patch["icon"];
+    delete patch["icon"];
+    let icon: NotionIcon | undefined;
+    if (rawIcon === null) {
+      icon = null;
+    } else if (rawIcon && typeof rawIcon === "object") {
+      const shape = rawIcon as { kind?: unknown; value?: unknown };
+      const kind = shape.kind;
+      const value = typeof shape.value === "string" ? shape.value.trim() : "";
+      if (kind === "emoji" && value) {
+        icon = { type: "emoji", emoji: value };
+      } else if (kind === "image" && value) {
+        if (value.startsWith("upload:")) icon = { type: "file_upload", file_upload: { id: value.slice("upload:".length) } };
+        else if (/^https?:\/\//i.test(value)) icon = { type: "external", external: { url: value } };
+        else return NextResponse.json({ ok: false, error: { message: "이미지 주소가 올바르지 않습니다.", code: "bad_icon" } }, { status: 400 });
+      }
+    }
+
+    const page = await updatePage(id, buildProperties(resource, patch, currentPage ?? undefined), icon);
     const map = mappers[resource] as (page: NotionPage) => unknown;
     return NextResponse.json({ ok: true, data: map(page) });
   } catch (error) {

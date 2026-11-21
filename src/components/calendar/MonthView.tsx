@@ -133,15 +133,15 @@ export function MonthView({
   const openDayItems = openDayDate ? itemsForDay(openDayDate) : [];
 
   return (
-    <div className="min-w-0">
-      <div className="grid grid-cols-7 border-b border-paper-300">
+    <div className="flex h-full min-h-0 min-w-0 flex-col">
+      <div className="grid flex-none grid-cols-7 border-b border-paper-300">
         {weekdays.map((label, index) => {
           const dow = weekStartsOn === 1 ? (index + 1) % 7 : index;
           return (
             <div
               key={label}
               className={cn(
-                "py-1.5 pl-3 text-left text-[0.68rem]",
+                "py-1.5 pl-3 text-left text-[14px]",
                 dow === 6 ? "text-blue-500" : dow === 0 ? "text-red-400" : "text-ink-400",
               )}
             >
@@ -151,13 +151,14 @@ export function MonthView({
         })}
       </div>
 
+      <div className="flex min-h-0 flex-1 flex-col">
       {matrix.map((row, rowIndex) => {
         const cells = showWeekends ? row : row.filter((_, index) => {
           const dow = new Date(`${row[index]}T12:00:00`).getDay();
           return dow !== 0 && dow !== 6;
         });
         return (
-          <div key={rowIndex} className="grid border-b border-paper-300 last:border-b-0" style={{ gridTemplateColumns: `repeat(${cells.length}, minmax(0,1fr))` }}>
+          <div key={rowIndex} className="grid min-h-0 flex-1 border-b border-paper-300 last:border-b-0" style={{ gridTemplateColumns: `repeat(${cells.length}, minmax(0,1fr))` }}>
             {cells.map((day) => {
               const inMonth = day.slice(0, 7) === cursor.slice(0, 7);
               const items = itemsForDay(day);
@@ -182,7 +183,7 @@ export function MonthView({
                     if ((type === "event" || type === "task") && id) onMoveItem(type, id, day);
                   }}
                   className={cn(
-                    "group relative min-h-[5rem] border-r border-paper-300 px-0.5 pb-1 pt-1 last:border-r-0 md:min-h-[7.2rem] md:px-2 md:pb-1.5 md:pt-1.5",
+                    "group relative min-h-0 overflow-hidden border-r border-paper-300 px-0.5 pb-1 pt-1 last:border-r-0 md:px-2 md:pb-1 md:pt-1",
                     !inMonth && "bg-paper-200/25",
                   )}
                 >
@@ -191,7 +192,7 @@ export function MonthView({
                       type="button"
                       onClick={() => onSelectDay(day)}
                       className={cn(
-                        "flex h-[1.25rem] min-w-[1.25rem] items-center justify-center rounded-full px-1 text-[0.72rem] font-medium tabular-nums transition md:h-[1.4rem] md:min-w-[1.4rem] md:text-[0.78rem]",
+                        "flex h-[1.25rem] min-w-[1.25rem] items-center justify-center rounded-full px-1 text-[14px] font-medium tabular-nums transition md:h-[1.4rem] md:min-w-[1.4rem] md:text-[15px]",
                         isToday
                           ? "bg-ink-900 text-white"
                           : holiday || dow === 0
@@ -207,7 +208,7 @@ export function MonthView({
                       {Number(day.slice(8, 10))}
                     </button>
                   </div>
-                  {holiday ? <p className="truncate text-[0.58rem] text-red-500">{holiday}</p> : null}
+                  {holiday ? <p className="truncate text-[12.5px] text-red-500">{holiday}</p> : null}
 
                   <div className="mt-0.5 space-y-[3px] md:space-y-[4px]">
                     {visibleItems.map((item) => {
@@ -225,7 +226,7 @@ export function MonthView({
                             }}
                             onClick={() => onOpenEvent(item.event.id)}
                             className={cn(
-                              "flex w-full items-start gap-1 rounded px-0.5 py-[2px] text-left text-[0.6rem] leading-[1.35] md:px-1 md:text-[0.68rem] md:leading-[1.45]",
+                              "flex w-full items-start gap-1 rounded px-0.5 py-[2px] text-left text-[13px] leading-[1.35] md:px-1 md:text-[14px] md:leading-[1.45]",
                               multiDay ? cn(tone.bg, tone.text) : tone.text,
                               item.event.canceled && "line-through opacity-50",
                               item.event.done && "opacity-60",
@@ -268,7 +269,7 @@ export function MonthView({
                             type="button"
                             onClick={() => onOpenTask(item.task.id)}
                             className={cn(
-                              "min-w-0 flex-1 truncate text-left text-[0.6rem] leading-[1.35] text-ink-500 md:text-[0.68rem] md:leading-[1.45]",
+                              "min-w-0 flex-1 truncate text-left text-[13px] leading-[1.35] text-ink-500 md:text-[14px] md:leading-[1.45]",
                               taskDone && "text-ink-300 line-through",
                             )}
                           >
@@ -281,7 +282,7 @@ export function MonthView({
                       <button
                         type="button"
                         onClick={() => setOpenDay(day)}
-                        className="block w-full px-0.5 text-left text-[0.6rem] text-ink-500 hover:text-ink-800 md:px-1 md:text-[0.64rem]"
+                        className="block w-full px-0.5 text-left text-[13px] text-ink-500 hover:text-ink-800 md:px-1 md:text-[13.5px]"
                       >
                         할 일 {restTasks}
                       </button>
@@ -290,7 +291,7 @@ export function MonthView({
                       <button
                         type="button"
                         onClick={() => setOpenDay(day)}
-                        className="block w-full px-0.5 text-left text-[0.6rem] text-ink-400 hover:text-ink-700 md:px-1 md:text-[0.64rem]"
+                        className="block w-full px-0.5 text-left text-[13px] text-ink-400 hover:text-ink-700 md:px-1 md:text-[13.5px]"
                       >
                         +{restEvents} 더
                       </button>
@@ -303,9 +304,11 @@ export function MonthView({
         );
       })}
 
+      </div>
+
       {routineTemplates.length > 0 ? (
-        <div className="mt-4 space-y-3 xl:hidden">
-          <h3 className="text-[0.86rem] font-semibold text-ink-900">이번 달 루틴</h3>
+        <div className="mt-2 max-h-[26%] flex-none space-y-2 overflow-y-auto xl:hidden">
+          <h3 className="text-[15.5px] font-semibold text-ink-900">이번 달 루틴</h3>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-2">
             {routineTemplates.map((routine, index) => (
               <RoutineHeat key={routine.id} routine={routine} routines={routines} days={days} index={index} onCount={(date, count) => onRoutineCount(routine, date, count)} />
@@ -372,10 +375,10 @@ function DayListPanel({
       >
         <div className="flex items-start gap-3 border-b border-paper-300/80 px-4 pb-2.5 pt-3">
           <div className="min-w-0 flex-1">
-            <p className="text-[0.66rem] text-ink-400">이 날짜 전체</p>
-            <p className="mt-0.5 truncate text-[0.96rem] font-semibold text-ink-900">
+            <p className="text-[13.5px] text-ink-400">이 날짜 전체</p>
+            <p className="mt-0.5 truncate text-[16px] font-semibold text-ink-900">
               {formatShort(day)} {weekdayKo(day)}요일
-              {holiday ? <span className="ml-1 text-[0.74rem] font-normal text-red-500">{holiday}</span> : null}
+              {holiday ? <span className="ml-1 text-[14.5px] font-normal text-red-500">{holiday}</span> : null}
             </p>
           </div>
           <button type="button" onClick={onClose} className="icon-btn -mr-1 -mt-1" aria-label="닫기">
@@ -385,14 +388,14 @@ function DayListPanel({
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
           {items.length === 0 ? (
-            <p className="rounded-xl bg-paper-200/50 px-3 py-6 text-center text-[0.74rem] text-ink-400">이 날짜에는 일정도 할 일도 없습니다.</p>
+            <p className="rounded-xl bg-paper-200/50 px-3 py-6 text-center text-[14.5px] text-ink-400">이 날짜에는 일정도 할 일도 없습니다.</p>
           ) : null}
 
           {allDay.length > 0 ? (
             <section className="mb-3">
-              <p className="mb-1 flex items-baseline justify-between text-[0.66rem] text-ink-400">
+              <p className="mb-1 flex items-baseline justify-between text-[13.5px] text-ink-400">
                 <span>종일 일정</span>
-                {allDay.length > 1 ? <span className="text-[0.62rem] text-ink-300">↑↓ 로 순서 바꾸기</span> : null}
+                {allDay.length > 1 ? <span className="text-[13px] text-ink-300">↑↓ 로 순서 바꾸기</span> : null}
               </p>
               <ul className="space-y-1">
                 {allDay.map(({ event }, index) => {
@@ -403,7 +406,7 @@ function DayListPanel({
                         type="button"
                         onClick={() => onOpenEvent(event.id)}
                         className={cn(
-                          "min-w-0 flex-1 truncate text-left text-[0.78rem]",
+                          "min-w-0 flex-1 truncate text-left text-[15px]",
                           tone.text,
                           event.canceled && "line-through opacity-50",
                           event.done && "opacity-60",
@@ -442,20 +445,20 @@ function DayListPanel({
 
           {timed.length > 0 ? (
             <section className="mb-3">
-              <p className="mb-1 text-[0.66rem] text-ink-400">시간 일정</p>
+              <p className="mb-1 text-[13.5px] text-ink-400">시간 일정</p>
               <ul className="space-y-1">
                 {timed.map(({ event }) => {
                   const tone = categoryTone(event.category);
                   return (
                     <li key={event.id} className="flex items-center gap-2">
-                      <span className={cn("w-[4.4rem] flex-none text-[0.68rem] tabular-nums", tone.text)}>
+                      <span className={cn("w-[4.4rem] flex-none text-[14px] tabular-nums", tone.text)}>
                         {event.startTime}
                         {event.endTime ? `–${event.endTime}` : ""}
                       </span>
                       <button
                         type="button"
                         onClick={() => onOpenEvent(event.id)}
-                        className={cn("min-w-0 flex-1 truncate text-left text-[0.78rem] text-ink-700", event.canceled && "line-through opacity-50")}
+                        className={cn("min-w-0 flex-1 truncate text-left text-[15px] text-ink-700", event.canceled && "line-through opacity-50")}
                       >
                         {event.title}
                       </button>
@@ -468,7 +471,7 @@ function DayListPanel({
 
           {dayTasks.length > 0 ? (
             <section className="mb-3">
-              <p className="mb-1 text-[0.66rem] text-ink-400">할 일 {dayTasks.length}</p>
+              <p className="mb-1 text-[13.5px] text-ink-400">할 일 {dayTasks.length}</p>
               <ul className="space-y-0.5">
                 {dayTasks.map(({ task }) => {
                   const tone = taskTone(task.category);
@@ -491,13 +494,13 @@ function DayListPanel({
                         type="button"
                         onClick={() => onOpenTask(task.id)}
                         className={cn(
-                          "min-w-0 flex-1 text-left text-[0.78rem] leading-snug text-ink-700",
+                          "min-w-0 flex-1 text-left text-[15px] leading-snug text-ink-700",
                           task.status === "완료" && "text-ink-300 line-through",
                         )}
                       >
                         {task.title}
                       </button>
-                      {waiting ? <span className="mt-[1px] flex-none rounded bg-paper-200 px-1 text-[0.58rem] text-ink-500">대기</span> : null}
+                      {waiting ? <span className="mt-[1px] flex-none rounded bg-paper-200 px-1 text-[12.5px] text-ink-500">대기</span> : null}
                     </li>
                   );
                 })}
@@ -545,12 +548,12 @@ export function RoutineHeat({
     <div className="rounded-2xl border border-paper-300 p-3">
       <header className="flex items-start justify-between gap-2">
         <div className="flex min-w-0 items-center gap-1.5">
-          <span className={cn("flex h-5 w-5 flex-none items-center justify-center rounded-md text-[0.6rem]", tone.soft, tone.text)}>루</span>
-          <span className="truncate text-[0.82rem] font-semibold text-ink-900">{routine.title}</span>
+          <span className={cn("flex h-5 w-5 flex-none items-center justify-center rounded-md text-[13px]", tone.soft, tone.text)}>루</span>
+          <span className="truncate text-[15px] font-semibold text-ink-900">{routine.title}</span>
         </div>
-        <span className="flex-none text-[0.78rem] font-semibold tabular-nums text-ink-900">
+        <span className="flex-none text-[15px] font-semibold tabular-nums text-ink-900">
           {doneCount}
-          <span className="text-[0.68rem] font-normal text-ink-400">/{scheduledCount}</span>
+          <span className="text-[14px] font-normal text-ink-400">/{scheduledCount}</span>
         </span>
       </header>
       <div className="mt-2 grid grid-cols-7 gap-1">
@@ -569,7 +572,7 @@ export function RoutineHeat({
               onClick={() => onCount(day, done ? 0 : count + 1)}
               title={`${formatShort(day)} · ${count}/${target}`}
               className={cn(
-                "relative flex h-[1.55rem] items-center justify-center rounded-md text-[0.62rem] tabular-nums transition",
+                "relative flex h-[1.55rem] items-center justify-center rounded-md text-[13px] tabular-nums transition",
                 done
                   ? cn(tone.solid, "font-semibold text-white")
                   : future || !scheduled
@@ -582,7 +585,7 @@ export function RoutineHeat({
             >
               {Number(day.slice(8, 10))}
               {count > 0 && !done ? (
-                <span className="absolute -right-0.5 -top-0.5 rounded-full bg-ink-900 px-[3px] text-[0.44rem] font-semibold leading-[0.7rem] text-white">
+                <span className="absolute -right-0.5 -top-0.5 rounded-full bg-ink-900 px-[3px] text-[10px] font-semibold leading-[0.7rem] text-white">
                   {count}
                 </span>
               ) : null}

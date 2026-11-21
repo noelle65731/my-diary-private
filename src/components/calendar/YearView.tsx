@@ -39,24 +39,11 @@ export function YearView({ year, events, tasks, hiddenIncluded, onPickDay }: Yea
     return map;
   }, [events, tasks, hiddenIncluded]);
 
+  /* A12: all twelve months sit on one screen — four columns on a laptop, no page scroll. */
   return (
-    <div>
-      {[0, 1, 2, 3].map((quarter) => (
-        <section key={quarter} className="border-b border-paper-300 py-3 last:border-b-0">
-          <div className="mb-2 flex items-baseline justify-between">
-            <h3 className="text-[0.74rem] text-ink-500">
-              {year} · {quarter + 1}분기
-            </h3>
-            <span className="text-[0.66rem] text-ink-300">
-              {MONTH_NAMES[quarter * 3]} – {MONTH_NAMES[quarter * 3 + 2]}
-            </span>
-          </div>
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-3">
-            {[quarter * 3, quarter * 3 + 1, quarter * 3 + 2].map((month0) => (
-              <MonthMini key={month0} year={year} month0={month0} today={today} counts={counts} onPickDay={onPickDay} />
-            ))}
-          </div>
-        </section>
+    <div className="grid grid-cols-2 gap-x-5 gap-y-2 sm:grid-cols-3 xl:grid-cols-4">
+      {Array.from({ length: 12 }, (_, month0) => (
+        <MonthMini key={month0} year={year} month0={month0} today={today} counts={counts} onPickDay={onPickDay} />
       ))}
     </div>
   );
@@ -79,13 +66,13 @@ function MonthMini({
   const monthKey = `${year}-${String(month0 + 1).padStart(2, "0")}`;
 
   return (
-    <div>
-      <p className="mb-1.5 text-[0.9rem] font-semibold text-ink-900">{MONTH_NAMES[month0]}</p>
-      <div className="grid grid-cols-7 gap-y-1.5 text-center">
+    <div className="min-w-0">
+      <p className="mb-0.5 text-[15px] font-semibold text-ink-900">{MONTH_NAMES[month0]}</p>
+      <div className="grid grid-cols-7 gap-y-0.5 text-center">
         {["월", "화", "수", "목", "금", "토", "일"].map((label, index) => (
           <span
             key={label}
-            className={cn("text-[0.62rem]", index === 6 ? "text-red-400" : index === 5 ? "text-blue-500" : "text-ink-300")}
+            className={cn("pb-0.5 text-[11.5px] font-medium", index === 6 ? "text-red-500" : index === 5 ? "text-blue-600" : "text-ink-500")}
           >
             {label}
           </span>
@@ -96,14 +83,14 @@ function MonthMini({
           const holiday = holidayName(day);
           const isToday = day === today;
           const dow = new Date(`${day}T12:00:00`).getDay();
-          if (!inMonth) return <span key={day} className="h-7" />;
+          if (!inMonth) return <span key={day} className="h-[1.45rem]" />;
           return (
             <button
               key={day}
               type="button"
               onClick={() => onPickDay(day)}
               className={cn(
-                "relative mx-auto flex h-7 w-7 items-center justify-center rounded-full text-[0.8rem] tabular-nums transition hover:bg-paper-200 md:h-8 md:w-8 md:text-[0.86rem]",
+                "relative mx-auto flex h-[1.45rem] w-[1.45rem] items-center justify-center rounded-full text-[13.5px] tabular-nums transition hover:bg-paper-200",
                 isToday && "bg-ink-900 font-semibold text-white hover:bg-ink-800",
                 !isToday && (holiday || dow === 0) && "text-red-500",
                 !isToday && dow === 6 && "text-blue-600",
