@@ -30,10 +30,19 @@ const CARD_OPEN_PREVIEW = 5;
 const RECENT_LOG_MAX = 2;
 
 const WEEKDAY_LETTERS = ["월", "화", "수", "목", "금", "토", "일"];
+/** A23: 루틴 카드 한 장에 들어가는 루틴 수. */
+const ROUTINES_PER_CARD = 3;
 
 function dateLabel(date: string | null): string {
   if (!date) return "";
   return `${formatShort(date)} ${weekdayKo(date)}`;
+}
+
+/** A22: 완료한 할 일의 기록 줄 — 끝낸 날(없으면 잡아 둔 날)에 시간이 있으면 시간까지 붙입니다. */
+function recordDateLabel(task: ProjectTask): string {
+  const day = dateLabel(task.doneAt?.slice(0, 10) ?? task.date);
+  const time = timeRangeLabel(task.startTime, task.endTime);
+  return time ? `${day} ${time}` : day;
 }
 
 /** The date a task row shows, plus its 시작~종료 when that date is the task's own day. */
@@ -80,6 +89,8 @@ export function ProjectsTab() {
     important?: boolean;
   } | null>(null);
   const [routineId, setRoutineId] = useState<string | null>(null);
+  /** A20: 우선순위 탭에만 걸리는 기간 — 다른 보기를 다녀와도 이 화면에서만 유지됩니다. */
+  const [priorityRange, setPriorityRange] = useState<{ from: string; to: string }>({ from: "", to: "" });
   const [quickTitle, setQuickTitle] = useState("");
   const [quickCategory, setQuickCategory] = useState<TaskCategory>("개인");
   const [busy, setBusy] = useState(false);
@@ -176,6 +187,25 @@ export function ProjectsTab() {
     [data.routines, mode, settings.nowOnly],
   );
 
+  /**
+   * A23: 루틴은 분류별로 카드를 나누지 않고, 지금 필터를 통과한 전체 목록을 순서대로
+   * 세 개씩 묶어 카드로 보여 줍니다 — 네 번째 루틴부터 잘려 보이지 않게.
+   */
+  const orderedRoutines = useMemo(
+    () =>
+      [...routines].sort(
+        (a, b) => (a.sort ?? 0) - (b.sort ?? 0) || a.createdAt.localeCompare(b.createdAt),
+      ),
+    [routines],
+  );
+  const routineChunks = useMemo(() => {
+    const chunks: Routine[][] = [];
+    for (let i = 0; i < orderedRoutines.length; i += ROUTINES_PER_CARD) {
+      chunks.push(orderedRoutines.slice(i, i + ROUTINES_PER_CARD));
+    }
+    return chunks;
+  }, [orderedRoutines]);
+
   const openTasks = tasks.filter((task) => !task.trash && task.status !== "완료" && task.status !== "취소" && !task.history);
   const inbox = openTasks.filter((task) => task.projectIds.length === 0);
   const projectCount = data.projects.filter((task) => task.kind === "프로젝트" && !task.trash && task.status !== "완료" && task.status !== "취소").length;
@@ -200,6 +230,82 @@ export function ProjectsTab() {
       const item = list.find((entry) => entry.id === id);
       if (item && item.sort !== (index + 1) * 10) {
         void update("projects", id, { sort: (index + 1) * 10 });
+      }
+    });
+  };
+
+  /**
+   * A21: 카드 사이로 할 일을 끌어 옮깁니다 — 드롭한 카드의 프로젝트로 바로 바뀌고,
+   * index 카드에 놓으면 분류 없음(projectIds 빈 값)으로 돌아갑니다.
+   * store 의 update 가 먼저 화면을 바꾸고 PATCH 하며, 실패하면 원래 값으로 되돌리고 알립니다.
+   */
+  const moveTaskToCard = (taskId: string, project: ProjectTask | null) => {
+    const task = data.projects.find((item) => item.id === taskId);
+    if (!task || task.kind !== "할 일") return;
+    const targetIds = project ? [project.id] : [];
+    const currentIds = task.projectIds ?? [];
+    if (currentIds.length === targetIds.length && currentIds.every((id, index) => id === targetIds[index])) return;
+    void update("projects", taskId, {
+      projectIds: targetIds,
+      // 프로젝트의 분류를 따라가면 카드 색·필터가 어긋나지 않습니다(index 로 뺄 때는 그대로).
+      ...(project ? { category: project.category } : {}),
+    });
+  };
+
+  /** 드롭 대상 카드 강조 — 카드 안 자식 사이를 오갈 때 깜빡이지 않게 깊이를 셉니다. */
+  const dragDepth = useRef(0);
+  const [dropCard, setDropCard] = useState<string | null>(null);
+  const clearDrop = () => {
+    dragDepth.current = 0;
+    setDropCard(null);
+  };
+  const dropProps = (key: string, taskDrop: (taskId: string) => void, projectDrop?: (event: React.DragEvent<HTMLElement>) => void) => ({
+    onDragEnter: (event: React.DragEvent<HTMLElement>) => {
+      if (!event.dataTransfer.types.includes("text/diary-task")) return;
+      dragDepth.current += 1;
+      setDropCard(key);
+    },
+    onDragOver: (event: React.DragEvent<HTMLElement>) => {
+      const types = event.dataTransfer.types;
+      // preventDefault 없이는 브라우저가 drop 을 보내지 않습니다(프로젝트 순서 변경 드롭도 여기로).
+      if (!types.includes("text/diary-task") && !types.includes("text/diary-project")) return;
+      event.preventDefault();
+      if (!types.includes("text/diary-task")) return;
+      event.dataTransfer.dropEffect = "move";
+      if (dropCard !== key) setDropCard(key);
+    },
+    onDragLeave: (event: React.DragEvent<HTMLElement>) => {
+      if (!event.dataTransfer.types.includes("text/diary-task")) return;
+      dragDepth.current = Math.max(0, dragDepth.current - 1);
+      if (dragDepth.current === 0) setDropCard((current) => (current === key ? null : current));
+    },
+    onDrop: (event: React.DragEvent<HTMLElement>) => {
+      const taskId = event.dataTransfer.getData("text/diary-task");
+      clearDrop();
+      if (taskId) {
+        event.preventDefault();
+        event.stopPropagation();
+        taskDrop(taskId);
+        return;
+      }
+      projectDrop?.(event);
+    },
+    onDragEnd: clearDrop,
+  });
+
+  /** A23: 루틴 순서 변경도 카드 경계를 넘어 전체 목록 기준으로 `sort` 를 다시 적습니다. */
+  const reorderRoutines = (dragId: string, targetId: string) => {
+    if (!dragId || !targetId || dragId === targetId) return;
+    const ids = orderedRoutines.map((routine) => routine.id);
+    const from = ids.indexOf(dragId);
+    const to = ids.indexOf(targetId);
+    if (from < 0 || to < 0) return;
+    ids.splice(from, 1);
+    ids.splice(to, 0, dragId);
+    ids.forEach((routineId, position) => {
+      const routine = orderedRoutines.find((item) => item.id === routineId);
+      if (routine && routine.sort !== (position + 1) * 10) {
+        void update("routines", routineId, { sort: (position + 1) * 10 });
       }
     });
   };
@@ -340,7 +446,14 @@ export function ProjectsTab() {
       {view === "tracks" ? (
         <div className="mt-4 space-y-4">
           <div className="cards-grid" style={{ "--proj-cols": cols } as React.CSSProperties}>
-            <article className="flex min-h-[10rem] flex-col rounded-2xl border border-paper-300 px-3.5 py-3">
+            <article
+              data-drop-card="index"
+              {...dropProps("index", (taskId) => moveTaskToCard(taskId, null))}
+              className={cn(
+                "flex min-h-[10rem] flex-col rounded-2xl border px-3.5 py-3 transition",
+                dropCard === "index" ? "border-ink-300 bg-paper-200/60 ring-2 ring-ink-200" : "border-paper-300",
+              )}
+            >
               <header className="flex items-start gap-2">
                 <span className="flex h-7 w-7 flex-none items-center justify-center rounded-full bg-paper-200 text-ink-500">
                   <InboxIcon size={14} />
@@ -388,22 +501,17 @@ export function ProjectsTab() {
                   }
                   drag={{
                     draggable: true,
-                    onDragOver: (event) => {
-                      if (event.dataTransfer.types.includes("text/diary-task") || event.dataTransfer.types.includes("text/diary-project")) event.preventDefault();
-                    },
-                    onDrop: (event) => {
-                      const taskDrag = event.dataTransfer.getData("text/diary-task");
-                      if (taskDrag) {
-                        event.preventDefault();
-                        void update("projects", taskDrag, { projectIds: [project.id], category: project.category });
-                        return;
-                      }
-                      const projectDrag = event.dataTransfer.getData("text/diary-project");
-                      if (projectDrag) {
+                    highlight: dropCard === project.id,
+                    ...dropProps(
+                      project.id,
+                      (taskId) => moveTaskToCard(taskId, project),
+                      (event) => {
+                        const projectDrag = event.dataTransfer.getData("text/diary-project");
+                        if (!projectDrag) return;
                         event.preventDefault();
                         reorder(projects, projectDrag, project.id);
-                      }
-                    },
+                      },
+                    ),
                     onDragStart: (event) => {
                       if (event.dataTransfer.types.includes("text/diary-task")) return;
                       event.dataTransfer.setData("text/diary-project", project.id);
@@ -416,29 +524,35 @@ export function ProjectsTab() {
 
           {routines.length > 0 ? (
             <div className="cards-grid" style={{ "--proj-cols": cols } as React.CSSProperties}>
-              {categoryOptions
-                .filter((category) => routines.some((routine) => routine.category === category))
-                .map((category) => {
-                const items = routines.filter((routine) => routine.category === category);
+              {routineChunks.map((chunk, chunkIndex) => {
+                const first = chunkIndex * ROUTINES_PER_CARD + 1;
+                const last = first + chunk.length - 1;
                 return (
-                  <article key={category} className="rounded-2xl border border-paper-300 px-3 py-3">
+                  <article
+                    key={`routines-${chunkIndex}`}
+                    data-routine-card={chunkIndex}
+                    className="rounded-2xl border border-paper-300 px-3 py-3"
+                  >
                     <header className="flex items-start gap-2">
                       <span className="flex h-7 w-7 flex-none items-center justify-center rounded-full bg-paper-200 text-[calc(15px*var(--fs))]">
                         <RepeatIcon size={14} className="text-ink-500" />
                       </span>
                       <div className="min-w-0 flex-1">
                         <p className="text-[calc(17px*var(--fs))] font-semibold tracking-tight text-ink-900">루틴</p>
-                        <p className="text-[calc(14px*var(--fs))] text-ink-500">{category}</p>
+                        {/* A23: 분류별로 나누지 않고 전체 목록을 순서대로 세 개씩 — 어디까지 보이는지 적습니다. */}
+                        <p data-routine-card-range={chunkIndex} className="truncate text-[calc(14px*var(--fs))] text-ink-500">
+                          {routineChunks.length === 1
+                            ? `전체 · ${orderedRoutines.length}개`
+                            : `${first}~${last} · ${orderedRoutines.length}개`}
+                        </p>
                       </div>
                     </header>
 
                     <div className="mt-2 space-y-2">
-                      {[...items]
-                        .sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0) || a.createdAt.localeCompare(b.createdAt))
-                        .slice(0, 3)
-                        .map((routine, index) => (
+                      {chunk.map((routine, index) => (
                         <div
                           key={routine.id}
+                          data-routine-row={routine.id}
                           draggable
                           onDragStart={(event) => {
                             event.dataTransfer.setData("text/diary-routine", routine.id);
@@ -451,22 +565,15 @@ export function ProjectsTab() {
                             const id = event.dataTransfer.getData("text/diary-routine");
                             if (!id || id === routine.id) return;
                             event.preventDefault();
-                            const ordered = [...items].sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0) || a.createdAt.localeCompare(b.createdAt));
-                            const ids = ordered.map((item) => item.id);
-                            const from = ids.indexOf(id);
-                            const to = ids.indexOf(routine.id);
-                            if (from < 0 || to < 0) return;
-                            ids.splice(from, 1);
-                            ids.splice(to, 0, id);
-                            ids.forEach((routineId, position) => {
-                              void update("routines", routineId, { sort: (position + 1) * 10 });
-                            });
+                            // A23: 카드가 갈라져 있어도 전체 루틴 목록 기준으로 순서를 다시 적습니다.
+                            reorderRoutines(id, routine.id);
                           }}
                         >
                           <RoutineWeekRow
                             routine={routine}
                             toneIndex={index}
                             routines={data.routines}
+                            showCategory
                             onOpen={() => setRoutineId(routine.id)}
                             onCount={(date, count) => void setRoutineCount(routine, date, count)}
                             onToggleNow={() => {
@@ -498,6 +605,10 @@ export function ProjectsTab() {
         <PriorityView
           tasks={data.projects.filter((task) => task.kind === "할 일" && !task.trash && matchesMode(mode, task, task.category))}
           projects={data.projects}
+          previewCount={settings.priorityTaskPreview}
+          onPreviewCount={(next) => setSetting("priorityTaskPreview", next)}
+          range={priorityRange}
+          onRange={setPriorityRange}
           onOpenTask={(id) => void openTask(id)}
           onOpenProject={setProjectId}
           onToggle={toggleTask}
@@ -598,12 +709,17 @@ function ProjectCard({
   restoreLabel?: string;
   drag?: {
     draggable?: boolean;
+    /** A21: 할 일을 이 카드 위로 끌어 왔을 때의 은은한 강조 */
+    highlight?: boolean;
     onDragStart?: (event: React.DragEvent<HTMLElement>) => void;
     onDragOver?: (event: React.DragEvent<HTMLElement>) => void;
+    onDragLeave?: (event: React.DragEvent<HTMLElement>) => void;
     onDrop?: (event: React.DragEvent<HTMLElement>) => void;
+    onDragEnd?: (event: React.DragEvent<HTMLElement>) => void;
   };
 }) {
   const { update } = useData();
+  const { highlight, ...dragProps } = drag ?? {};
   const { settings } = useSettings();
   const { pastelOf } = useProjectColors();
   const categoryColor = useCategoryColors();
@@ -628,12 +744,14 @@ function ProjectCard({
   return (
     <article
       data-project-card={project.id}
-      {...drag}
+      data-drop-card={mode === "track" ? project.id : undefined}
+      {...dragProps}
       className={cn(
         "flex min-h-[10rem] flex-col rounded-2xl border px-3.5 py-3 transition",
         pastel.bg,
         pastel.border,
         mode === "track" ? "hover:border-paper-400" : "opacity-95",
+        highlight && "border-ink-400 ring-2 ring-ink-200 ring-offset-1",
       )}
     >
       <header className="flex items-start gap-2">
@@ -721,7 +839,7 @@ function ProjectCard({
                 >
                   {task.title}
                 </button>
-                <span className="flex-none text-[calc(13px*var(--fs))] text-ink-400">{dateLabel(task.doneAt?.slice(0, 10) ?? task.date)}</span>
+                <span className="flex-none whitespace-nowrap text-[calc(13px*var(--fs))] tabular-nums text-ink-400">{recordDateLabel(task)}</span>
               </li>
             ))}
           </ul>
@@ -767,7 +885,8 @@ function TaskLine({
   const tone = categoryColor.toneOf(task.category, taskTone(task.category));
   return (
     <li
-      className="flex items-start gap-1.5"
+      data-task-id={task.id}
+      className="flex cursor-grab items-start gap-1.5 active:cursor-grabbing"
       draggable
       onDragStart={(event) => {
         // B6: dragging an inbox task only carries its id — the text, 기타 and body stay intact.
@@ -806,6 +925,7 @@ function RoutineWeekRow({
   routine,
   routines,
   toneIndex,
+  showCategory = false,
   onOpen,
   onCount,
   onToggleNow,
@@ -813,10 +933,13 @@ function RoutineWeekRow({
   routine: Routine;
   routines: Routine[];
   toneIndex: number;
+  /** A23: 전체 루틴을 한 카드에 모아 보여 줄 때 어느 분류인지 작은 배지로 알려 줍니다. */
+  showCategory?: boolean;
   onOpen: () => void;
   onCount: (date: string, count: number) => void;
   onToggleNow: () => void;
 }) {
+  const categoryColor = useCategoryColors();
   const weekStart = startOfWeekISO(todayISO());
   const days = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(`${weekStart}T12:00:00`);
@@ -830,6 +953,17 @@ function RoutineWeekRow({
   return (
     <div>
       <div className="flex items-center gap-1.5">
+        {showCategory ? (
+          <span
+            data-routine-category={routine.category}
+            className={cn(
+              "flex-none rounded bg-white/70 px-1 text-[calc(11.5px*var(--fs))] font-semibold leading-[1.6] tracking-tight",
+              categoryColor.toneOf(routine.category, taskTone(routine.category)).text,
+            )}
+          >
+            {routine.category}
+          </span>
+        ) : null}
         <button type="button" onClick={onOpen} className="min-w-0 flex-1 truncate text-left text-[calc(14.5px*var(--fs))] text-ink-700 hover:text-ink-900">
           {routine.title}
         </button>
@@ -892,9 +1026,22 @@ function RoutineWeekRow({
   );
 }
 
+/** 설정된 개수를 넘는 할 일은 `+N개 더 보기`로 펼칩니다 — 3~10개 사이에서 고릅니다. */
+const PRIORITY_PREVIEW_MIN = 3;
+const PRIORITY_PREVIEW_MAX = 10;
+
+/**
+ * A20: 우선순위 탭 — 사분면마다 기본으로 보여 줄 할 일 수(3~10)와 이 탭에만 걸리는
+ * 기간(부터 ~ 까지)을 사용자가 고릅니다. 둘 다 이 화면 안에서만 쓰므로 진행·기록·히스토리
+ * 탭의 목록은 그대로입니다.
+ */
 function PriorityView({
   tasks,
   projects,
+  previewCount,
+  onPreviewCount,
+  range,
+  onRange,
   onOpenTask,
   onOpenProject,
   onToggle,
@@ -902,6 +1049,12 @@ function PriorityView({
 }: {
   tasks: ProjectTask[];
   projects: ProjectTask[];
+  /** 사분면 하나에 기본으로 보여 줄 할 일 수 (3~10) — 설정에 저장돼 새로고침해도 남습니다. */
+  previewCount: number;
+  onPreviewCount: (next: number) => void;
+  /** 우선순위 탭 전용 기간 — 비어 있으면 전체입니다. */
+  range: { from: string; to: string };
+  onRange: (next: { from: string; to: string }) => void;
   onOpenTask: (id: string) => void;
   onOpenProject: (id: string) => void;
   onToggle: (task: ProjectTask) => void;
@@ -910,6 +1063,41 @@ function PriorityView({
   const { update } = useData();
   const categoryColor = useCategoryColors();
   const open = sortTasksNewestFirst(tasks.filter((task) => task.status !== "완료" && task.status !== "취소"));
+
+  const { from, to } = range;
+  /** 펼쳐 둔 사분면 key 목록 */
+  const [expanded, setExpanded] = useState<string[]>([]);
+  const rangeActive = Boolean(from || to);
+  const clearRange = () => {
+    onRange({ from: "", to: "" });
+    setExpanded([]);
+  };
+  /** 시작일이 종료일보다 뒤로 가지 않게 반대쪽 날짜도 끌어 줍니다. */
+  const pickFrom = (next: string) => {
+    onRange({ from: next, to: next && to && to < next ? next : to });
+  };
+  const pickTo = (next: string) => {
+    onRange({ from: next && from && next < from ? next : from, to: next });
+  };
+
+  /** 기간 비교에 쓰는 하루 — 화면에 보이는 날짜(마감일 우선)와 같습니다. */
+  const dayOf = (task: ProjectTask) => (task.due ?? task.date ?? "").slice(0, 10);
+  const inRange = (task: ProjectTask) => {
+    if (!rangeActive) return true;
+    const day = dayOf(task);
+    // 날짜가 없는 할 일은 기간을 고르면 빠집니다 — 몇 개가 빠졌는지 아래에 적어 둡니다.
+    if (!day) return false;
+    if (from && day < from) return false;
+    if (to && day > to) return false;
+    return true;
+  };
+  const shown = open.filter(inRange);
+  const undated = rangeActive ? open.filter((task) => !dayOf(task)).length : 0;
+
+  const preview = Math.max(PRIORITY_PREVIEW_MIN, Math.min(PRIORITY_PREVIEW_MAX, Math.round(previewCount)));
+  const stepPreview = (delta: number) =>
+    onPreviewCount(Math.max(PRIORITY_PREVIEW_MIN, Math.min(PRIORITY_PREVIEW_MAX, preview + delta)));
+
   const quadrants = [
     { key: "do", label: "긴급·중요", urgent: true, important: true },
     { key: "plan", label: "중요", urgent: false, important: true },
@@ -920,9 +1108,13 @@ function PriorityView({
   const projectOf = (task: ProjectTask) => projects.find((project) => project.id === (task.projectIds[0] ?? "")) ?? null;
 
   const card = (quadrant: (typeof quadrants)[number]) => {
-    const items = open.filter((task) => task.urgent === quadrant.urgent && task.important === quadrant.important);
+    const items = shown.filter((task) => task.urgent === quadrant.urgent && task.important === quadrant.important);
+    const isExpanded = expanded.includes(quadrant.key);
+    const visible = isExpanded ? items : items.slice(0, preview);
+    const hidden = items.length - visible.length;
     return (
       <section
+        data-quadrant={quadrant.key}
         onDragOver={(event) => {
           if (event.dataTransfer.types.includes("text/diary-task")) event.preventDefault();
         }}
@@ -939,18 +1131,20 @@ function PriorityView({
           <h3 className={cn("rounded px-1 text-[calc(15px*var(--fs))] font-semibold leading-5", PRIORITY_TONES[quadrant.label].badge)}>
             {quadrant.label}
           </h3>
-          <span className="text-[calc(14px*var(--fs))] text-ink-400">{items.length}</span>
+          <span data-quadrant-count={quadrant.key} className="text-[calc(14px*var(--fs))] text-ink-400">
+            {items.length}
+          </span>
         </header>
 
         <ul className="mt-1.5 space-y-1.5">
-          {items.map((task) => {
+          {visible.map((task) => {
             const project = projectOf(task);
             const tone = categoryColor.toneOf(project?.category ?? task.category, taskTone(project?.category ?? task.category));
             // A10: a task with neither 긴급 nor 중요 is still unclassified — say so in small,
             // faint letters (기타 사분면 included), whether or not it already has a project.
             const unclassified = !task.urgent && !task.important;
             return (
-              <li key={task.id} className="flex items-start gap-1.5">
+              <li key={task.id} data-priority-task={task.id} className="flex items-start gap-1.5">
                 <button
                   type="button"
                   onClick={() => onToggle(task)}
@@ -974,7 +1168,37 @@ function PriorityView({
               </li>
             );
           })}
-          {items.length === 0 ? <li className="py-2 text-[calc(14px*var(--fs))] text-ink-300">비어 있습니다.</li> : null}
+          {items.length === 0 ? (
+            <li className="py-2 text-[calc(14px*var(--fs))] text-ink-300">
+              {rangeActive ? "이 기간에 해당하는 할 일이 없습니다." : "비어 있습니다."}
+            </li>
+          ) : null}
+          {hidden > 0 ? (
+            <li>
+              <button
+                type="button"
+                data-priority-more={quadrant.key}
+                aria-expanded={false}
+                onClick={() => setExpanded((current) => [...current, quadrant.key])}
+                className="pl-[1.375rem] text-[calc(13.5px*var(--fs))] text-ink-400 transition hover:text-ink-700"
+              >
+                +{hidden}개 더 보기
+              </button>
+            </li>
+          ) : null}
+          {isExpanded && items.length > preview ? (
+            <li>
+              <button
+                type="button"
+                data-priority-less={quadrant.key}
+                aria-expanded
+                onClick={() => setExpanded((current) => current.filter((key) => key !== quadrant.key))}
+                className="pl-[1.375rem] text-[calc(13.5px*var(--fs))] text-ink-400 transition hover:text-ink-700"
+              >
+                접기
+              </button>
+            </li>
+          ) : null}
         </ul>
 
         <button
@@ -989,24 +1213,109 @@ function PriorityView({
   };
 
   return (
-    <div className="mt-4 overflow-x-auto">
-      <div className="min-w-[42rem]">
-        <div className="grid grid-cols-[2.2rem_1fr_1fr] items-center gap-2 pb-1.5 text-center text-[calc(14px*var(--fs))] text-ink-400">
-          <span />
-          <span>급함</span>
-          <span>안 급함</span>
+    <div className="mt-4" data-priority-view="true">
+      {/* A20: 우선순위 탭 전용 도구줄 — 기간(부터~까지)과 사분면 표시 개수(3~10). */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <div className="flex w-full min-w-0 flex-wrap items-center gap-1.5 sm:w-auto sm:flex-1" data-priority-range="true">
+          <span className="hidden text-[calc(14px*var(--fs))] text-ink-500 sm:inline">기간</span>
+          <input
+            type="date"
+            aria-label="시작일"
+            data-priority-from="true"
+            value={from}
+            onChange={(event) => pickFrom(event.target.value)}
+            className="rounded-lg bg-paper-200 px-2 py-1 text-[calc(14px*var(--fs))] tabular-nums text-ink-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-paper-200"
+          />
+          <span className="text-[calc(14px*var(--fs))] text-ink-300">~</span>
+          <input
+            type="date"
+            aria-label="종료일"
+            data-priority-to="true"
+            value={to}
+            onChange={(event) => pickTo(event.target.value)}
+            className="rounded-lg bg-paper-200 px-2 py-1 text-[calc(14px*var(--fs))] tabular-nums text-ink-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-paper-200"
+          />
+          <button
+            type="button"
+            data-priority-range-clear="true"
+            onClick={clearRange}
+            disabled={!rangeActive}
+            className={cn(
+              "rounded-full px-2 py-1 text-[calc(13.5px*var(--fs))] transition",
+              rangeActive ? "bg-paper-200 text-ink-600 hover:bg-paper-300/70 hover:text-ink-900" : "text-ink-300",
+            )}
+          >
+            전체 보기
+          </button>
         </div>
-        <div className="grid grid-cols-[2.2rem_1fr_1fr] gap-2">
-          <div className="flex items-center justify-center text-[calc(14px*var(--fs))] text-ink-400">
-            <span className="writing-vertical">중요</span>
+
+        <div
+          className="ml-auto flex items-center gap-1.5 text-[calc(14px*var(--fs))] text-ink-500"
+          data-priority-count-control="true"
+          title="우선순위 사분면마다 처음에 보여 줄 할 일 개수입니다"
+        >
+          <span>표시</span>
+          <div className="inline-flex items-center gap-0.5 rounded-full border border-paper-300 bg-paper-200 p-0.5">
+            <button
+              type="button"
+              aria-label="표시 개수 줄이기"
+              data-priority-preview-step="-1"
+              onClick={() => stepPreview(-1)}
+              disabled={preview <= PRIORITY_PREVIEW_MIN}
+              className={cn(
+                "flex h-6 w-6 items-center justify-center rounded-full text-[calc(15px*var(--fs))] leading-none transition",
+                preview <= PRIORITY_PREVIEW_MIN ? "text-ink-300" : "text-ink-600 hover:bg-white hover:text-ink-900",
+              )}
+            >
+              −
+            </button>
+            <span data-priority-preview={preview} className="w-6 text-center text-[calc(14.5px*var(--fs))] font-semibold tabular-nums text-ink-800">
+              {preview}
+            </span>
+            <button
+              type="button"
+              aria-label="표시 개수 늘리기"
+              data-priority-preview-step="1"
+              onClick={() => stepPreview(1)}
+              disabled={preview >= PRIORITY_PREVIEW_MAX}
+              className={cn(
+                "flex h-6 w-6 items-center justify-center rounded-full text-[calc(15px*var(--fs))] leading-none transition",
+                preview >= PRIORITY_PREVIEW_MAX ? "text-ink-300" : "text-ink-600 hover:bg-white hover:text-ink-900",
+              )}
+            >
+              +
+            </button>
           </div>
-          {card(quadrants[0])}
-          {card(quadrants[1])}
-          <div className="flex items-center justify-center text-[calc(14px*var(--fs))] text-ink-400">
-            <span className="writing-vertical">안 중요</span>
+          <span className="text-ink-400">개씩</span>
+        </div>
+      </div>
+
+      {rangeActive ? (
+        <p data-priority-range-note="true" className="mt-1.5 text-[calc(13.5px*var(--fs))] leading-relaxed text-ink-400">
+          {from ? formatShort(from) : "처음"} ~ {to ? formatShort(to) : "끝"} 기간의 할 일만 보는 중
+          {undated > 0 ? ` · 날짜 없는 할 일 ${undated}개는 빠집니다` : ""}
+        </p>
+      ) : null}
+
+      <div className="mt-3 overflow-x-auto">
+        <div className="min-w-[42rem]">
+          <div className="grid grid-cols-[2.2rem_1fr_1fr] items-center gap-2 pb-1.5 text-center text-[calc(14px*var(--fs))] text-ink-400">
+            <span />
+            <span>급함</span>
+            <span>안 급함</span>
           </div>
-          {card(quadrants[2])}
-          {card(quadrants[3])}
+          <div className="grid grid-cols-[2.2rem_1fr_1fr] gap-2">
+            <div className="flex items-center justify-center text-[calc(14px*var(--fs))] text-ink-400">
+              <span className="writing-vertical">중요</span>
+            </div>
+            {card(quadrants[0])}
+            {card(quadrants[1])}
+            <div className="flex items-center justify-center text-[calc(14px*var(--fs))] text-ink-400">
+              <span className="writing-vertical">안 중요</span>
+            </div>
+            {card(quadrants[2])}
+            {card(quadrants[3])}
+          </div>
         </div>
       </div>
     </div>
