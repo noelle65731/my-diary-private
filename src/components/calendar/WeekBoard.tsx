@@ -492,7 +492,7 @@ export function WeekBoard({
           const tone = project ? taskTone(project.category) : null;
           return (
             <div key={key} className="grid border-b border-paper-300/80" style={grid}>
-              <div className="sticky left-0 z-20 flex min-h-[2rem] items-center gap-1 bg-white py-0.5 pr-1">
+              <div className="group/row sticky left-0 z-20 flex min-h-[2rem] items-center gap-1 bg-white py-0.5 pr-1">
                 {project ? (
                   <span className={cn("h-2 w-2 flex-none rounded-full", tone ? tone.dot : "bg-paper-400")} aria-hidden="true" />
                 ) : null}
@@ -509,7 +509,7 @@ export function WeekBoard({
                   <button
                     type="button"
                     onClick={() => onCreateTaskForProject(project.id)}
-                    className="flex-none rounded px-1 text-[16px] leading-none text-ink-300 hover:text-ink-600"
+                    className="flex-none rounded px-1 text-[16px] leading-none text-ink-400 opacity-0 transition hover:text-ink-800 group-hover/row:opacity-100"
                     aria-label="할 일 추가"
                   >
                     +

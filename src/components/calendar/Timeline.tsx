@@ -224,7 +224,7 @@ export function Timeline({
             <div
               key={minutes}
               className="absolute right-1.5 -translate-y-1/2 whitespace-nowrap text-[13px] tabular-nums text-ink-400 md:right-2 md:text-[13.5px]"
-              style={{ top: ((minutes - bounds.start) / 60) * hourHeight }}
+              style={{ top: Math.max(9, ((minutes - bounds.start) / 60) * hourHeight) }}
             >
               {hourLabel(minutes)}
             </div>
