@@ -6,6 +6,7 @@ import { useSettings } from "@/state/settings";
 import { useCategoryOptions } from "@/state/categories";
 import { Drawer, EmptyState, Segmented } from "@/components/common/primitives";
 import { taskTone } from "@/components/common/tone";
+import { useCategoryColors } from "@/state/category-colors";
 import { PASTELS } from "@/components/common/pastels";
 import { useProjectColors } from "@/state/project-colors";
 import { CheckIcon, PlusIcon } from "@/components/icons";
@@ -35,6 +36,7 @@ export function ProjectDrawer({
   const { data, create, update, remove } = useData();
   const { addCategory } = useSettings();
   const { pastelOf, chosenOf, setColor } = useProjectColors();
+  const categoryColor = useCategoryColors();
   /** A16: 이 화면에서 바로 분류를 바꾸거나 새로 만듭니다. */
   const categories = useCategoryOptions();
   const [newCategory, setNewCategory] = useState<string | null>(null);
@@ -212,7 +214,7 @@ export function ProjectDrawer({
                 { value: "done", label: `완료 ${done}` },
               ]}
             />
-            <span className={cn("chip", taskTone(project.category).bg, taskTone(project.category).text)}>
+            <span className={cn("chip", categoryColor.toneOf(project.category, taskTone(project.category)).bg, categoryColor.toneOf(project.category, taskTone(project.category)).text)}>
               {project.category}
             </span>
           </div>

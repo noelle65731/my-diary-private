@@ -5,6 +5,7 @@ import type { CalendarEvent } from "@/lib/types";
 import type { Tone } from "@/components/common/tone";
 import { categoryTone } from "@/components/common/tone";
 import { eventColorTone, type EventColorKey } from "@/components/common/event-colors";
+import { useCategoryColors } from "@/state/category-colors";
 
 /**
  * 일정 색은 노션 Calendar DB에 색 속성이 없어 이 브라우저에 저장합니다.
@@ -44,6 +45,8 @@ const EventColorContext = createContext<EventColorContextValue | null>(null);
 
 export function EventColorProvider({ children }: { children: ReactNode }) {
   const [colors, setColors] = useState<ColorMap>({});
+  /** A19: 분류에 직접 고른 색이 있으면 분류 기본색 대신 그 색을 씁니다. */
+  const categoryColors = useCategoryColors();
 
   useEffect(() => {
     setColors(read());
@@ -78,8 +81,9 @@ export function EventColorProvider({ children }: { children: ReactNode }) {
   const colorOf = useCallback((id: string) => colors[id] ?? null, [colors]);
 
   const toneFor = useCallback(
-    (event: Pick<CalendarEvent, "id" | "category">) => eventColorTone(colors[event.id]) ?? categoryTone(event.category),
-    [colors],
+    (event: Pick<CalendarEvent, "id" | "category">) =>
+      eventColorTone(colors[event.id]) ?? categoryColors.toneOf(event.category, categoryTone(event.category)),
+    [categoryColors, colors],
   );
 
   const value = useMemo<EventColorContextValue>(

@@ -569,7 +569,7 @@ export function CalendarTab() {
               onReorderAllDay={reorderAllDay}
               onToggleTask={toggleTask}
               onRoutineCount={(routine, date, count) => void setRoutineCount(routine, date, count)}
-              onCreateTaskForProject={(projectId) => setTaskId(projectId ? `new:${projectId}` : "new:")}
+              onCreateTaskForProject={(projectId, date) => setTaskId(`${projectId ? `new:${projectId}` : "new:"}${date ? `@${date}` : ""}`)}
               onCreateRoutine={() => setRoutineId("new")}
               mode={mode}
               hiddenProjectIds={customHidden.projects}
@@ -603,7 +603,7 @@ export function CalendarTab() {
               onReorderAllDay={reorderAllDay}
               onToggleTask={toggleTask}
               onRoutineCount={(routine, date, count) => void setRoutineCount(routine, date, count)}
-              onCreateTaskForProject={(projectId) => setTaskId(projectId ? `new:${projectId}` : "new:")}
+              onCreateTaskForProject={(projectId, date) => setTaskId(`${projectId ? `new:${projectId}` : "new:"}${date ? `@${date}` : ""}`)}
               onCreateRoutine={() => setRoutineId("new")}
               mode={mode}
               hiddenProjectIds={customHidden.projects}
@@ -706,7 +706,15 @@ export function CalendarTab() {
       />
       <TaskEditor
         open={taskId !== null && taskId.startsWith("new:")}
-        draft={taskId?.startsWith("new:") ? { kind: "할 일", projectId: taskId.slice(4) || undefined, date: cursor } : undefined}
+        draft={
+          taskId?.startsWith("new:")
+            ? (() => {
+                /* A19: 주간 보기의 칸에서 더한 할 일은 그 날짜로 시작합니다 — "new:<projectId>@<date>". */
+                const [projectId, date] = taskId.slice(4).split("@");
+                return { kind: "할 일" as const, projectId: projectId || undefined, date: date || cursor };
+              })()
+            : undefined
+        }
         onClose={() => setTaskId(null)}
       />
       <RoutineEditor

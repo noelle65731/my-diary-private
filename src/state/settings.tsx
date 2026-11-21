@@ -24,9 +24,8 @@ export interface Settings {
   monthDayItems: 3 | 4 | 5;
   calendarDefaultView: CalendarViewKey;
   calendarShowHidden: boolean;
+  /** A19: 카드 한 장에 보여 줄 남은 할 일 수 (3~8). */
   projectTaskPreview: number;
-  /** A7: how many recent completions a project card shows (2 or 3). */
-  projectCompletedPreview: 2 | 3;
   /** A6/A7: user-made categories shown next to 업무·개인·공부 in the filters. */
   customCategories: string[];
   /** A16: 분류 the user removed — hidden from filters and pickers (records keep their value). */
@@ -48,12 +47,11 @@ export const DEFAULT_SETTINGS: Settings = {
   monthDayItems: 3,
   calendarDefaultView: "week",
   calendarShowHidden: false,
-  projectTaskPreview: 4,
-  projectCompletedPreview: 2,
+  projectTaskPreview: 6,
   customCategories: [],
   hiddenCategories: [],
   nowOnly: false,
-  showCompletedTasks: true,
+  showCompletedTasks: false,
   binderPreviewLines: 3,
   binderShowSchedule: true,
   archiveDefaultCategory: "전체",
@@ -106,9 +104,21 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
           legacy && typeof parsed.fontSize === "number"
             ? Math.max(1, Math.min(FONT_STEPS, Math.round(parsed.fontSize) + 3))
             : parsed.fontSize;
-        const next = { ...DEFAULT_SETTINGS, ...parsed, fontSize: fontSize ?? DEFAULT_SETTINGS.fontSize, fontSizeVersion: 2 };
+        // A19: '완료 보기'의 뜻이 바뀌었습니다(남은 할 일 + 완료한 할 일만). 예전 저장값은 한 번만
+        // 기본(남은 할 일)으로 되돌려, 첫 화면에서 카드가 비어 보이지 않게 합니다.
+        const legacyCompleted = (parsed as { projectViewVersion?: number }).projectViewVersion !== 2;
+        const completed = legacyCompleted ? DEFAULT_SETTINGS.showCompletedTasks : (parsed.showCompletedTasks ?? DEFAULT_SETTINGS.showCompletedTasks);
+        const next = {
+          ...DEFAULT_SETTINGS,
+          ...parsed,
+          fontSize: fontSize ?? DEFAULT_SETTINGS.fontSize,
+          fontSizeVersion: 2,
+          showCompletedTasks: completed,
+          projectTaskPreview: Math.max(3, Math.min(8, Number(parsed.projectTaskPreview) || DEFAULT_SETTINGS.projectTaskPreview)),
+          projectViewVersion: 2,
+        };
         setSettings(next);
-        if (legacy) window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+        if (legacy || legacyCompleted) window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
       }
     } catch {
       /* ignore broken storage */

@@ -7,7 +7,7 @@ import { holidayName } from "@/lib/holidays";
 import { cn } from "@/lib/utils";
 import { mergeCategories } from "@/state/categories";
 import { priorityOf, projectEmoji, routineTone, taskTone } from "@/components/common/tone";
-import { CheckIcon, ChevronDownIcon, ChevronRightIcon } from "@/components/icons";
+import { CheckIcon, ChevronDownIcon, ChevronRightIcon, XIcon } from "@/components/icons";
 import {
   eventCoversDay,
   eventEndMinutes,
@@ -18,6 +18,7 @@ import { Timeline, minutesFromDrop } from "@/components/calendar/Timeline";
 import { useDnd } from "@/components/common/dnd";
 import { useEventColors } from "@/state/event-colors";
 import { useProjectColors } from "@/state/project-colors";
+import { useCategoryColors } from "@/state/category-colors";
 
 interface WeekBoardProps {
   days: string[];
@@ -41,7 +42,8 @@ interface WeekBoardProps {
   onResizeEvent?: (id: string, startTime: string, endTime: string) => void;
   onToggleTask: (task: ProjectTask) => void;
   onRoutineCount: (routine: Routine, date: string, count: number) => void;
-  onCreateTaskForProject: (projectId: string) => void;
+  /** A19: a phone tap on a project's day opens that day's list; adding from it keeps the date. */
+  onCreateTaskForProject: (projectId: string, date?: string) => void;
   onCreateRoutine: () => void;
   /** A6: 맞춤 — projects/routines hidden one by one in the week view. */
   mode?: ModeFilter;
@@ -94,6 +96,8 @@ export function WeekBoard({
   /** B5: all-day 4건 → 3건 + 펼치기, and the 시간표 lifts when the rows fold. */
   const [allDayExpanded, setAllDayExpanded] = useState(false);
   const [customOpen, setCustomOpen] = useState(false);
+  /** A19: 폰에서 프로젝트 칸을 누르면 열리는 그 날의 할 일 시트. */
+  const [cellSheet, setCellSheet] = useState<{ key: string; title: string; day: string } | null>(null);
   const [narrow, setNarrow] = useState(false);
   /** Lets the timetable take the full height when the user wants every event at once. */
   const [timeExpanded, setTimeExpanded] = useState(false);
@@ -107,8 +111,12 @@ export function WeekBoard({
   const tapOrigin = useRef<{ id: string; x: number; y: number; at: number } | null>(null);
   const { toneFor } = useEventColors();
   const { pastelOf } = useProjectColors();
+  /** A19: 분류에 직접 고른 색이 있으면 프로젝트 점·할 일 체크·루틴 배지에 그 색을 씁니다. */
+  const categoryColor = useCategoryColors();
   const dnd = useDnd();
   const scroller = useRef<HTMLDivElement | null>(null);
+  /** A19: 일정 영역(종일+시간표)의 스크롤 창 — 지금 시각이 보이도록 처음에 옮깁니다. */
+  const scheduleScroll = useRef<HTMLDivElement | null>(null);
   const dayKey = days.join(",");
   useEffect(() => {
     const query = window.matchMedia("(max-width: 767px)");
@@ -128,6 +136,22 @@ export function WeekBoard({
     const delta = box.left - frame.left;
     scroller.current.scrollLeft += delta - (scroller.current.clientWidth - box.width) / 2;
   }, [narrow, dayKey]);
+  /**
+   * A19: 데스크톱 기본 보기는 세 시간 남짓만 보이는 스크롤 창입니다. 예전에는 늘 시작 시각(9시)
+   * 에서 열려 하루가 지난 뒤에는 현재 시각 빨간 선을 볼 수 없었습니다. 창을 지금 근처로 옮깁니다.
+   */
+  useEffect(() => {
+    if (narrow || timeExpanded || scheduleCollapsed) return;
+    const node = scheduleScroll.current;
+    if (!node) return;
+    const clock = new Date();
+    const minutes = clock.getHours() * 60 + clock.getMinutes();
+    const top = ((minutes - startHour * 60) / 60) * 32;
+    const max = Math.max(0, node.scrollHeight - node.clientHeight);
+    node.scrollTop = Math.min(max, Math.max(0, top - 48));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [narrow, timeExpanded, scheduleCollapsed]);
+
   /* the frozen left column: wide enough on a phone to read a project or routine name;
      on a desktop a little wider so '브랜드 포트폴리오' is not cut to '브랜드 포…' */
   const gutter = narrow ? "6rem" : "9rem";
@@ -165,6 +189,18 @@ export function WeekBoard({
         return (order[(pa?.category ?? "개인") as keyof typeof order] ?? 1) - (order[(pb?.category ?? "개인") as keyof typeof order] ?? 1);
       });
   }, [weekTasks, projects, mode, hiddenProjectIds]);
+
+  /** A19: 프로젝트 칸 시트에 보여 줄 그 날의 할 일 — 진행 중인 것과 완료한 것 모두. */
+  const sheetTasks = useMemo(() => {
+    if (!cellSheet) return [];
+    return visibleTasks
+      .filter((task) => {
+        const projectId = task.projectIds[0] ?? "";
+        if (projectId !== cellSheet.key) return false;
+        return task.date === cellSheet.day || task.due === cellSheet.day;
+      })
+      .sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0) || String(a.createdAt).localeCompare(String(b.createdAt)));
+  }, [cellSheet, visibleTasks]);
 
   const routineGroups = useMemo(() => {
     const active = routines.filter(
@@ -233,7 +269,8 @@ export function WeekBoard({
     if (!narrow || timeExpanded) return null;
     const span = Math.min(3, Math.max(1, endHour - startHour));
     const now = new Date();
-    const nowMinutes = now.getHours() * 60 + now.getMinutes();
+    const nowHour = now.getHours();
+    const nowMinutes = nowHour * 60 + now.getMinutes();
     const upcoming = visibleEvents
       .filter(
         (event) =>
@@ -248,8 +285,10 @@ export function WeekBoard({
     if (upcoming.length > 0 && !upcoming.some((hour) => hour >= start && hour < start + span)) {
       start = Math.floor(upcoming[0]!);
     }
-    start = Math.max(startHour, Math.min(start, endHour - span));
-    return { start, end: start + span };
+    /* A19: 설정한 끝 시각을 지나도 창은 지금 시각을 따라갑니다 — 지금 빨간 띠가 사라지지 않게. */
+    start = Math.max(startHour, Math.min(start, Math.max(endHour - span, nowHour - span + 1)));
+    start = Math.max(startHour, Math.min(start, Math.max(startHour, 24 - span)));
+    return { start, end: Math.min(24, start + span) };
   })();
 
   return (
@@ -417,6 +456,7 @@ export function WeekBoard({
       </div>
       {scheduleCollapsed ? null : (
       <div
+        ref={scheduleScroll}
         data-week-scroll="true"
         style={
           narrow
@@ -594,32 +634,36 @@ export function WeekBoard({
         ) : null}
         {projectsCollapsed ? null : rows.map(([key, row]) => {
           const project = row.project;
-          const tone = project ? taskTone(project.category) : null;
+          const tone = project ? categoryColor.toneOf(project.category, taskTone(project.category)) : null;
           return (
             <div key={key} className="grid border-b border-paper-300/80 last:border-b-0" style={grid}>
+              {/* A19: 프로젝트 이름(색 점 포함, index 행 포함)은 왼쪽 열 안에서 가로·세로 가운데로
+                  모읍니다. 예전에는 이름이 왼쪽 벽에 붙어 있었습니다. */}
               <div
                 className={cn(
-                  "group/row sticky left-0 z-20 flex min-h-[2rem] items-center gap-1 border-r border-paper-300 py-0.5 pr-1",
+                  "group/row relative sticky left-0 z-20 flex min-h-[2rem] items-center justify-center border-r border-paper-300 px-1 py-0.5 text-center",
                   project ? pastelOf(project.id).bg : "bg-white",
                 )}
               >
-                {project ? (
-                  <span className={cn("h-2 w-2 flex-none rounded-full", tone ? tone.dot : "bg-paper-400")} aria-hidden="true" />
-                ) : null}
-                <button
-                  type="button"
-                  onClick={() => (project ? onOpenTask(project.id) : onCreateTaskForProject(""))}
-                  className="line-clamp-2 min-w-0 flex-1 break-keep text-left text-[calc(14px*var(--fs))] font-semibold leading-[1.15] text-ink-900 hover:text-ink-900"
-                  title={project?.title ?? "index"}
-                  aria-label={project?.title ?? "index"}
-                >
-                  {project?.title ?? "index"}
-                </button>
+                <div className="flex min-w-0 flex-1 items-center justify-center gap-1 text-center">
+                  {project ? (
+                    <span className={cn("h-2 w-2 flex-none rounded-full", tone ? tone.dot : "bg-paper-400")} aria-hidden="true" />
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => (project ? onOpenTask(project.id) : onCreateTaskForProject(""))}
+                    className="line-clamp-2 min-w-0 max-w-full break-keep text-center text-[calc(14px*var(--fs))] font-semibold leading-[1.15] text-ink-900 hover:text-ink-900"
+                    title={project?.title ?? "index"}
+                    aria-label={project?.title ?? "index"}
+                  >
+                    {project?.title ?? "index"}
+                  </button>
+                </div>
                 {project && !narrow ? (
                   <button
                     type="button"
                     onClick={() => onCreateTaskForProject(project.id)}
-                    className="flex-none rounded px-1 text-[calc(16px*var(--fs))] leading-none text-ink-400 opacity-0 transition hover:text-ink-800 group-hover/row:opacity-100"
+                    className="absolute right-0.5 top-1/2 -translate-y-1/2 rounded px-1 text-[calc(16px*var(--fs))] leading-none text-ink-400 opacity-0 transition hover:text-ink-800 group-hover/row:opacity-100"
                     aria-label="할 일 추가"
                   >
                     +
@@ -635,6 +679,14 @@ export function WeekBoard({
                     data-drop-zone="week-task-day"
                     data-drop-day={day}
                     data-week-task-day={day}
+                    data-week-project-cell={`${project?.title ?? "index"}:${day}`}
+                    onClick={(event) => {
+                      /* A19: 폰에서는 칸이 좁아, 칸을 한 번 누르면 그 날 이 프로젝트의 할 일을
+                         모아 보여 주고 거기서 새 할 일도 더합니다(할 일 줄을 누른 경우는 빼고). */
+                      if (!narrow) return;
+                      if ((event.target as HTMLElement).closest("[data-week-task]")) return;
+                      setCellSheet({ key, title: project?.title ?? "index", day });
+                    }}
                     className={cn(
                       "min-h-[2rem] border-l border-paper-300/80 py-0.5",
                       narrow ? "px-[3px]" : "px-1",
@@ -647,12 +699,13 @@ export function WeekBoard({
                         const waiting = task.status === "대기 중";
                         const canceled = task.status === "취소";
                         const priority = priorityOf(task);
-                        const taskColor = taskTone(task.category);
+                        const taskColor = categoryColor.toneOf(task.category, taskTone(task.category));
                         const memoLine = task.memo ? task.memo.split(/\r?\n/)[0]!.trim() : "";
                         return (
                           <div
                             key={task.id}
                             data-week-task={task.id}
+                            onClick={(event) => event.stopPropagation()}
                             onPointerDown={(event) => {
                               if (!onMoveTask) return;
                               dnd.start(
@@ -709,12 +762,14 @@ export function WeekBoard({
                                   onOpenTask(task.id);
                                   return;
                                 }
+                                /* A19: 폰에서는 할 일 제목을 눌러도 그 날 목록 시트로 갑니다 —
+                                   체크는 시트 안에서 한 번 더 누르면 됩니다. */
                                 const origin = tapOrigin.current;
                                 tapOrigin.current = null;
                                 const travelled = origin && origin.id === task.id ? Math.hypot(event.clientX - origin.x, event.clientY - origin.y) : 0;
-                                const elapsed = origin ? Date.now() - origin.at : 0;
-                                if (travelled > 10 || elapsed > 900) return;
-                                onToggleTask(task);
+                                if (travelled > 10) return;
+                                event.stopPropagation();
+                                setCellSheet({ key, title: project?.title ?? "index", day });
                               }}
                               aria-label={narrow ? `${task.title} ${done ? "완료 해제" : "완료"}` : undefined}
                               title={narrow ? (done ? "한 번 더 누르면 완료 해제" : "한 번 누르면 완료") : undefined}
@@ -771,7 +826,10 @@ export function WeekBoard({
                             {narrow ? (
                               <button
                                 type="button"
-                                onClick={() => onOpenTask(task.id)}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  onOpenTask(task.id);
+                                }}
                                 aria-label="상세 열기"
                                 title="상세 열기"
                                 className="mt-[1px] flex h-[20px] w-[15px] flex-none items-center justify-center rounded text-ink-300 transition hover:text-ink-800"
@@ -824,7 +882,7 @@ export function WeekBoard({
           routineRows.map(({ routine, category }, index) => {
             const target = routine.targetCount ?? 1;
             const tone = routineTone(index);
-            const categoryTone = taskTone(category);
+            const categoryTone = categoryColor.toneOf(category, taskTone(category));
             return (
               <div key={routine.id} className="grid border-t border-paper-300/50" style={grid}>
                 <button
@@ -888,6 +946,111 @@ export function WeekBoard({
 
         </div>
       </div>
+
+      {/* A19: 폰에서 프로젝트 칸을 누르면 — 그 날 이 프로젝트의 할 일을 한 화면에 모아 보여 줍니다. */}
+      {cellSheet ? (
+        <div className="fixed inset-0 z-50 flex items-end justify-center" data-week-cell-sheet={cellSheet.day}>
+          <button type="button" aria-label="닫기" onClick={() => setCellSheet(null)} className="absolute inset-0 bg-ink-900/10" />
+          <div
+            role="dialog"
+            aria-label={`${cellSheet.title} ${cellSheet.day} 할 일`}
+            className="relative z-10 flex max-h-[70dvh] w-full flex-col overflow-hidden rounded-t-3xl border border-paper-300 bg-white pb-[env(safe-area-inset-bottom)] shadow-lift animate-slide-up sm:mb-6 sm:w-[26rem] sm:rounded-3xl"
+          >
+            <div className="flex items-start gap-3 border-b border-paper-300/80 px-4 pb-2.5 pt-3">
+              <div className="min-w-0 flex-1">
+                <p className="text-[calc(13.5px*var(--fs))] text-ink-400">
+                  이 날 할 일 {sheetTasks.length > 0 ? `· ${sheetTasks.length}개` : ""}
+                </p>
+                <p className="mt-0.5 truncate text-[calc(16px*var(--fs))] font-semibold text-ink-900">
+                  {cellSheet.title} ·{" "}
+                  {(() => {
+                    const date = new Date(`${cellSheet.day}T12:00:00`);
+                    return `${date.getMonth() + 1}월 ${date.getDate()}일 (${weekdayKo(cellSheet.day)})`;
+                  })()}
+                </p>
+              </div>
+              <button type="button" onClick={() => setCellSheet(null)} className="icon-btn -mr-1 -mt-1" aria-label="닫기">
+                <XIcon size={16} />
+              </button>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+              {sheetTasks.length === 0 ? (
+                <p className="rounded-xl bg-paper-200/50 px-3 py-6 text-center text-[calc(14.5px*var(--fs))] text-ink-400">
+                  이 날 이 프로젝트에 예정된 할 일이 없습니다.
+                </p>
+              ) : (
+                <ul className="space-y-1.5">
+                  {sheetTasks.map((task) => {
+                    const done = task.status === "완료";
+                    const canceled = task.status === "취소";
+                    const waiting = task.status === "대기 중";
+                    const tone = categoryColor.toneOf(task.category, taskTone(task.category));
+                    const memoLine = task.memo ? task.memo.split(/\r?\n/)[0]!.trim() : "";
+                    return (
+                      <li key={task.id} data-week-cell-task={task.id} className="flex items-start gap-2">
+                        <button
+                          type="button"
+                          onClick={() => onToggleTask(task)}
+                          aria-label={done ? `${task.title} 완료 해제` : `${task.title} 완료`}
+                          aria-pressed={done}
+                          className={cn(
+                            "mt-[3px] flex h-[16px] w-[16px] flex-none items-center justify-center rounded-[4px] border transition",
+                            done ? cn(tone.solid, "border-transparent text-white") : "border-dashed border-ink-300 hover:border-ink-500",
+                          )}
+                        >
+                          {done ? <CheckIcon size={9} /> : null}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCellSheet(null);
+                            onOpenTask(task.id);
+                          }}
+                          className="min-w-0 flex-1 text-left"
+                        >
+                          <span
+                            className={cn(
+                              "block break-keep text-[calc(15px*var(--fs))] leading-snug",
+                              done || canceled ? "text-ink-400 line-through" : "text-ink-800",
+                            )}
+                          >
+                            {task.title}
+                          </span>
+                          {memoLine ? <span className="mt-0.5 block truncate text-[calc(13px*var(--fs))] text-ink-400">{memoLine}</span> : null}
+                        </button>
+                        {canceled ? (
+                          <span className="mt-[2px] flex-none rounded bg-paper-200 px-1 text-[calc(11.5px*var(--fs))] font-medium text-ink-500">취소</span>
+                        ) : waiting ? (
+                          <span className="mt-[2px] flex-none rounded bg-paper-200 px-1 text-[calc(11.5px*var(--fs))] font-medium text-ink-500">대기</span>
+                        ) : null}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between gap-2 border-t border-paper-300/80 bg-paper-50/60 px-4 py-2.5">
+              <button type="button" onClick={() => setCellSheet(null)} className="btn-ghost btn-xs">
+                닫기
+              </button>
+              <button
+                type="button"
+                data-week-cell-add="true"
+                onClick={() => {
+                  const target = cellSheet;
+                  setCellSheet(null);
+                  onCreateTaskForProject(target.key, target.day);
+                }}
+                className="btn-primary btn-xs"
+              >
+                + 할 일 추가
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

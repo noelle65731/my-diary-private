@@ -11,6 +11,7 @@ import { cn, categoryNameOf, matchesMode } from "@/lib/utils";
 import { formatShort, startOfWeekISO, todayISO, weekdayKo } from "@/lib/date";
 import { type ModeFilter, type ProjectTask, type Routine, type TaskCategory } from "@/lib/types";
 import { PRIORITY_TONES, priorityOf, routineTone, taskTone } from "@/components/common/tone";
+import { useCategoryColors } from "@/state/category-colors";
 import { ProjectIcon } from "@/components/common/ProjectIcon";
 import { CheckIcon, ChevronRightIcon, EyeIcon, InboxIcon, PlusIcon, RepeatIcon, TrashIcon } from "@/components/icons";
 import { ModeChips } from "@/components/common/ModeChips";
@@ -25,6 +26,8 @@ import { sortProjectTaskList, sortTasksNewestFirst } from "@/lib/order";
 type ProjectView = "tracks" | "priority" | "history" | "journal";
 /** A card keeps five open tasks in view — fewer than four hid the work that was left. */
 const CARD_OPEN_PREVIEW = 5;
+/** A19: 기본 보기의 '최근 기록'은 최근 완료한 할 일 두 개까지. */
+const RECENT_LOG_MAX = 2;
 
 const WEEKDAY_LETTERS = ["월", "화", "수", "목", "금", "토", "일"];
 
@@ -211,7 +214,7 @@ export function ProjectsTab() {
       <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
         <div className="min-w-0">
           <p className="text-[calc(13.5px*var(--fs))] text-ink-400">
-            트랙 {projectCount} · 남은 할 일 {openTasks.length}
+            진행 {projectCount} · 남은 할 일 {openTasks.length}
           </p>
           <h1 className="mt-1.5 text-[calc(20px*var(--fs))] font-semibold leading-none tracking-[-0.02em] text-ink-900 md:text-[calc(21px*var(--fs))]">프로젝트</h1>
         </div>
@@ -220,7 +223,7 @@ export function ProjectsTab() {
           <div className="seg-track">
             {(
               [
-                { value: "tracks", label: "트랙" },
+                { value: "tracks", label: "진행" },
                 { value: "priority", label: "우선순위" },
                 { value: "history", label: "기록" },
                 { value: "journal", label: "히스토리" },
@@ -559,7 +562,7 @@ export function ProjectsTab() {
 }
 
 /**
- * 프로젝트 카드 — 트랙과 히스토리가 같은 규격으로 씁니다.
+ * 프로젝트 카드 — 진행과 히스토리가 같은 규격으로 씁니다.
  * 배경은 프로젝트마다 자동으로 돌아가는 아주 옅은 파스텔입니다.
  */
 function ProjectCard({
@@ -594,17 +597,23 @@ function ProjectCard({
   const { update } = useData();
   const { settings } = useSettings();
   const { pastelOf } = useProjectColors();
+  const categoryColor = useCategoryColors();
   const pastel = pastelOf(project.id);
-  const tone = taskTone(project.category);
+  const tone = categoryColor.toneOf(project.category, taskTone(project.category));
   const children = sortProjectTaskList(tasks.filter((task) => !task.trash && task.projectIds.includes(project.id)));
   const open = children.filter((task) => task.status !== "완료" && task.status !== "취소");
   const orderedOpen = sortTasksNewestFirst(open);
-  const recent = settings.showCompletedTasks
-    ? children
-        .filter((task) => task.status === "완료")
-        .sort((a, b) => (b.doneAt ?? "").localeCompare(a.doneAt ?? ""))
-        .slice(0, settings.projectCompletedPreview)
-    : [];
+  /** A19: 완료한 할 일 — 최근에 끝낸 순서. */
+  const completed = children
+    .filter((task) => task.status === "완료")
+    .sort((a, b) => (b.doneAt ?? "").localeCompare(a.doneAt ?? ""));
+  /** A19: '완료 보기'를 켜면 카드가 완료한 할 일만 보여 줍니다(히스토리 카드도 같은 규격). */
+  const doneOnly = mode === "history" || (mode === "track" && settings.showCompletedTasks);
+  /** 카드 한 장에 보여 줄 개수 — 설정(3~8)을 따릅니다. */
+  const previewCount = Math.max(1, settings.projectTaskPreview);
+  const previewList = doneOnly ? completed : orderedOpen;
+  /** 기본 보기 아래 '최근 기록'은 토글과 상관없이 늘 보이고, 최근 두 개까지만 보여 줍니다. */
+  const recent = doneOnly ? [] : completed.slice(0, RECENT_LOG_MAX);
   const last = [...children].sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""))[0];
 
   return (
@@ -666,32 +675,31 @@ function ProjectCard({
       </header>
 
       <p className="mt-1.5 text-[calc(14px*var(--fs))] text-ink-500">
-        {mode === "history" ? `완료한 할 일 ${children.filter((task) => task.status === "완료").length}` : `남은 할 일 ${open.length}`}
+        {doneOnly ? `완료한 할 일 ${completed.length}` : `남은 할 일 ${open.length}`}
       </p>
       <ul className="mt-1 space-y-1.5">
-        {(mode === "history" ? [...children].filter((task) => task.status === "완료").sort((a, b) => (b.doneAt ?? "").localeCompare(a.doneAt ?? "")) : orderedOpen)
-          .slice(0, CARD_OPEN_PREVIEW + 1)
-          .map((task) => (
-            <TaskLine key={task.id} task={task} onToggle={() => onToggleTask(task)} onOpen={() => onOpenTask(task.id)} />
-          ))}
-        {mode === "history" && children.filter((task) => task.status === "완료").length === 0 && open.length === 0 ? (
-          <li className="text-[calc(14px*var(--fs))] text-ink-400">남은 할 일이 없습니다.</li>
+        {previewList.slice(0, previewCount).map((task) => (
+          <TaskLine key={task.id} task={task} onToggle={() => onToggleTask(task)} onOpen={() => onOpenTask(task.id)} />
+        ))}
+        {previewList.length === 0 ? (
+          <li className="text-[calc(14px*var(--fs))] text-ink-400">
+            {doneOnly ? "완료한 할 일이 없습니다." : "남은 할 일이 없습니다."}
+          </li>
         ) : null}
-        {mode === "track" && open.length === 0 ? <li className="text-[calc(14px*var(--fs))] text-ink-400">남은 할 일이 없습니다.</li> : null}
-        {mode === "track" && open.length > CARD_OPEN_PREVIEW ? (
+        {previewList.length > previewCount ? (
           <li>
             <button
               type="button"
               onClick={() => onOpenProject(project.id)}
               className="pl-[1.375rem] text-[calc(13.5px*var(--fs))] text-ink-500 transition hover:text-ink-700"
             >
-              +{open.length - CARD_OPEN_PREVIEW}개 더 보기
+              +{previewList.length - previewCount}개 더 보기
             </button>
           </li>
         ) : null}
       </ul>
 
-      {mode === "track" && recent.length > 0 ? (
+      {recent.length > 0 ? (
         <div className="mt-2 border-t border-black/[0.06] pt-1.5">
           <p className="text-[calc(13px*var(--fs))] text-ink-400">최근 기록</p>
           <ul className="mt-0.5 space-y-0.5">
@@ -744,9 +752,10 @@ function TaskLine({
   onOpen: () => void;
 }) {
   const { update } = useData();
+  const categoryColor = useCategoryColors();
   const done = task.status === "완료";
   const priority = priorityOf(task);
-  const tone = taskTone(task.category);
+  const tone = categoryColor.toneOf(task.category, taskTone(task.category));
   return (
     <li
       className="flex items-start gap-1.5"
@@ -890,6 +899,7 @@ function PriorityView({
   onCreateTask: (category: TaskCategory, urgent: boolean, important: boolean) => void;
 }) {
   const { update } = useData();
+  const categoryColor = useCategoryColors();
   const open = sortTasksNewestFirst(tasks.filter((task) => task.status !== "완료" && task.status !== "취소"));
   const quadrants = [
     { key: "do", label: "긴급·중요", urgent: true, important: true },
@@ -926,7 +936,7 @@ function PriorityView({
         <ul className="mt-1.5 space-y-1.5">
           {items.map((task) => {
             const project = projectOf(task);
-            const tone = taskTone(project?.category ?? task.category);
+            const tone = categoryColor.toneOf(project?.category ?? task.category, taskTone(project?.category ?? task.category));
             // A10: a task with neither 긴급 nor 중요 is still unclassified — say so in small,
             // faint letters (기타 사분면 included), whether or not it already has a project.
             const unclassified = !task.urgent && !task.important;
@@ -1015,7 +1025,7 @@ function HistoryView({
   onRestoreRoutine: (routine: Routine) => void;
   onRestoreProject: (project: ProjectTask) => void;
 }) {
-  /** 완료·취소·History·숨김까지 모두 카드로 보여 줍니다 (트랙과 같은 규격). */
+  /** 완료·취소·History·숨김까지 모두 카드로 보여 줍니다 (진행과 같은 규격). */
   const finishedProjects = projects.filter(
     (project) => !project.trash && (project.status === "완료" || project.status === "취소" || project.history || project.hidden),
   );

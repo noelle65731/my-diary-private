@@ -7,6 +7,8 @@ import { holidayName } from "@/lib/holidays";
 import { cn } from "@/lib/utils";
 import { routineTone, taskTone } from "@/components/common/tone";
 import { useEventColors } from "@/state/event-colors";
+import { useCategoryColors } from "@/state/category-colors";
+import { useProjectColors } from "@/state/project-colors";
 import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, XIcon } from "@/components/icons";
 import { eventCoversDay, routineCountForDay } from "@/components/calendar/calendar-utils";
 
@@ -74,6 +76,14 @@ export function MonthView({
 }: MonthViewProps) {
   const today = todayISO();
   const { toneFor } = useEventColors();
+  /** A19: 분류에 직접 고른 색이 있으면 할 일 점·배지에 그 색을 씁니다. */
+  const categoryColor = useCategoryColors();
+  /** A19: 할 일 밑줄은 그 할 일이 속한 프로젝트의 색을 그대로 씁니다. */
+  const { pastelOf } = useProjectColors();
+  const projectById = useMemo(
+    () => new Map(tasks.filter((task) => task.kind === "프로젝트").map((task) => [task.id, task])),
+    [tasks],
+  );
   const year = Number(cursor.slice(0, 4));
   const month0 = Number(cursor.slice(5, 7)) - 1;
   const matrix = useMemo(() => monthMatrix(year, month0, weekStartsOn), [year, month0, weekStartsOn]);
@@ -94,10 +104,6 @@ export function MonthView({
     query.addEventListener("change", sync);
     return () => query.removeEventListener("change", sync);
   }, []);
-  const openDayFirst = (day: string) => {
-    if (touchLayout) setOpenDay(day);
-    else onSelectDay(day);
-  };
   const openItemFirst = (kind: "event" | "task", id: string, day: string) => {
     if (touchLayout) {
       setOpenDay(day);
@@ -204,9 +210,13 @@ export function MonthView({
               return (
                 <div
                   key={day}
-                  onClick={() => {
-                    // A16: on a phone the whole cell leads to that day's list.
-                    if (touchLayout) setOpenDay(day);
+                  data-month-cell={day}
+                  onClick={(event) => {
+                    // A16/A19: on a phone the whole cell leads to that day's list, and on a
+                    // desktop the white space, the date and +N do too — chips keep opening
+                    // their own record, so a click that landed on one is left alone.
+                    if ((event.target as HTMLElement).closest("[data-month-item]")) return;
+                    setOpenDay(day);
                   }}
                   onDragOver={(event) => {
                     if (onMoveItem) event.preventDefault();
@@ -226,7 +236,7 @@ export function MonthView({
                   <div className="flex items-center justify-between">
                     <button
                       type="button"
-                      onClick={() => openDayFirst(day)}
+                      onClick={() => setOpenDay(day)}
                       className={cn(
                         "flex h-[1.25rem] min-w-[1.25rem] items-center justify-center rounded-full px-1 text-[calc(14px*var(--fs))] font-medium tabular-nums transition md:h-[1.4rem] md:min-w-[1.4rem] md:text-[calc(15px*var(--fs))]",
                         isToday
@@ -275,7 +285,10 @@ export function MonthView({
                         );
                       }
                       const taskDone = item.task.status === "완료";
-                      const taskColor = taskTone(item.task.category);
+                      const taskColor = categoryColor.toneOf(item.task.category, taskTone(item.task.category));
+                      const owner = item.task.projectIds[0] ? projectById.get(item.task.projectIds[0]!) : undefined;
+                      /* A19: 네모 배경 대신 프로젝트 색 밑줄 하나 — 프로젝트가 없으면 옅은 회색. */
+                      const underline = owner ? pastelOf(owner.id).line : "#e5e7eb";
                       return (
                         <div
                           key={item.task.id}
@@ -310,8 +323,14 @@ export function MonthView({
                               "min-w-0 flex-1 truncate text-left text-[calc(13px*var(--fs))] leading-[1.35] text-ink-500 md:text-[calc(14px*var(--fs))] md:leading-[1.45]",
                               taskDone && "text-ink-300 line-through",
                             )}
+                            data-project-underline={owner ? owner.id : "none"}
                           >
-                            {item.task.title}
+                            <span
+                              className="border-b-2 pb-[0.5px]"
+                              style={{ borderColor: underline }}
+                            >
+                              {item.task.title}
+                            </span>
                           </button>
                         </div>
                       );
@@ -403,6 +422,7 @@ function DayListPanel({
   onCreate?: () => void;
 }) {
   const { toneFor } = useEventColors();
+  const categoryColor = useCategoryColors();
   const holiday = holidayName(day);
   const allDay = items.filter((item) => item.type === "event" && item.event.allDay) as { type: "event"; event: CalendarEvent }[];
   const timed = items.filter((item) => item.type === "event" && !item.event.allDay) as { type: "event"; event: CalendarEvent }[];
@@ -517,7 +537,7 @@ function DayListPanel({
               <p className="mb-1 text-[calc(13.5px*var(--fs))] text-ink-400">할 일 {dayTasks.length}</p>
               <ul className="space-y-0.5">
                 {dayTasks.map(({ task }) => {
-                  const tone = taskTone(task.category);
+                  const tone = categoryColor.toneOf(task.category, taskTone(task.category));
                   const waiting = task.status === "대기 중";
                   return (
                     <li key={task.id} className="flex items-start gap-2">

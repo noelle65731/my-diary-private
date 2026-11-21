@@ -104,6 +104,14 @@ export function Timeline({
     let start = startHour * 60;
     let end = endHour * 60;
     if (!fixedWindow) {
+      /* A19: 설정한 시작·끝 시각 밖에 있더라도 오늘 화면이라면 지금 시각까지는 그립니다.
+         (예: 19시까지 설정했는데 19시 30분이면 현재 시각 빨간 선이 사라져 버렸습니다.) */
+      if (days.includes(today)) {
+        const clock = new Date(nowTick);
+        const minutes = clock.getHours() * 60 + clock.getMinutes();
+        start = Math.min(start, Math.floor(minutes / 60) * 60);
+        end = Math.max(end, Math.ceil((minutes + 1) / 60) * 60);
+      }
       for (const event of active) {
         if (event.allDay || event.kind !== "일정") continue;
         for (const day of days) {
@@ -114,7 +122,7 @@ export function Timeline({
       }
     }
     return { start: Math.max(0, start), end: Math.min(24 * 60, Math.max(end, start + 60)) };
-  }, [active, days, endHour, fixedWindow, startHour]);
+  }, [active, days, endHour, fixedWindow, nowTick, startHour, today]);
 
   const totalHeight = ((bounds.end - bounds.start) / 60) * hourHeight;
   const marks = useMemo(() => {
@@ -246,9 +254,15 @@ export function Timeline({
 
   return (
     <div className="relative">
+      {/* A19: 현재 시각 빨간 띠 — 오늘 열 위로 또렷하게 지나가도록 칸보다 위(z-30)에 그립니다. */}
       {showNow ? (
-        <div className="pointer-events-none absolute right-0 z-10 h-px bg-red-400" style={{ top: nowTop, left: gutterWidth }}>
-          <span className="absolute -left-[3px] top-1/2 h-[7px] w-[7px] -translate-y-1/2 rounded-full bg-red-500" />
+        <div
+          data-now-line="true"
+          title={`지금 ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`}
+          className="pointer-events-none absolute right-0 z-30 h-[2px] bg-[#ef4444]"
+          style={{ top: nowTop - 1, left: gutterWidth }}
+        >
+          <span className="absolute -left-[4px] top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-[#ef4444] shadow-[0_0_0_1.5px_white]" />
         </div>
       ) : null}
       <div className="grid" style={{ gridTemplateColumns: `${gutterWidth} repeat(${days.length}, minmax(0, 1fr))` }}>

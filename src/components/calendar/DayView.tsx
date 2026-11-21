@@ -7,6 +7,7 @@ import { holidayName } from "@/lib/holidays";
 import { cn } from "@/lib/utils";
 import { routineTone, taskTone } from "@/components/common/tone";
 import { useEventColors } from "@/state/event-colors";
+import { useCategoryColors } from "@/state/category-colors";
 import { ProjectIcon } from "@/components/common/ProjectIcon";
 import { CheckIcon, PencilIcon, PlusIcon } from "@/components/icons";
 import {
@@ -60,6 +61,7 @@ export function DayView({
 }: DayViewProps) {
   const dnd = useDnd();
   const { toneFor } = useEventColors();
+  const categoryColor = useCategoryColors();
   const visible = events.filter((event) => !event.trash && (hiddenIncluded || !event.hidden));
   const allDay = allDayEventsForDay(visible, day);
   const timed = timedEventsForDay(visible, day).filter((event) => !event.canceled);
@@ -174,7 +176,7 @@ export function DayView({
         ) : null}
 
         {groups.map(({ project, tasks: items }) => {
-          const tone = taskTone(project?.category ?? "개인");
+          const tone = categoryColor.toneOf(project?.category ?? "개인", taskTone(project?.category ?? "개인"));
           return (
             <section key={project?.id ?? "inbox"} className="rounded-2xl bg-paper-200/50 px-3 py-2.5">
               <header className="flex items-center gap-2">

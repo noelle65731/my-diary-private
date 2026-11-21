@@ -7,6 +7,8 @@ import { useUi } from "@/state/ui";
 import { Modal, Segmented, Toggle } from "@/components/common/primitives";
 import { cn } from "@/lib/utils";
 import { ARCHIVE_KINDS } from "@/lib/types";
+import { CATEGORY_COLOR_CHOICES, useCategoryColors } from "@/state/category-colors";
+import { useCategoryOptions } from "@/state/categories";
 import { DB_ENV_KEYS, DB_LABELS, DB_ORDER, DB_PURPOSES, DB_SETUP_STEPS, KIT_VERSION } from "@/lib/db-meta";
 
 const SECTIONS = [
@@ -34,6 +36,9 @@ export function SettingsDialog() {
   const { settingsOpen, setSettingsOpen } = useUi();
   const { settings, set, reset, removeCategory } = useSettings();
   const { status, demo, refresh, logout } = useData();
+  /** A19: 분류별 기본 색을 직접 고르는 팔레트. */
+  const categoryOptions = useCategoryOptions();
+  const { colorOf, setColor, resetAll } = useCategoryColors();
   const [section, setSection] = useState<SectionKey>("look");
 
   return (
@@ -191,24 +196,82 @@ export function SettingsDialog() {
                 label="처음부터 숨긴 항목 표시"
                 description="끄면 숨긴 항목은 '전체' 모드에서만 보입니다"
               />
+              {/* A19: 분류 색깔 — 업무·개인·공부(그리고 더한 분류)의 기본 색을 직접 고릅니다. */}
+              <div data-category-colors="true">
+                <div className="mb-1.5 flex items-baseline justify-between gap-2">
+                  <p className="text-[calc(15.5px*var(--fs))] font-medium text-ink-800">분류 색깔</p>
+                  <button type="button" onClick={resetAll} className="btn-ghost btn-xs">
+                    모두 기본색
+                  </button>
+                </div>
+                <p className="mb-2 text-[calc(14px*var(--fs))] leading-relaxed text-ink-400">
+                  일정·할 일·루틴에 함께 쓰이는 분류 색입니다. 일정 하나에 따로 고른 색이 있으면 그 색이 먼저 나옵니다.
+                </p>
+                <ul className="space-y-2">
+                  {categoryOptions.map((category) => {
+                    const current = colorOf(category);
+                    return (
+                      <li key={category} className="rounded-xl border border-paper-300 bg-white px-2.5 py-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[calc(15px*var(--fs))] font-medium text-ink-900">{category}</span>
+                          {current === "default" ? (
+                            <span className="text-[calc(13px*var(--fs))] text-ink-400">기본색</span>
+                          ) : (
+                            <button type="button" onClick={() => setColor(category, "default")} className="btn-ghost btn-xs">
+                              기본색으로
+                            </button>
+                          )}
+                        </div>
+                        <div className="mt-1.5 flex flex-wrap gap-1.5">
+                          {CATEGORY_COLOR_CHOICES.map((choice) => (
+                            <button
+                              key={choice.key}
+                              type="button"
+                              data-category-color={`${category}:${choice.key}`}
+                              aria-label={`${category} ${choice.label}`}
+                              aria-pressed={current === choice.key}
+                              title={choice.label}
+                              onClick={() => setColor(category, choice.key)}
+                              className={cn(
+                                "h-[1.15rem] w-[1.15rem] rounded-full transition",
+                                choice.swatch,
+                                current === choice.key ? "ring-2 ring-ink-900 ring-offset-1" : "hover:scale-110",
+                              )}
+                            />
+                          ))}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
             </>
           ) : null}
 
           {section === "projects" ? (
             <>
-              <div>
+              {/* A19: 카드 한 장에 보여 줄 남은 할 일 수 (3~8). */}
+              <div data-project-preview="true">
                 <div className="mb-1 flex items-baseline justify-between">
-                  <p className="text-[calc(15.5px*var(--fs))] text-ink-800">카드에 보이는 할 일 수</p>
+                  <p className="text-[calc(15.5px*var(--fs))] text-ink-800">남은 할 일 표시 개수</p>
                   <span className="text-[calc(14px*var(--fs))] text-ink-400">{settings.projectTaskPreview}개</span>
                 </div>
-                <input
-                  type="range"
-                  min={2}
-                  max={8}
-                  value={settings.projectTaskPreview}
-                  onChange={(event) => set("projectTaskPreview", Number(event.target.value))}
-                  className="w-full accent-ink-900"
+                <Segmented<"3" | "4" | "5" | "6" | "7" | "8">
+                  value={String(settings.projectTaskPreview) as "3" | "4" | "5" | "6" | "7" | "8"}
+                  onChange={(value) => set("projectTaskPreview", Number(value))}
+                  size="sm"
+                  options={[
+                    { value: "3", label: "3" },
+                    { value: "4", label: "4" },
+                    { value: "5", label: "5" },
+                    { value: "6", label: "6" },
+                    { value: "7", label: "7" },
+                    { value: "8", label: "8" },
+                  ]}
                 />
+                <p className="mt-1 text-[calc(14px*var(--fs))] leading-relaxed text-ink-400">
+                  프로젝트 카드마다 ‘남은 할 일’과 ‘완료한 할 일’을 이 개수까지만 보여 줍니다. 아래 ‘최근 기록’은 최근 완료한 두 개를 늘 보여 줍니다.
+                </p>
               </div>
               <Toggle
                 checked={settings.showCompletedTasks}
@@ -216,18 +279,6 @@ export function SettingsDialog() {
                 label="완료한 일도 기본으로 보기"
                 description="프로젝트 서랍에서 완료 항목을 접지 않습니다"
               />
-              <div>
-                <p className="label">카드에 보이는 최근 완료 기록</p>
-                <Segmented<"2" | "3">
-                  value={String(settings.projectCompletedPreview) as "2" | "3"}
-                  onChange={(value) => set("projectCompletedPreview", value === "3" ? 3 : 2)}
-                  size="sm"
-                  options={[
-                    { value: "2", label: "2개" },
-                    { value: "3", label: "3개" },
-                  ]}
-                />
-              </div>
               <div>
                 <p className="label">내 분류</p>
                 <div className="flex flex-wrap items-center gap-1.5">
