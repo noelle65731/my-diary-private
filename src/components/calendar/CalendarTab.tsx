@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useData } from "@/state/store";
 import { useSettings, type CalendarViewKey } from "@/state/settings";
+import { useCategoryOptions } from "@/state/categories";
 import { useTabReset, useUi } from "@/state/ui";
 import {
   addDaysISO,
@@ -20,7 +21,7 @@ import {
 import { holidayName } from "@/lib/holidays";
 import { cn, matchesMode } from "@/lib/utils";
 import type { CalendarEvent, ModeFilter, ProjectTask, Routine } from "@/lib/types";
-import { currentCalendarCategory } from "@/lib/types";
+import { currentCalendarCategory, isLegacyCalendarCategory } from "@/lib/types";
 import { ChevronLeftIcon, ChevronRightIcon, PlusIcon, SearchIcon, TrashIcon } from "@/components/icons";
 import { ModeChips } from "@/components/common/ModeChips";
 import { WeekBoard } from "@/components/calendar/WeekBoard";
@@ -44,16 +45,16 @@ const VIEWS: { value: CalendarViewKey; label: string }[] = [
   { value: "day", label: "일간" },
 ];
 
-const BASE_CATEGORIES = ["업무", "개인", "공부"];
-
-function eventMode(event: CalendarEvent): "업무" | "개인" | "공부" {
-  // A10: now 분류 is 업무·개인·공부; an old value is read as its current equivalent.
-  return currentCalendarCategory(event.category);
+function eventMode(event: CalendarEvent): string {
+  // A10: an old value is read as its current equivalent; A16: a user-made 분류 stays as it is.
+  return isLegacyCalendarCategory(event.category) ? currentCalendarCategory(event.category) : event.category;
 }
 
 export function CalendarTab() {
   const { data, update, setRoutineCount, findItem, create } = useData();
-  const { settings, addCategory } = useSettings();
+  const { settings, addCategory, removeCategory } = useSettings();
+  // A16: the 분류 filter shares one list with the routine/task pickers.
+  const categoryOptions = useCategoryOptions();
   const { focus, clearFocus, openBinderForDate, setSearchOpen, openTrash, views, setView: setTabView } = useUi();
 
   const today = todayISO();
@@ -138,13 +139,24 @@ export function CalendarTab() {
   const threeStart = cursor;
   const hiddenIncluded = mode === "all" || settings.calendarShowHidden;
 
+  // A16: NOW 모드가 켜져 있으면 NOW 숨김 항목은 모든 보기에서 가립니다.
+  const hiddenProjects = useMemo(
+    () => data.projects.filter((project) => project.kind === "프로젝트" && project.hidden).map((project) => project.id),
+    [data.projects],
+  );
   const events = useMemo(
-    () => data.calendar.filter((event) => matchesMode(mode, event, eventMode(event))),
-    [data.calendar, mode],
+    () => data.calendar.filter((event) => (!settings.nowOnly || !event.hidden) && matchesMode(mode, event, eventMode(event))),
+    [data.calendar, mode, settings.nowOnly],
   );
   const tasks = useMemo(
-    () => data.projects.filter((task) => task.kind === "할 일" && matchesMode(mode, task, task.category)),
-    [data.projects, mode],
+    () =>
+      data.projects.filter(
+        (task) =>
+          task.kind === "할 일" &&
+          (!settings.nowOnly || (!task.hidden && !task.projectIds.some((id) => hiddenProjects.includes(id)))) &&
+          matchesMode(mode, task, task.category),
+      ),
+    [data.projects, mode, settings.nowOnly, hiddenProjects],
   );
   // A6: a project sent to History never appears in the week's project rows.
   const projects = useMemo(
@@ -153,8 +165,11 @@ export function CalendarTab() {
   );
   // A6: routine rows follow the same mode filter as projects.
   const routines = useMemo(
-    () => data.routines.filter((routine) => !routine.trash && matchesMode(mode, routine, routine.category)),
-    [data.routines, mode],
+    () =>
+      data.routines.filter(
+        (routine) => !routine.trash && (!settings.nowOnly || !routine.hidden) && matchesMode(mode, routine, routine.category),
+      ),
+    [data.routines, mode, settings.nowOnly],
   );
 
   const allWeekDays = weekDays(weekStart, settings.weekStartsOn);
@@ -399,9 +414,10 @@ export function CalendarTab() {
           <ModeChips
             mode={mode}
             onChange={setMode}
-            categories={[...BASE_CATEGORIES, ...settings.customCategories.filter((item) => !BASE_CATEGORIES.includes(item))]}
+            categories={categoryOptions}
             showCustom={view === "week" || view === "three"}
             onAddCategory={addCategory}
+            onRemoveCategory={removeCategory}
           />
           {mode !== "all" && data.calendar.some((event) => event.hidden && !event.trash) ? (
             <button

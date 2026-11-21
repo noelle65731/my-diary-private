@@ -6,6 +6,7 @@ import { useSettings } from "@/state/settings";
 import { useTabReset, useUi } from "@/state/ui";
 import {
   addDaysISO,
+  diaryTitle,
   formatFullKo,
   isoWeekNumber,
   formatMonthKo,
@@ -94,8 +95,7 @@ export function BinderTab() {
 
   /** Inline writing in the weekly spread — the first keystroke creates the record. */
   const createInline = async (day: string, body: string) => {
-    const title = inlineTitle(body, day);
-    const created = await create("binder", { title, kind: "일기", date: day, body });
+    const created = await create("binder", { title: autoTitle(day), kind: "일기", date: day, body });
     return created?.id ?? null;
   };
 
@@ -277,13 +277,15 @@ function SpreadHeader({ label, start }: { label: string; start: string }) {
   );
 }
 
-/** The first line of what was typed becomes the record's title. */
-function inlineTitle(body: string, day: string): string {
-  const first = body
-    .split(/\r?\n/)
-    .map((line) => line.replace(/^#+\s*/, "").trim())
-    .find((line) => line.length > 0);
-  return first ? first.slice(0, 60) : `${day} 일기`;
+/** A16: a day's record names itself — 11월 21일 토요일 바인더 — so writing is body-only. */
+function autoTitle(day: string): string {
+  return diaryTitle(day);
+}
+
+/** A title the app wrote itself (or none at all) — safe to replace on the next save. */
+function isAutoTitle(title: string | null | undefined, day: string): boolean {
+  if (!title) return true;
+  return title === `${day} 일기` || title === autoTitle(day);
 }
 
 function DiaryRow({
@@ -334,7 +336,8 @@ function DiaryRow({
       return;
     }
     const patch: Record<string, unknown> = { body };
-    if (!entry || entry.title === `${day} 일기`) patch.title = inlineTitle(body, day);
+    // A16: only a title the app wrote is refreshed; one the user typed stays as it is.
+    if (isAutoTitle(entry?.title, day)) patch.title = autoTitle(day);
     const ok = await onSaveInline(idRef.current, patch);
     setSaved(ok ? "saved" : "idle");
   };
@@ -472,7 +475,7 @@ function DiaryRow({
             }}
             rows={3}
             autoFocus
-            placeholder="바로 적어 보세요. 첫 줄이 제목이 됩니다."
+            placeholder="바로 적어 보세요"
             className="binder-input min-h-[4.4rem]"
           />
           <div className="mt-1 flex items-center justify-between text-[12px] text-ink-400">
@@ -503,7 +506,6 @@ function DiaryRow({
         >
           {entry ? (
             <>
-              <p className="line-clamp-1 text-[15px] font-semibold text-ink-900">{entry.title}</p>
               {preview.map((line, index) => (
                 <p key={index} className="mt-0.5 line-clamp-1 text-[14px] leading-[1.6] text-ink-600">
                   {truncate(line, 90)}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useData } from "@/state/store";
 import { Modal, StarRating, TextArea, TextInput, Toggle } from "@/components/common/primitives";
 import { EditorFooter, ErrorNote, TagInput } from "@/components/editors/shared";
@@ -94,6 +94,38 @@ function ArchiveEditorInner({
   );
   const [preview, setPreview] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** A16: closing the window saves what was written — compare with the opening state. */
+  const initialForm = useRef<FormState | null>(null);
+  if (initialForm.current === null) {
+    initialForm.current = existing
+      ? {
+          title: existing.title,
+          kind: existing.kind,
+          date: existing.date ?? todayISO(),
+          rating: existing.rating ?? null,
+          link: existing.link,
+          tags: existing.tags,
+          body: existing.body,
+          favorite: existing.favorite,
+          photos: existing.photos ?? [],
+          endDate: existing.endDate ?? "",
+          endTime: existing.endTime ?? "",
+        }
+      : {
+          title: "",
+          kind: draft?.kind ?? "메모",
+          date: draft?.date ?? todayISO(),
+          rating: null,
+          link: "",
+          tags: [],
+          body: "",
+          favorite: false,
+          photos: [],
+          endDate: "",
+          endTime: "",
+        };
+  }
+  const closing = useRef(false);
   const [showEnd, setShowEnd] = useState(Boolean(existing?.endDate || existing?.endTime));
   const [folder, setFolder] = useState<string | null>(null);
   const { folders, add: addFolder } = useArchiveFolders();
@@ -101,10 +133,10 @@ function ArchiveEditorInner({
   const patch = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((current) => ({ ...current, [key]: value }));
 
-  const save = async () => {
+  const save = async (): Promise<boolean> => {
     if (!form.title.trim()) {
       setError("제목을 입력해 주세요.");
-      return;
+      return false;
     }
     const payload: Record<string, unknown> = {
       title: form.title.trim(),
@@ -124,28 +156,42 @@ function ArchiveEditorInner({
       const ok = await update("archive", existing.id, payload);
       if (!ok) {
         setError("저장하지 못했습니다. 잠시 후 다시 시도해 주세요.");
-        return;
+        return false;
       }
     } else {
       const created = await create("archive", payload);
       if (!created) {
         setError("저장하지 못했습니다. 잠시 후 다시 시도해 주세요.");
-        return;
+        return false;
       }
     }
-    onClose();
+    return true;
+  };
+
+  /** A16: X · 바깥 클릭 · 뒤로 가기로 닫아도 고친 내용은 저장합니다. */
+  const closeWithSave = () => {
+    if (closing.current) return;
+    closing.current = true;
+    const changed = JSON.stringify(form) !== JSON.stringify(initialForm.current);
+    void (async () => {
+      try {
+        if (changed && form.title.trim()) await save();
+      } finally {
+        onClose();
+      }
+    })();
   };
 
   return (
     <Modal
       open
-      onClose={onClose}
+      onClose={closeWithSave}
       title={existing ? "아카이브 수정" : "아카이브에 담기"}
       size="md"
       footer={
         <EditorFooter
-          onClose={onClose}
-          onSave={() => void save()}
+          onClose={closeWithSave}
+          onSave={() => void save().then((ok) => ok && onClose())}
           onDelete={existing ? () => void remove("archive", existing.id).then(onClose) : undefined}
           onRestore={existing ? () => void update("archive", existing.id, { trash: false }).then(onClose) : undefined}
           trashed={existing?.trash}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useData } from "@/state/store";
 import { Modal, Segmented, TextInput, Toggle } from "@/components/common/primitives";
 import { EditorFooter, ErrorNote, ProjectPicker } from "@/components/editors/shared";
@@ -111,6 +111,10 @@ function EventEditorInner({
   const { data, create, update, remove } = useData();
   const existing = eventId ? data.calendar.find((item) => item.id === eventId) ?? null : null;
   const [form, setForm] = useState<FormState>(existing ? formFromEvent(existing) : formFromDraft(draft));
+  /** A16: what the window opened with, so closing saves only when something changed. */
+  const initialForm = useRef<FormState | null>(null);
+  if (initialForm.current === null) initialForm.current = existing ? formFromEvent(existing) : formFromDraft(draft);
+  const closing = useRef(false);
   const [error, setError] = useState<string | null>(null);
   /** B6: 여러 날을 고르면 '날짜마다'가 기본이고, 저장할 때 '기간'으로 바꿀 수 있습니다. */
   const [multiMode, setMultiMode] = useState<"days" | "range">("days");
@@ -120,10 +124,10 @@ function EventEditorInner({
     setForm((current) => ({ ...current, [key]: value }));
   const multiDayDraft = form.kind === "일정" && !!form.endDate && form.endDate > form.date;
 
-  const save = async () => {
+  const save = async (): Promise<boolean> => {
     if (!form.title.trim()) {
       setError("제목을 입력해 주세요.");
-      return;
+      return false;
     }
     const weekStart = startOfWeekISO(form.date);
     const multiDay = form.kind === "일정" && !!form.endDate && form.endDate > form.date;
@@ -154,7 +158,7 @@ function EventEditorInner({
       const ok = await update("calendar", existing.id, payload);
       if (!ok) {
         setError("저장하지 못했습니다. 잠시 후 다시 시도해 주세요.");
-        return;
+        return false;
       }
     } else if (multiDay && multiMode === "days") {
       // B6: '날짜마다' makes one record per day, each with the same time range.
@@ -170,29 +174,43 @@ function EventEditorInner({
       }
       if (!ok) {
         setError("일부 날짜를 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.");
-        return;
+        return false;
       }
     } else {
       const created = await create("calendar", payload);
       if (!created) {
         setError("저장하지 못했습니다. 잠시 후 다시 시도해 주세요.");
-        return;
+        return false;
       }
     }
-    onClose();
+    return true;
+  };
+
+  /** A16: X · 바깥 클릭 · 뒤로 가기 · 닫기 all keep what was written. */
+  const closeWithSave = () => {
+    if (closing.current) return;
+    closing.current = true;
+    const changed = JSON.stringify(form) !== JSON.stringify(initialForm.current);
+    void (async () => {
+      try {
+        if (changed && form.title.trim()) await save();
+      } finally {
+        onClose();
+      }
+    })();
   };
 
   return (
     <Modal
       open
-      onClose={onClose}
+      onClose={closeWithSave}
       title={existing ? "일정 수정" : form.kind === "일정" ? "새 일정" : `${form.kind} 추가`}
       subtitle={form.date}
       size="md"
       footer={
         <EditorFooter
-          onClose={onClose}
-          onSave={() => void save()}
+          onClose={closeWithSave}
+          onSave={() => void save().then((ok) => ok && onClose())}
           onDelete={existing ? () => void remove("calendar", existing.id).then(onClose) : undefined}
           onRestore={existing ? () => void update("calendar", existing.id, { trash: false }).then(onClose) : undefined}
           trashed={existing?.trash}

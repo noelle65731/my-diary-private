@@ -46,7 +46,7 @@ type QuickKind = "event" | "task" | "routine" | "diary" | "note" | "memo";
 
 const QUICK_ITEMS: { key: QuickKind; label: string; hint: string; icon: typeof PlusIcon }[] = [
   { key: "event", label: "일정", hint: "시간·종일 일정", icon: CalendarIcon },
-  { key: "task", label: "할 일", hint: "프로젝트·받은함", icon: CheckIcon },
+  { key: "task", label: "할 일", hint: "프로젝트·index", icon: CheckIcon },
   { key: "routine", label: "루틴", hint: "매일 반복", icon: RepeatIcon },
   { key: "diary", label: "일기", hint: "오늘 기록", icon: BookIcon },
   { key: "memo", label: "아카이브", hint: "메모·리뷰", icon: ArchiveIcon },
@@ -83,6 +83,23 @@ export function AppShell() {
     setChromeOpen(true);
   };
   const closeChrome = () => setChromeOpen(false);
+  /** A16: an upward swipe on the open bar (dy < -24px) puts it away at once. */
+  const chromeTouchY = useRef<number | null>(null);
+  const onChromeTouchStart = (event: React.TouchEvent) => {
+    chromeTouchY.current = event.touches[0]?.clientY ?? null;
+  };
+  const onChromeTouchMove = (event: React.TouchEvent) => {
+    const start = chromeTouchY.current;
+    const current = event.touches[0]?.clientY;
+    if (start === null || current === undefined) return;
+    if (start - current > 24) {
+      chromeTouchY.current = null;
+      closeChrome();
+    }
+  };
+  const onChromeTouchEnd = () => {
+    chromeTouchY.current = null;
+  };
   const scheduleClose = () => {
     if (chromeTimer.current) clearTimeout(chromeTimer.current);
     chromeTimer.current = setTimeout(() => {
@@ -182,6 +199,9 @@ export function AppShell() {
         <button
           type="button"
           onClick={() => (chromeOpen ? closeChrome() : openChrome())}
+          onTouchStart={onChromeTouchStart}
+          onTouchMove={onChromeTouchMove}
+          onTouchEnd={onChromeTouchEnd}
           aria-label={chromeOpen ? "상단 메뉴 닫기" : "상단 메뉴 열기"}
           aria-expanded={chromeOpen}
           className="pointer-events-auto absolute left-1/2 top-0 flex h-4 w-12 -translate-x-1/2 items-center justify-center rounded-b-full border border-t-0 border-paper-400 bg-white/95 text-ink-400 shadow-soft md:hidden"
@@ -191,6 +211,9 @@ export function AppShell() {
         <div
           onMouseEnter={openChrome}
           onMouseLeave={scheduleClose}
+          onTouchStart={onChromeTouchStart}
+          onTouchMove={onChromeTouchMove}
+          onTouchEnd={onChromeTouchEnd}
           onFocus={openChrome}
           onBlur={(event) => {
             if (!event.currentTarget.contains(event.relatedTarget as Node | null)) scheduleClose();

@@ -267,3 +267,14 @@ export function DragIcon(props: IconProps) {
     </svg>
   );
 }
+
+/** A16: 숨김 / 숨김 해제 — an eye with (or without) a slash. */
+export function EyeIcon({ off, ...props }: IconProps & { off?: boolean }) {
+  return (
+    <svg {...base(props)}>
+      <path d="M2.6 12S6 5.8 12 5.8 21.4 12 21.4 12 18 18.2 12 18.2 2.6 12 2.6 12Z" />
+      <circle cx="12" cy="12" r="2.8" />
+      {off ? <path d="M4 20 20 4" /> : null}
+    </svg>
+  );
+}

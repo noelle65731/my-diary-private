@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useData } from "@/state/store";
 import { Modal, Segmented, TextArea, TextInput, Toggle } from "@/components/common/primitives";
 import { EditorFooter, ErrorNote, TagInput } from "@/components/editors/shared";
 import { renderMarkdown } from "@/lib/markdown";
-import { todayISO } from "@/lib/date";
+import { diaryTitle, todayISO } from "@/lib/date";
 import { cn } from "@/lib/utils";
 import { BINDER_KINDS, type BinderEntry, type BinderKind } from "@/lib/types";
 import { PhotoEditor } from "@/components/common/PhotoField";
@@ -77,12 +77,38 @@ function BinderEditorInner({
   );
   const [preview, setPreview] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** A16: closing the window saves what was written — compare with the opening state. */
+  const initialForm = useRef<FormState | null>(null);
+  if (initialForm.current === null) {
+    initialForm.current = existing
+      ? {
+          title: existing.title,
+          kind: existing.kind,
+          date: existing.date ?? todayISO(),
+          body: existing.body,
+          tags: existing.tags,
+          favorite: existing.favorite,
+          archiveFlag: existing.archiveFlag,
+          photos: existing.photos ?? [],
+        }
+      : {
+          title: "",
+          kind: draft?.kind ?? "일기",
+          date: draft?.date ?? todayISO(),
+          body: "",
+          tags: [],
+          favorite: false,
+          archiveFlag: false,
+          photos: [],
+        };
+  }
+  const closing = useRef(false);
 
   const patch = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((current) => ({ ...current, [key]: value }));
 
-  const save = async () => {
-    const title = form.title.trim() || (form.kind === "일기" ? `${form.date} 일기` : "제목 없는 노트");
+  const save = async (): Promise<boolean> => {
+    const title = form.title.trim() || (form.kind === "일기" ? diaryTitle(form.date) : "제목 없는 노트");
     const payload: Record<string, unknown> = {
       title,
       kind: form.kind,
@@ -97,29 +123,44 @@ function BinderEditorInner({
       const ok = await update("binder", existing.id, payload);
       if (!ok) {
         setError("저장하지 못했습니다. 잠시 후 다시 시도해 주세요.");
-        return;
+        return false;
       }
     } else {
       const created = await create("binder", payload);
       if (!created) {
         setError("저장하지 못했습니다. 잠시 후 다시 시도해 주세요.");
-        return;
+        return false;
       }
     }
-    onClose();
+    return true;
+  };
+
+  /** A16: X · 바깥 클릭 · 뒤로 가기로 닫아도 쓴 내용은 저장합니다(빈 새 기록은 만들지 않음). */
+  const closeWithSave = () => {
+    if (closing.current) return;
+    closing.current = true;
+    const changed = JSON.stringify(form) !== JSON.stringify(initialForm.current);
+    const hasSomething = Boolean(form.title.trim() || form.body.trim() || form.photos.length);
+    void (async () => {
+      try {
+        if (changed && hasSomething) await save();
+      } finally {
+        onClose();
+      }
+    })();
   };
 
   return (
     <Modal
       open
-      onClose={onClose}
+      onClose={closeWithSave}
       title={existing ? "기록 수정" : form.kind === "일기" ? "새 일기" : "새 노트"}
       subtitle={`${form.date} · ${form.kind}`}
       size="lg"
       footer={
         <EditorFooter
-          onClose={onClose}
-          onSave={() => void save()}
+          onClose={closeWithSave}
+          onSave={() => void save().then((ok) => ok && onClose())}
           onDelete={existing ? () => void remove("binder", existing.id).then(onClose) : undefined}
           onRestore={existing ? () => void update("binder", existing.id, { trash: false }).then(onClose) : undefined}
           trashed={existing?.trash}

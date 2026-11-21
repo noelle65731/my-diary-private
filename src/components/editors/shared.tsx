@@ -176,7 +176,7 @@ export function EditorFooter({
       </div>
       <div className="flex items-center gap-2">
         <button type="button" onClick={onClose} className="btn-ghost btn-xs">
-          취소
+          닫기
         </button>
         <button type="button" onClick={onSave} className="btn-primary btn-xs px-4">
           {saveLabel}

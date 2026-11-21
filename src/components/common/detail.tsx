@@ -32,6 +32,23 @@ export function DetailShell({
   children: ReactNode;
 }) {
   useOverlay(open, onBack);
+  /** A16: 모바일에서 상세 시트를 아래로 끌어내리면 닫힙니다(자동 저장은 onBack이 합니다). */
+  const shellRef = useRef<HTMLDivElement | null>(null);
+  const dragStart = useRef<number | null>(null);
+  const onShellTouchStart = (event: React.TouchEvent) => {
+    const scroller = shellRef.current?.querySelector<HTMLElement>("[data-sheet-scroll]");
+    const atTop = !scroller || scroller.scrollTop <= 0;
+    dragStart.current = atTop ? event.touches[0]?.clientY ?? null : null;
+  };
+  const onShellTouchMove = (event: React.TouchEvent) => {
+    const start = dragStart.current;
+    const current = event.touches[0]?.clientY;
+    if (start === null || current === undefined) return;
+    if (current - start > 60) {
+      dragStart.current = null;
+      onBack();
+    }
+  };
   if (!open) return null;
 
   return (
@@ -49,12 +66,20 @@ export function DetailShell({
           className="absolute inset-0 animate-fade-in bg-ink-900/25 backdrop-blur-[2px]"
         />
         <div
+          ref={shellRef}
           role="dialog"
           aria-modal="true"
           aria-label={typeof label === "string" ? label : "상세"}
           className="relative z-10 flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-3xl border border-paper-300 bg-white shadow-lift animate-slide-up sm:max-w-2xl sm:animate-pop-in sm:rounded-3xl"
         >
-          <header className="flex items-center gap-1 border-b border-paper-300/80 pl-1.5 pr-3 py-1.5">
+          <header
+            className="flex items-center gap-1 border-b border-paper-300/80 pl-1.5 pr-3 py-1.5"
+            onTouchStart={onShellTouchStart}
+            onTouchMove={onShellTouchMove}
+            onTouchEnd={() => {
+              dragStart.current = null;
+            }}
+          >
             <button type="button" onClick={onBack} className="icon-btn" aria-label="이전">
               <ChevronLeftIcon size={18} />
             </button>
@@ -66,7 +91,7 @@ export function DetailShell({
               <XIcon size={18} />
             </button>
           </header>
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3.5 sm:px-5">{children}</div>
+          <div data-sheet-scroll="true" className="min-h-0 flex-1 overflow-y-auto px-4 py-3.5 sm:px-5">{children}</div>
           {footer ? (
             <div className="flex items-center justify-between gap-2 border-t border-paper-300/80 bg-paper-50/60 px-3 py-2 pb-safe">
               {footer}
@@ -130,6 +155,7 @@ export function InlineText({
   type = "text",
   inputClassName,
   valueClassName,
+  onClear,
 }: {
   label: string;
   value: string;
@@ -148,6 +174,8 @@ export function InlineText({
   type?: "text" | "date" | "time";
   inputClassName?: string;
   valueClassName?: string;
+  /** A16: 값이 있을 때 옆의 ×로 비웁니다 (마감일 지우기). */
+  onClear?: () => void;
 }) {
   return (
     <div className="py-0.5">
@@ -190,6 +218,7 @@ export function InlineText({
           />
         )
       ) : (
+        <span className="flex items-center gap-1">
         <button
           type="button"
           onClick={onActivate}
@@ -207,6 +236,18 @@ export function InlineText({
               <span className="text-[15px] text-ink-300">{placeholder ?? "눌러서 입력"}</span>
             ))}
         </button>
+        {onClear && value.trim() ? (
+          <button
+            type="button"
+            onClick={onClear}
+            aria-label={`${label} 지우기`}
+            title={`${label} 지우기`}
+            className="flex h-6 w-6 flex-none items-center justify-center rounded-full text-ink-300 transition hover:bg-paper-200 hover:text-rose-500"
+          >
+            ×
+          </button>
+        ) : null}
+        </span>
       )}
       {invalid ? (
         <p className="mt-0.5 text-[14px] text-rose-500" role="alert">

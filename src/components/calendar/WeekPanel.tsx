@@ -263,12 +263,12 @@ export function WeekPanel({
         <header className="flex items-center justify-between">
           <h3 className="text-[15px] font-semibold text-ink-900">이번 주 꼭</h3>
         </header>
-        <p className="mt-0.5 text-[13px] leading-snug text-ink-400" title="제목만 넣으면 긴급·중요·별표가 함께 켜지고, 받은함으로 옮겨도 이번 주에는 계속 보입니다.">
-          제목만 넣으면 <b className="font-semibold text-ink-600">긴급·중요·별표</b>가 함께 켜져요.
+        <p className="mt-0.5 text-[13px] leading-snug text-ink-400">
+          이번 주에 놓치면 안 되는 일
         </p>
 
         {favorites.length === 0 ? (
-          <p className="mt-1 text-[13.5px] leading-snug text-ink-300">아직 없습니다. 아래에 제목만 적고 Enter를 누르세요.</p>
+          <p className="mt-1 text-[13.5px] leading-snug text-ink-300">아직 없습니다.</p>
         ) : (
           <ul className="mt-1.5 divide-y divide-paper-300/60">
             {favorites.slice(0, 8).map(({ kind, item }) => {
@@ -302,7 +302,7 @@ export function WeekPanel({
                       {formatShort(date)} {["일", "월", "화", "수", "목", "금", "토"][new Date(`${date}T12:00:00`).getDay()]}
                     </span>
                   ) : (
-                    <span className="flex-none text-[13px] text-ink-300">받은함</span>
+                    <span className="flex-none text-[13px] text-ink-300">index</span>
                   )}
                 </li>
               );
@@ -355,7 +355,7 @@ export function WeekPanel({
               />
             </li>
           ))}
-          {goals.length === 0 ? <li className="text-[14px] text-ink-400">아래에 목표를 적고 Enter를 누르세요.</li> : null}
+          {goals.length === 0 ? <li className="text-[14px] text-ink-400">아직 없습니다.</li> : null}
         </ul>
         <form
           onSubmit={(event) => {
@@ -404,16 +404,9 @@ export function WeekPanel({
         <MemoBox
           key={`${activeMemo?.id ?? "new"}-${weekKey}`}
           initial={activeMemo?.memo ?? ""}
-          placeholder={savingMemo ? "저장 중…" : "이번 주에 남기고 싶은 생각을 바로 적으세요"}
+          placeholder={savingMemo ? "저장 중…" : ""}
           onCommit={(text) => void commitMemo(text)}
         />
-        <p className="mt-1 truncate text-[13px] text-ink-300">
-          {activeMemo
-            ? activeMemo.id === currentMemo?.id
-              ? activeMemo.title
-              : `${memoWeekStart(activeMemo)} 주의 기록 · 읽기·수정 가능`
-            : "여기에 쓰고 바깥을 누르면 이번 주 메모로 저장됩니다."}
-        </p>
       </section>
     </div>
   );

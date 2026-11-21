@@ -188,7 +188,7 @@ export function DayView({
                   onClick={() => (project ? onOpenTask(project.id) : undefined)}
                   className="line-clamp-2 min-w-0 flex-1 text-left text-[15.5px] font-semibold leading-snug text-ink-900 md:line-clamp-1 md:text-[16px]"
                 >
-                  {project?.title ?? "받은함"}
+                  {project?.title ?? "index"}
                 </button>
               </header>
               <ul className="mt-1.5 space-y-1">

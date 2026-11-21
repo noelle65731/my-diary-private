@@ -446,7 +446,8 @@ export function mapRoutine(page: NotionPage): Routine {
   return {
     ...baseOf(page, props, "routines"),
     kind: (readSelect(props, "유형") ?? "루틴") as RoutineKind,
-    category: (readSelect(props, "분류") ?? "개인") === "공부" ? "공부" : "개인",
+    // A16: keep whatever 분류 the row holds — 업무·개인·공부 or one the user made.
+    category: (readSelect(props, "분류") ?? "개인") as Routine["category"],
     date: when.date,
     repeatDays: readMultiSelect(props, "반복 요일"),
     targetCount: readNumber(props, "목표 횟수"),

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useData } from "@/state/store";
 import { useSettings } from "@/state/settings";
+import { useCategoryOptions } from "@/state/categories";
 import {
   DetailSection,
   DetailShell,
@@ -144,14 +145,8 @@ function EventDetailInner({
   const { settings } = useSettings();
   const { draft, set, markSaved, changedKeys, isDirty } = useDetailDraft(formFromEvent(event));
   const [field, setField] = useState<string | null>(null);
-  /** A10: 업무 · 개인 · 공부 and the categories the user added — nothing older. */
-  const categoryOptions = useMemo<CalendarCategory[]>(() => {
-    const list: CalendarCategory[] = [...CALENDAR_CATEGORIES];
-    for (const extra of settings.customCategories) {
-      if (!list.includes(extra as CalendarCategory)) list.push(extra as CalendarCategory);
-    }
-    return list;
-  }, [settings.customCategories]);
+  /** A10/A16: 업무 · 개인 · 공부 and the categories the user added — nothing older. */
+  const categoryOptions = useCategoryOptions() as CalendarCategory[];
   const legacyCategory = isLegacyCalendarCategory(event.category) ? event.category : null;
 
   const invalidField = requiredField(draft);

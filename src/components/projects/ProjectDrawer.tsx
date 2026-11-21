@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useData } from "@/state/store";
+import { useSettings } from "@/state/settings";
+import { useCategoryOptions } from "@/state/categories";
 import { Drawer, EmptyState, Segmented } from "@/components/common/primitives";
 import { taskTone } from "@/components/common/tone";
 import { CheckIcon, PlusIcon } from "@/components/icons";
@@ -9,7 +11,7 @@ import { cn } from "@/lib/utils";
 import { todayISO } from "@/lib/date";
 import type { ProjectTask } from "@/lib/types";
 import { TaskRow } from "@/components/projects/TaskRow";
-import { ProjectIcon } from "@/components/common/ProjectIcon";
+import { ProjectIcon, ProjectIconPicker } from "@/components/common/ProjectIcon";
 import { RichText } from "@/components/common/rich";
 import { reorderSameDate, sortProjectTaskList, taskSortDate } from "@/lib/order";
 
@@ -29,6 +31,11 @@ export function ProjectDrawer({
   showBackdrop?: boolean;
 }) {
   const { data, create, update, remove } = useData();
+  const { addCategory } = useSettings();
+  /** A16: 이 화면에서 바로 분류를 바꾸거나 새로 만듭니다. */
+  const categories = useCategoryOptions();
+  const [newCategory, setNewCategory] = useState<string | null>(null);
+  const [iconOpen, setIconOpen] = useState(false);
   const [filter, setFilter] = useState<Filter>("all");
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
@@ -88,9 +95,15 @@ export function ProjectDrawer({
       title={
         project ? (
           <span className="flex items-center gap-2">
-            <span className="flex h-7 w-7 flex-none items-center justify-center overflow-hidden rounded-lg bg-paper-200 text-[16px]">
+            <button
+              type="button"
+              onClick={() => setIconOpen((open) => !open)}
+              className="flex h-7 w-7 flex-none items-center justify-center overflow-hidden rounded-lg bg-paper-200 text-[16px] transition hover:bg-paper-300"
+              aria-label="프로젝트 아이콘 바꾸기"
+              title="아이콘 바꾸기"
+            >
               <ProjectIcon icon={project.icon} seed={project.id} category={project.category} className="h-full w-full" />
-            </span>
+            </button>
             <span className="truncate">{project.title}</span>
           </span>
         ) : (
@@ -114,6 +127,14 @@ export function ProjectDrawer({
               삭제
             </button>
             <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => void update("projects", project.id, { history: !project.history, hidden: false })}
+                className={cn("btn-ghost btn-xs", project.history && "text-ink-900")}
+                aria-pressed={!!project.history}
+              >
+                {project.history ? "히스토리에서 꺼내기" : "히스토리로 보내기"}
+              </button>
               <button type="button" onClick={() => onEditProject(project.id)} className="btn-outline btn-xs">
                 프로젝트 수정
               </button>
@@ -159,6 +180,132 @@ export function ProjectDrawer({
             <span className={cn("chip", taskTone(project.category).bg, taskTone(project.category).text)}>
               {project.category}
             </span>
+          </div>
+
+          {/* A16: 분류를 이 화면에서 바로 바꾸고, 없으면 새로 만듭니다. */}
+          <div className="flex flex-wrap items-center gap-1">
+            {categories.map((category) => (
+              <button
+                key={category}
+                type="button"
+                onClick={() => void update("projects", project.id, { category })}
+                className={cn(
+                  "rounded-full px-2 py-[2px] text-[13.5px] font-medium transition",
+                  project.category === category ? "bg-ink-900 text-white" : "bg-paper-200 text-ink-500 hover:bg-paper-300/80 hover:text-ink-800",
+                )}
+                aria-pressed={project.category === category}
+              >
+                {category}
+              </button>
+            ))}
+            {newCategory === null ? (
+              <button
+                type="button"
+                onClick={() => setNewCategory("")}
+                aria-label="분류 새로 추가"
+                className="inline-flex h-6 items-center gap-0.5 rounded-full border border-dashed border-paper-400 px-2 text-[13px] text-ink-500 transition hover:border-ink-500 hover:text-ink-900"
+              >
+                <span className="text-[14px] leading-none">+</span> 분류
+              </button>
+            ) : (
+              <input
+                autoFocus
+                value={newCategory}
+                onChange={(event) => setNewCategory(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    const name = newCategory.trim();
+                    setNewCategory(null);
+                    if (!name) return;
+                    addCategory(name);
+                    void update("projects", project.id, { category: name });
+                  }
+                  if (event.key === "Escape") setNewCategory(null);
+                }}
+                onBlur={() => setNewCategory(null)}
+                placeholder="새 분류 이름"
+                aria-label="새 분류 이름"
+                className="input h-6 w-[7rem] py-0 text-[13.5px]"
+              />
+            )}
+          </div>
+
+          {iconOpen ? (
+            <div className="rounded-xl border border-paper-300 px-2 py-1.5">
+              <ProjectIconPicker
+                value={project.icon ?? null}
+                onChange={(next) => void update("projects", project.id, { icon: next })}
+                seed={project.id}
+                category={project.category}
+              />
+            </div>
+          ) : null}
+
+          {/* A16: 프로젝트 수정 창에 들어가지 않고 바로 바꾸는 속성들 */}
+          <div className="space-y-1.5 rounded-xl border border-paper-300/80 bg-paper-50/60 px-2.5 py-2">
+            <div className="flex flex-wrap items-center gap-1">
+              <span className="mr-1 text-[13px] text-ink-400">상태</span>
+              {(["미완료", "대기 중", "완료", "취소"] as const).map((status) => (
+                <button
+                  key={status}
+                  type="button"
+                  onClick={() =>
+                    void update("projects", project.id, {
+                      status,
+                      doneAt: status === "완료" ? project.doneAt ?? todayISO() : null,
+                    })
+                  }
+                  className={cn(
+                    "rounded-full px-2 py-[2px] text-[13px] font-medium transition",
+                    project.status === status ? "bg-ink-900 text-white" : "bg-white text-ink-500 ring-1 ring-paper-300 hover:text-ink-800",
+                  )}
+                  aria-pressed={project.status === status}
+                >
+                  {status}
+                </button>
+              ))}
+            </div>
+            <div className="flex flex-wrap items-center gap-1">
+              <span className="mr-1 text-[13px] text-ink-400">표시</span>
+              {([
+                { key: "urgent", label: "긴급", on: project.urgent },
+                { key: "important", label: "중요", on: project.important },
+                { key: "hidden", label: "NOW 숨김", on: project.hidden },
+                { key: "history", label: "히스토리", on: project.history },
+              ] as const).map((flag) => (
+                <button
+                  key={flag.key}
+                  type="button"
+                  onClick={() => void update("projects", project.id, { [flag.key]: !flag.on })}
+                  className={cn(
+                    "rounded-full px-2 py-[2px] text-[13px] font-medium transition",
+                    flag.on ? "bg-ink-900 text-white" : "bg-white text-ink-500 ring-1 ring-paper-300 hover:text-ink-800",
+                  )}
+                  aria-pressed={flag.on}
+                >
+                  {flag.label}
+                </button>
+              ))}
+            </div>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[13px] text-ink-400">날짜</span>
+              <input
+                type="date"
+                value={project.date ?? ""}
+                onChange={(event) => void update("projects", project.id, { date: event.target.value || null })}
+                className="input h-7 w-[8.4rem] py-0 text-[13px]"
+                aria-label="프로젝트 날짜"
+              />
+              <span className="text-[13px] text-ink-400">마감</span>
+              <input
+                type="date"
+                value={project.due ?? ""}
+                onChange={(event) => void update("projects", project.id, { due: event.target.value || null })}
+                className="input h-7 w-[8.4rem] py-0 text-[13px]"
+                aria-label="프로젝트 마감일"
+              />
+            </div>
           </div>
 
           {filtered.length === 0 ? (

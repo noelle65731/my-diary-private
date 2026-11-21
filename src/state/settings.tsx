@@ -29,6 +29,10 @@ export interface Settings {
   projectCompletedPreview: 2 | 3;
   /** A6/A7: user-made categories shown next to 업무·개인·공부 in the filters. */
   customCategories: string[];
+  /** A16: 분류 the user removed — hidden from filters and pickers (records keep their value). */
+  hiddenCategories: string[];
+  /** A16: NOW 모드 — 켜면 `NOW 숨김` 항목만 화면에서 가립니다 (프로젝트 탭 토글). */
+  nowOnly: boolean;
   showCompletedTasks: boolean;
   binderPreviewLines: number;
   binderShowSchedule: boolean;
@@ -47,6 +51,8 @@ export const DEFAULT_SETTINGS: Settings = {
   projectTaskPreview: 4,
   projectCompletedPreview: 2,
   customCategories: [],
+  hiddenCategories: [],
+  nowOnly: false,
   showCompletedTasks: true,
   binderPreviewLines: 3,
   binderShowSchedule: true,
@@ -111,8 +117,11 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     const clean = name.trim().slice(0, 12);
     if (!clean) return;
     setSettings((current) => {
-      if (current.customCategories.includes(clean)) return current;
-      const next = { ...current, customCategories: [...current.customCategories, clean] };
+      const next = {
+        ...current,
+        hiddenCategories: current.hiddenCategories.filter((item) => item !== clean),
+        customCategories: current.customCategories.includes(clean) ? current.customCategories : [...current.customCategories, clean],
+      };
       try {
         window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
       } catch {
@@ -122,9 +131,16 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
+  /** A16: 지운 분류는 목록에서 사라집니다 — 기본 업무·개인·공부도 지울 수 있습니다. */
   const removeCategory = useCallback((name: string) => {
+    const clean = name.trim();
+    if (!clean) return;
     setSettings((current) => {
-      const next = { ...current, customCategories: current.customCategories.filter((item) => item !== name) };
+      const next = {
+        ...current,
+        customCategories: current.customCategories.filter((item) => item !== clean),
+        hiddenCategories: current.hiddenCategories.includes(clean) ? current.hiddenCategories : [...current.hiddenCategories, clean],
+      };
       try {
         window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
       } catch {

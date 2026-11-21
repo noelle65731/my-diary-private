@@ -11,7 +11,8 @@ export type CalendarKind = "일정" | "주간 목표" | "주간 메모" | "월�
 export type CalendarCategory = "업무" | "개인" | "공부" | "외부일정" | "성과" | "휴먼네트워크";
 
 export type TaskKind = "프로젝트" | "할 일";
-export type TaskCategory = "업무" | "개인" | "공부";
+/** A16: 업무·개인·공부 plus any 분류 the user made (Notion select keeps the name). */
+export type TaskCategory = "업무" | "개인" | "공부" | (string & {});
 export type TaskStatus = "미완료" | "대기 중" | "완료" | "취소";
 
 export type RoutineKind = "루틴" | "날짜별 체크";
@@ -104,7 +105,8 @@ export interface ProjectTask extends BaseItem {
 
 export interface Routine extends BaseItem {
   kind: RoutineKind;
-  category: "개인" | "공부";
+  /** A16: the same 분류 as projects — 업무·개인·공부 and user-made ones. */
+  category: TaskCategory;
   date: string | null;
   repeatDays: string[];
   targetCount: number | null;
@@ -197,6 +199,8 @@ export function isLegacyCalendarCategory(category: string | null | undefined): b
 }
 export const TASK_KINDS: TaskKind[] = ["프로젝트", "할 일"];
 export const TASK_CATEGORIES: TaskCategory[] = ["업무", "개인", "공부"];
+/** A16: the built-in 분류 shown first in every picker and filter. */
+export const BASE_CATEGORIES: string[] = ["업무", "개인", "공부"];
 export const TASK_STATUSES: TaskStatus[] = ["미완료", "대기 중", "완료", "취소"];
 export const ROUTINE_DAYS = ["월", "화", "수", "목", "금", "토", "일"];
 export const BINDER_KINDS: BinderKind[] = ["일기", "노트"];

@@ -69,6 +69,7 @@ export function MonthView({
   onUpdateEvent,
   onRoutineCount,
   onMoveItem,
+  onCreate,
 }: MonthViewProps) {
   const today = todayISO();
   const year = Number(cursor.slice(0, 4));
@@ -82,6 +83,27 @@ export function MonthView({
 
   /** A day list opened from a cell — the month stays on screen behind it. */
   const [openDay, setOpenDay] = useState<string | null>(null);
+  /** A16: on a phone a tap shows the day's list first; the editor opens from that list. */
+  const [touchLayout, setTouchLayout] = useState(false);
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 639px)");
+    const sync = () => setTouchLayout(query.matches);
+    sync();
+    query.addEventListener("change", sync);
+    return () => query.removeEventListener("change", sync);
+  }, []);
+  const openDayFirst = (day: string) => {
+    if (touchLayout) setOpenDay(day);
+    else onSelectDay(day);
+  };
+  const openItemFirst = (kind: "event" | "task", id: string, day: string) => {
+    if (touchLayout) {
+      setOpenDay(day);
+      return;
+    }
+    if (kind === "event") onOpenEvent(id);
+    else onOpenTask(id);
+  };
 
   useEffect(() => {
     if (closeDayListSignal === 0) return;
@@ -172,6 +194,10 @@ export function MonthView({
               return (
                 <div
                   key={day}
+                  onClick={() => {
+                    // A16: on a phone the whole cell leads to that day's list.
+                    if (touchLayout) setOpenDay(day);
+                  }}
                   onDragOver={(event) => {
                     if (onMoveItem) event.preventDefault();
                   }}
@@ -190,7 +216,7 @@ export function MonthView({
                   <div className="flex items-center justify-between">
                     <button
                       type="button"
-                      onClick={() => onSelectDay(day)}
+                      onClick={() => openDayFirst(day)}
                       className={cn(
                         "flex h-[1.25rem] min-w-[1.25rem] items-center justify-center rounded-full px-1 text-[14px] font-medium tabular-nums transition md:h-[1.4rem] md:min-w-[1.4rem] md:text-[15px]",
                         isToday
@@ -224,7 +250,7 @@ export function MonthView({
                               event.dataTransfer.setData("text/diary-item", `event:${item.event.id}`);
                               event.dataTransfer.effectAllowed = "move";
                             }}
-                            onClick={() => onOpenEvent(item.event.id)}
+                            onClick={() => openItemFirst("event", item.event.id, day)}
                             className={cn(
                               "flex w-full items-start gap-1 rounded px-0.5 py-[2px] text-left text-[13px] leading-[1.35] md:px-1 md:text-[14px] md:leading-[1.45]",
                               multiDay ? cn(tone.bg, tone.text) : tone.text,
@@ -267,7 +293,7 @@ export function MonthView({
                           </button>
                           <button
                             type="button"
-                            onClick={() => onOpenTask(item.task.id)}
+                            onClick={() => openItemFirst("task", item.task.id, day)}
                             className={cn(
                               "min-w-0 flex-1 truncate text-left text-[13px] leading-[1.35] text-ink-500 md:text-[14px] md:leading-[1.45]",
                               taskDone && "text-ink-300 line-through",
@@ -326,6 +352,7 @@ export function MonthView({
             setOpenDay(null);
             onSelectDay(openDayDate);
           }}
+          onCreate={() => onCreate(openDayDate)}
           onOpenEvent={onOpenEvent}
           onOpenTask={onOpenTask}
           onToggleTask={onToggleTask}
@@ -350,6 +377,7 @@ function DayListPanel({
   onOpenTask,
   onToggleTask,
   onMoveAllDay,
+  onCreate,
 }: {
   day: string;
   items: CellItem[];
@@ -359,6 +387,8 @@ function DayListPanel({
   onOpenTask: (id: string) => void;
   onToggleTask?: (task: ProjectTask) => void;
   onMoveAllDay: (id: string, direction: -1 | 1) => void;
+  /** A16: the day list can start a new record without leaving the month. */
+  onCreate?: () => void;
 }) {
   const holiday = holidayName(day);
   const allDay = items.filter((item) => item.type === "event" && item.event.allDay) as { type: "event"; event: CalendarEvent }[];
@@ -513,9 +543,16 @@ function DayListPanel({
           <button type="button" onClick={onClose} className="btn-ghost btn-xs">
             닫기
           </button>
-          <button type="button" onClick={onGoDay} className="btn-primary btn-xs">
-            이 날짜로 이동
-          </button>
+          <div className="flex items-center gap-1.5">
+            {onCreate ? (
+              <button type="button" onClick={onCreate} className="btn-outline btn-xs">
+                + 새 일정
+              </button>
+            ) : null}
+            <button type="button" onClick={onGoDay} className="btn-primary btn-xs">
+              이 날짜로 이동
+            </button>
+          </div>
         </div>
       </div>
     </div>

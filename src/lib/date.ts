@@ -177,6 +177,12 @@ export function memoTitle(iso: string, kind: "주간 메모" | "월간 메모"):
   return `${d.getFullYear()}년 ${pad2(d.getMonth() + 1)}월 ${pad2(d.getDate())}일 ${kind}`;
 }
 
+/** A16: the name a diary writes itself — 11월 21일 토요일 바인더 — so only body is typed. */
+export function diaryTitle(iso: string): string {
+  const d = fromISO(iso);
+  return `${d.getMonth() + 1}월 ${d.getDate()}일 ${WEEKDAYS_KO[d.getDay()] ?? ""}요일 바인더`;
+}
+
 export function formatMonthKo(iso: string): string {
   const d = fromISO(iso);
   return `${d.getFullYear()}년 ${d.getMonth() + 1}월`;

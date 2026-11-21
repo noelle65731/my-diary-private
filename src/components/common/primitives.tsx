@@ -128,6 +128,23 @@ export function Modal({
   bodyClassName,
 }: ModalProps) {
   useOverlay(open, onClose);
+  /** A16: 모바일에서 시트를 아래로 끌어내리면 닫힙니다 (내용이 맨 위일 때만). */
+  const sheetRef = useRef<HTMLDivElement | null>(null);
+  const dragStart = useRef<number | null>(null);
+  const onSheetTouchStart = (event: React.TouchEvent) => {
+    const scroller = sheetRef.current?.querySelector<HTMLElement>("[data-sheet-scroll]");
+    const atTop = !scroller || scroller.scrollTop <= 0;
+    dragStart.current = atTop ? event.touches[0]?.clientY ?? null : null;
+  };
+  const onSheetTouchMove = (event: React.TouchEvent) => {
+    const start = dragStart.current;
+    const current = event.touches[0]?.clientY;
+    if (start === null || current === undefined) return;
+    if (current - start > 60) {
+      dragStart.current = null;
+      onClose();
+    }
+  };
   if (!open) return null;
 
   return (
@@ -140,6 +157,7 @@ export function Modal({
           className="absolute inset-0 animate-fade-in bg-ink-900/25 backdrop-blur-[2px]"
         />
         <div
+          ref={sheetRef}
           role="dialog"
           aria-modal="true"
           className={cn(
@@ -147,7 +165,14 @@ export function Modal({
             sizeClass[size],
           )}
         >
-          <div className="flex items-start gap-3 border-b border-paper-300/80 px-5 pb-3 pt-4">
+          <div
+            className="flex items-start gap-3 border-b border-paper-300/80 px-5 pb-3 pt-4"
+            onTouchStart={onSheetTouchStart}
+            onTouchMove={onSheetTouchMove}
+            onTouchEnd={() => {
+              dragStart.current = null;
+            }}
+          >
             <div className="min-w-0 flex-1">
               {title ? <h2 className="truncate text-[17px] font-semibold text-ink-900">{title}</h2> : null}
               {subtitle ? <p className="mt-0.5 truncate text-[15px] text-ink-500">{subtitle}</p> : null}
@@ -156,7 +181,7 @@ export function Modal({
               <XIcon size={18} />
             </button>
           </div>
-          <div className={cn("min-h-0 flex-1 overflow-y-auto px-5 py-4", bodyClassName)}>{children}</div>
+          <div data-sheet-scroll="true" className={cn("min-h-0 flex-1 overflow-y-auto px-5 py-4", bodyClassName)}>{children}</div>
           {footer ? <div className="border-t border-paper-300/80 bg-paper-50/60 px-5 py-3">{footer}</div> : null}
         </div>
       </div>

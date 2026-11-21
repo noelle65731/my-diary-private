@@ -68,7 +68,8 @@ export const CATEGORY_TONES: Record<CalendarCategory, Tone> = {
   },
 };
 
-export const TASK_TONES: Record<TaskCategory, Tone> = {
+/** A16: user-made 분류 colors fall back to 개인 — the table only names the built-in ones. */
+export const TASK_TONES = {
   업무: {
     text: "text-accent-600",
     bg: "bg-accent-100",
@@ -96,7 +97,7 @@ export const TASK_TONES: Record<TaskCategory, Tone> = {
     solid: "bg-dusk-500",
     solidText: "text-white",
   },
-};
+} satisfies Record<string, Tone>;
 
 export const STATUS_TONES: Record<TaskStatus, Tone> = {
   미완료: {
@@ -205,8 +206,8 @@ export function categoryTone(category: CalendarCategory): Tone {
   return CATEGORY_TONES[category] ?? CATEGORY_TONES["개인"];
 }
 
-export function taskTone(category: TaskCategory): Tone {
-  return TASK_TONES[category] ?? TASK_TONES["개인"];
+export function taskTone(category: string): Tone {
+  return TASK_TONES[category as keyof typeof TASK_TONES] ?? TASK_TONES["개인"];
 }
 
 export function statusTone(status: TaskStatus): Tone {

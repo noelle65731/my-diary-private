@@ -25,9 +25,18 @@ export function byDateThenTime<T extends { sort?: number | null }>(a: T, b: T): 
   return (a.sort ?? 0) - (b.sort ?? 0);
 }
 
-/** `업무` / `개인` / `공부` mode of a task — used by the mode filters. */
-export function taskMode(task: ProjectTask): "업무" | "개인" | "공부" {
+/** A16: the 분류 of a task as the mode filters see it (a user-made one included). */
+export function taskMode(task: ProjectTask): string {
   return task.category;
+}
+
+/** A16: a 분류 chip carries the `cat:` prefix so a category named `now` is not the NOW filter. */
+export function categoryModeOf(name: string): string {
+  return `cat:${name}`;
+}
+
+export function categoryNameOf(mode: string): string {
+  return mode.startsWith("cat:") ? mode.slice(4) : mode;
 }
 
 export function matchesMode(
@@ -41,7 +50,7 @@ export function matchesMode(
   // A6: NOW hides only the items marked with the eye icon (개인 is never auto-hidden).
   if (item.hidden) return false;
   if (mode === "now" || mode === "custom") return true;
-  return categoryMode === mode;
+  return categoryMode === categoryNameOf(mode);
 }
 
 export function sortByDate<T>(items: T[], get: (item: T) => string | null): T[] {

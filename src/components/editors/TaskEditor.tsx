@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useData } from "@/state/store";
 import { useSettings } from "@/state/settings";
+import { useCategoryOptions } from "@/state/categories";
 import { Modal, Segmented, TextInput, Toggle } from "@/components/common/primitives";
 import { EditorFooter, ErrorNote, ProjectPicker } from "@/components/editors/shared";
 import { ProjectIconPicker } from "@/components/common/ProjectIcon";
@@ -11,7 +12,6 @@ import { plainOfSpans, spansFromMarkdown } from "@/lib/richtext";
 import { todayISO } from "@/lib/date";
 import { cn } from "@/lib/utils";
 import {
-  TASK_CATEGORIES,
   TASK_STATUSES,
   type ItemIcon,
   type ProjectTask,
@@ -122,14 +122,18 @@ function TaskEditorInner({
   onClose: () => void;
 }) {
   const { data, create, update, remove } = useData();
-  const { settings, addCategory } = useSettings();
+  const { addCategory } = useSettings();
   const existing = taskId ? data.projects.find((item) => item.id === taskId) ?? null : null;
   const [form, setForm] = useState<FormState>(existing ? formFromTask(existing) : formFromDraft(draft));
+  /** A16: 자동 저장은 무엇이 바뀌었는지 비교할 수 있게 처음 상태를 기억합니다. */
+  const initialForm = useRef<FormState | null>(null);
+  if (initialForm.current === null) initialForm.current = existing ? formFromTask(existing) : formFromDraft(draft);
+  const closing = useRef(false);
   const [error, setError] = useState<string | null>(null);
   // A6: History projects are not offered for a new task.
   const projects = data.projects.filter((item) => item.kind === "프로젝트" && !item.trash && !item.history && item.id !== existing?.id);
-  // A7: 업무·개인·공부 plus the categories the user added.
-  const categories = [...TASK_CATEGORIES, ...settings.customCategories.filter((item) => !TASK_CATEGORIES.includes(item as never))];
+  // A7/A16: 업무·개인·공부 plus every category the user made or a record already has.
+  const categories = useCategoryOptions();
   // A11: 분류와 프로젝트는 여기서 바로 새로 만들 수 있습니다.
   const [newCategory, setNewCategory] = useState<string | null>(null);
   const [newProject, setNewProject] = useState<string | null>(null);
@@ -158,10 +162,10 @@ function TaskEditorInner({
     return "border-ink-900 bg-ink-900 text-paper-50";
   };
 
-  const save = async () => {
+  const save = async (): Promise<boolean> => {
     if (!form.title.trim()) {
       setError("제목을 입력해 주세요.");
-      return;
+      return false;
     }
     const completed = form.status === "완료";
     const payload: Record<string, unknown> = {
@@ -191,28 +195,42 @@ function TaskEditorInner({
       const ok = await update("projects", existing.id, payload);
       if (!ok) {
         setError("저장하지 못했습니다. 잠시 후 다시 시도해 주세요.");
-        return;
+        return false;
       }
     } else {
       const created = await create("projects", payload);
       if (!created) {
         setError("저장하지 못했습니다. 잠시 후 다시 시도해 주세요.");
-        return;
+        return false;
       }
     }
-    onClose();
+    return true;
+  };
+
+  /** A16: X · 바깥 클릭 · 뒤로 가기로 닫아도 고친 내용은 저장합니다. */
+  const closeWithSave = () => {
+    if (closing.current) return;
+    closing.current = true;
+    const changed = JSON.stringify(form) !== JSON.stringify(initialForm.current);
+    void (async () => {
+      try {
+        if (changed && form.title.trim()) await save();
+      } finally {
+        onClose();
+      }
+    })();
   };
 
   return (
     <Modal
       open
-      onClose={onClose}
+      onClose={closeWithSave}
       title={existing ? (form.kind === "프로젝트" ? "프로젝트 수정" : "할 일 수정") : form.kind === "프로젝트" ? "새 프로젝트" : "새 할 일"}
       size="md"
       footer={
         <EditorFooter
-          onClose={onClose}
-          onSave={() => void save()}
+          onClose={closeWithSave}
+          onSave={() => void save().then((ok) => ok && onClose())}
           onDelete={existing ? () => void remove("projects", existing.id).then(onClose) : undefined}
           onRestore={existing ? () => void update("projects", existing.id, { trash: false }).then(onClose) : undefined}
           trashed={existing?.trash}
@@ -347,8 +365,7 @@ function TaskEditorInner({
               <Toggle checked={form.important} onChange={(value) => patch("important", value)} label="중요" />
             </>
           )}
-          <Toggle checked={form.hidden} onChange={(value) => patch("hidden", value)} label="기본 보기에서 숨김" />
-          <Toggle checked={form.history} onChange={(value) => patch("history", value)} label="지난 기록으로 보내기" />
+
         </div>
 
         {form.kind === "할 일" ? (

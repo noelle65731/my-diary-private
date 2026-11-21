@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useData } from "@/state/store";
+import { useSettings } from "@/state/settings";
+import { useCategoryOptions } from "@/state/categories";
 import { Modal, TextInput, Toggle } from "@/components/common/primitives";
 import { EditorFooter, ErrorNote } from "@/components/editors/shared";
 import { cn } from "@/lib/utils";
@@ -9,7 +11,7 @@ import { ROUTINE_DAYS, type Routine } from "@/lib/types";
 
 interface FormState {
   title: string;
-  category: "개인" | "공부";
+  category: string;
   repeatDays: string[];
   targetCount: string;
   amount: string;
@@ -46,6 +48,9 @@ export function RoutineEditor({
 
 function RoutineEditorInner({ routineId, onClose }: { routineId: string | null; onClose: () => void }) {
   const { data, create, update, remove } = useData();
+  const { addCategory } = useSettings();
+  // A16: the same 분류 as the top filters — 업무·개인·공부 plus every user-made one.
+  const categories = useCategoryOptions();
   const existing = routineId ? data.routines.find((item) => item.id === routineId && item.kind === "루틴") ?? null : null;
   const [form, setForm] = useState<FormState>(
     existing
@@ -62,18 +67,45 @@ function RoutineEditorInner({ routineId, onClose }: { routineId: string | null; 
         },
   );
   const [error, setError] = useState<string | null>(null);
+  /** A16: auto-save on close compares against what the window opened with. */
+  const initialForm = useRef<FormState | null>(null);
+  if (initialForm.current === null) {
+    initialForm.current = existing
+      ? formFromRoutine(existing)
+      : {
+          title: "",
+          category: "개인",
+          repeatDays: ["월", "화", "수", "목", "금", "토", "일"],
+          targetCount: "1",
+          amount: "",
+          unit: "",
+          hidden: false,
+          history: false,
+        };
+  }
+  const closing = useRef(false);
+  /** A16: 루틴 안에서도 분류를 바로 새로 만들 수 있습니다 (할 일 창과 같은 방식). */
+  const [newCategory, setNewCategory] = useState<string | null>(null);
 
   const patch = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((current) => ({ ...current, [key]: value }));
+
+  const addNewCategory = () => {
+    const name = (newCategory ?? "").trim();
+    setNewCategory(null);
+    if (!name) return;
+    addCategory(name);
+    patch("category", name);
+  };
 
   const toggleDay = (day: string) => {
     patch("repeatDays", form.repeatDays.includes(day) ? form.repeatDays.filter((value) => value !== day) : [...form.repeatDays, day]);
   };
 
-  const save = async () => {
+  const save = async (): Promise<boolean> => {
     if (!form.title.trim()) {
       setError("제목을 입력해 주세요.");
-      return;
+      return false;
     }
     const target = Number(form.targetCount);
     const payload: Record<string, unknown> = {
@@ -91,28 +123,42 @@ function RoutineEditorInner({ routineId, onClose }: { routineId: string | null; 
       const ok = await update("routines", existing.id, payload);
       if (!ok) {
         setError("저장하지 못했습니다. 잠시 후 다시 시도해 주세요.");
-        return;
+        return false;
       }
     } else {
       const created = await create("routines", payload);
       if (!created) {
         setError("저장하지 못했습니다. 잠시 후 다시 시도해 주세요.");
-        return;
+        return false;
       }
     }
-    onClose();
+    return true;
+  };
+
+  /** A16: X · 바깥 클릭 · 뒤로 가기로 닫아도 고친 내용은 저장합니다. */
+  const closeWithSave = () => {
+    if (closing.current) return;
+    closing.current = true;
+    const changed = JSON.stringify(form) !== JSON.stringify(initialForm.current);
+    void (async () => {
+      try {
+        if (changed && form.title.trim()) await save();
+      } finally {
+        onClose();
+      }
+    })();
   };
 
   return (
     <Modal
       open
-      onClose={onClose}
+      onClose={closeWithSave}
       title={existing ? "루틴 수정" : "새 루틴"}
       size="sm"
       footer={
         <EditorFooter
-          onClose={onClose}
-          onSave={() => void save()}
+          onClose={closeWithSave}
+          onSave={() => void save().then((ok) => ok && onClose())}
           onDelete={existing ? () => void remove("routines", existing.id).then(onClose) : undefined}
           onRestore={existing ? () => void update("routines", existing.id, { trash: false }).then(onClose) : undefined}
           trashed={existing?.trash}
@@ -131,8 +177,8 @@ function RoutineEditorInner({ routineId, onClose }: { routineId: string | null; 
 
         <div>
           <p className="label">분류</p>
-          <div className="flex gap-1.5">
-            {(["개인", "공부"] as const).map((category) => (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {categories.map((category) => (
               <button
                 key={category}
                 type="button"
@@ -147,6 +193,33 @@ function RoutineEditorInner({ routineId, onClose }: { routineId: string | null; 
                 {category}
               </button>
             ))}
+            {newCategory === null ? (
+              <button
+                type="button"
+                onClick={() => setNewCategory("")}
+                aria-label="분류 새로 추가"
+                className="inline-flex h-7 items-center gap-0.5 rounded-full border border-dashed border-paper-400 px-2 text-[14px] text-ink-500 transition hover:border-ink-500 hover:text-ink-900"
+              >
+                <span className="text-[15px] leading-none">+</span> 분류
+              </button>
+            ) : (
+              <input
+                autoFocus
+                value={newCategory}
+                onChange={(event) => setNewCategory(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    addNewCategory();
+                  }
+                  if (event.key === "Escape") setNewCategory(null);
+                }}
+                onBlur={addNewCategory}
+                placeholder="새 분류 이름"
+                aria-label="새 분류 이름"
+                className="input h-7 w-[7.5rem] py-0 text-[14px]"
+              />
+            )}
           </div>
         </div>
 

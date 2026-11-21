@@ -3,13 +3,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useData } from "@/state/store";
 import { useSettings } from "@/state/settings";
+import { useCategoryOptions } from "@/state/categories";
 import { useTabReset, useUi } from "@/state/ui";
-import { cn, matchesMode } from "@/lib/utils";
+import { cn, categoryNameOf, matchesMode } from "@/lib/utils";
 import { formatShort, startOfWeekISO, todayISO, weekdayKo } from "@/lib/date";
 import { type ModeFilter, type ProjectTask, type Routine, type TaskCategory } from "@/lib/types";
 import { PRIORITY_TONES, priorityOf, routineTone, taskTone } from "@/components/common/tone";
 import { ProjectIcon } from "@/components/common/ProjectIcon";
-import { CheckIcon, ChevronRightIcon, InboxIcon, PlusIcon, RepeatIcon, TrashIcon } from "@/components/icons";
+import { CheckIcon, ChevronRightIcon, EyeIcon, InboxIcon, PlusIcon, RepeatIcon, TrashIcon } from "@/components/icons";
 import { ModeChips } from "@/components/common/ModeChips";
 import { ProjectDrawer } from "@/components/projects/ProjectDrawer";
 import { TaskEditor } from "@/components/editors/TaskEditor";
@@ -18,9 +19,7 @@ import { RoutineEditor } from "@/components/editors/RoutineEditor";
 import { routineCountForDay } from "@/components/calendar/calendar-utils";
 import { sortProjectTaskList, sortTasksNewestFirst } from "@/lib/order";
 
-type ProjectView = "tracks" | "priority" | "history";
-
-const BASE_CATEGORIES = ["업무", "개인", "공부"];
+type ProjectView = "tracks" | "priority" | "history" | "journal";
 /** A card keeps five open tasks in view — fewer than four hid the work that was left. */
 const CARD_OPEN_PREVIEW = 5;
 
@@ -33,7 +32,9 @@ function dateLabel(date: string | null): string {
 
 export function ProjectsTab() {
   const { data, update, setRoutineCount, create } = useData();
-  const { settings, set: setSetting, addCategory } = useSettings();
+  const { settings, set: setSetting, addCategory, removeCategory } = useSettings();
+  // A16: filters and pickers share one 분류 list, so a new one shows up everywhere.
+  const categoryOptions = useCategoryOptions();
   const { focus, clearFocus, openTrash, views, setView: setTabView } = useUi();
 
   // A15: tracks / priority / history is kept in the shared UI state for 뒤로 가기.
@@ -100,7 +101,7 @@ export function ProjectsTab() {
   }, [focus, data.projects, clearFocus]);
 
   useEffect(() => {
-    if (mode !== "now" && mode !== "all" && mode !== "custom") setQuickCategory(mode as TaskCategory);
+    if (mode !== "now" && mode !== "all" && mode !== "custom") setQuickCategory(categoryNameOf(mode) as TaskCategory);
   }, [mode]);
 
   useTabReset("projects", () => {
@@ -118,7 +119,12 @@ export function ProjectsTab() {
    */
   const projects = useMemo(() => {
     const list = data.projects.filter(
-      (task) => task.kind === "프로젝트" && !task.trash && !task.history && matchesMode(mode, task, task.category),
+      (task) =>
+        task.kind === "프로젝트" &&
+        !task.trash &&
+        !task.history &&
+        (!settings.nowOnly || !task.hidden) &&
+        matchesMode(mode, task, task.category),
     );
     const done = (task: ProjectTask) => task.status === "완료" || task.status === "취소";
     return [...list].sort((a, b) => {
@@ -128,14 +134,31 @@ export function ProjectsTab() {
       if (a.sort === null && b.sort !== null) return 1;
       return (a.createdAt || "").localeCompare(b.createdAt || "");
     });
-  }, [data.projects, mode]);
+  }, [data.projects, mode, settings.nowOnly]);
+  const hiddenProjectIds = useMemo(
+    () => data.projects.filter((project) => project.kind === "프로젝트" && project.hidden).map((project) => project.id),
+    [data.projects],
+  );
   const tasks = useMemo(
-    () => data.projects.filter((task) => task.kind === "할 일" && matchesMode(mode, task, task.category)),
-    [data.projects, mode],
+    () =>
+      data.projects.filter(
+        (task) =>
+          task.kind === "할 일" &&
+          (!settings.nowOnly || (!task.hidden && !task.projectIds.some((id) => hiddenProjectIds.includes(id)))) &&
+          matchesMode(mode, task, task.category),
+      ),
+    [data.projects, mode, settings.nowOnly, hiddenProjectIds],
   );
   const routines = useMemo(
-    () => data.routines.filter((routine) => routine.kind === "루틴" && !routine.trash && !routine.history && (mode === "all" || !routine.hidden)),
-    [data.routines, mode],
+    () =>
+      data.routines.filter(
+        (routine) =>
+          routine.kind === "루틴" &&
+          !routine.history &&
+          (!settings.nowOnly || !routine.hidden) &&
+          matchesMode(mode, routine, routine.category),
+      ),
+    [data.routines, mode, settings.nowOnly],
   );
 
   const openTasks = tasks.filter((task) => !task.trash && task.status !== "완료" && task.status !== "취소" && !task.history);
@@ -197,6 +220,7 @@ export function ProjectsTab() {
                 { value: "tracks", label: "트랙" },
                 { value: "priority", label: "우선순위" },
                 { value: "history", label: "기록" },
+                { value: "journal", label: "히스토리" },
               ] as { value: ProjectView; label: string }[]
             ).map((item) => (
               <button
@@ -219,7 +243,7 @@ export function ProjectsTab() {
             <TrashIcon size={13} /> 휴지통
           </button>
 
-          <div className="seg-track" aria-label="카드 칸 수">
+          <div className="seg-track hidden sm:inline-flex" aria-label="카드 칸 수">
             {([3, 4] as const).map((option) => (
               <button
                 key={option}
@@ -253,6 +277,31 @@ export function ProjectsTab() {
               />
             </span>
           </button>
+
+          {/* A16: NOW 전용 토글 — 켜면 NOW 숨김 항목만 가립니다. */}
+          <button
+            type="button"
+            onClick={() => setSetting("nowOnly", !settings.nowOnly)}
+            aria-pressed={settings.nowOnly}
+            aria-label="NOW 숨김만 보기"
+            title="켜면 NOW 숨김으로 표시한 프로젝트·할 일·일정만 가립니다"
+            className="inline-flex items-center gap-2 text-[14.5px] text-ink-500"
+          >
+            NOW
+            <span
+              className={cn(
+                "relative h-[18px] w-8 rounded-full transition",
+                settings.nowOnly ? "bg-ink-900" : "bg-paper-300",
+              )}
+            >
+              <span
+                className={cn(
+                  "absolute top-[2px] h-[14px] w-[14px] rounded-full bg-white transition-all",
+                  settings.nowOnly ? "left-[16px]" : "left-[2px]",
+                )}
+              />
+            </span>
+          </button>
         </div>
       </div>
 
@@ -260,15 +309,16 @@ export function ProjectsTab() {
         <ModeChips
           mode={mode}
           onChange={setMode}
-          categories={[...BASE_CATEGORIES, ...settings.customCategories.filter((item) => !BASE_CATEGORIES.includes(item))]}
+          categories={categoryOptions}
           onAddCategory={addCategory}
+          onRemoveCategory={removeCategory}
         />
         <button
           type="button"
           onClick={() => setTaskDraft({ kind: "프로젝트", category: quickCategory })}
           className="ml-auto rounded-full bg-paper-200 px-3 py-1 text-[15px] font-medium text-ink-700 transition hover:bg-paper-300/70"
         >
-          + 트랙
+          + new
         </button>
       </div>
 
@@ -281,7 +331,7 @@ export function ProjectsTab() {
                   <InboxIcon size={14} />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-[17px] font-semibold tracking-tight text-ink-900">받은함</p>
+                  <p className="truncate text-[17px] font-semibold tracking-tight text-ink-900">index</p>
                   <p className="truncate text-[14px] text-ink-500">트랙에 넣지 않은 할 일</p>
                 </div>
               </header>
@@ -362,6 +412,25 @@ export function ProjectsTab() {
                     </button>
                     <button
                       type="button"
+                      onClick={(event) => {
+                        // A16: 카드에서 바로 NOW 숨김 켜기/끄기 — 카드가 열리지 않게 합니다.
+                        event.stopPropagation();
+                        void update("projects", project.id, { hidden: !project.hidden });
+                      }}
+                      className={cn(
+                        "flex-none rounded-full px-1.5 py-[1px] text-[11.5px] font-semibold leading-[1.6] transition",
+                        project.hidden
+                          ? "bg-ink-900 text-white"
+                          : "bg-paper-200 text-ink-400 hover:bg-paper-300/80 hover:text-ink-700",
+                      )}
+                      aria-label={project.hidden ? `${project.title} NOW 숨김 해제` : `${project.title} NOW 숨기기`}
+                      aria-pressed={!!project.hidden}
+                      title={project.hidden ? "NOW 숨김 켜짐 — 누르면 다시 보입니다" : "NOW 숨김 켜기"}
+                    >
+                      NOW
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => setProjectId(project.id)}
                       className="flex-none text-ink-300 transition hover:text-ink-600"
                       aria-label="프로젝트 열기"
@@ -428,9 +497,10 @@ export function ProjectsTab() {
 
           {routines.length > 0 ? (
             <div className="cards-grid" style={{ "--proj-cols": cols } as React.CSSProperties}>
-              {(["개인", "공부"] as const).map((category) => {
+              {categoryOptions
+                .filter((category) => routines.some((routine) => routine.category === category))
+                .map((category) => {
                 const items = routines.filter((routine) => routine.category === category);
-                if (items.length === 0) return null;
                 return (
                   <article key={category} className="rounded-2xl border border-paper-300 px-3 py-3">
                     <header className="flex items-start gap-2">
@@ -439,7 +509,7 @@ export function ProjectsTab() {
                       </span>
                       <div className="min-w-0 flex-1">
                         <p className="text-[17px] font-semibold tracking-tight text-ink-900">루틴</p>
-                        <p className="text-[14px] text-ink-500">루틴 · {category} · 이번 주</p>
+                        <p className="text-[14px] text-ink-500">{category}</p>
                       </div>
                     </header>
 
@@ -524,6 +594,21 @@ export function ProjectsTab() {
           onRestoreTask={(task) => void update("projects", task.id, { status: "미완료", doneAt: null })}
           onRestoreRoutine={(routine) => void update("routines", routine.id, { history: false })}
           onRestoreProject={(project) => void update("projects", project.id, { status: "미완료", history: false })}
+        />
+      ) : null}
+
+      {view === "journal" ? (
+        <HistorySpace
+          projects={data.projects.filter((task) => task.kind === "프로젝트")}
+          tasks={data.projects.filter((task) => task.kind === "할 일")}
+          routines={data.routines.filter((routine) => routine.kind === "루틴")}
+          onOpenProject={setProjectId}
+          onOpenTask={(id) => void openTask(id)}
+          onOpenRoutine={setRoutineId}
+          onToggleHidden={(project) => void update("projects", project.id, { hidden: !project.hidden })}
+          onRestoreProject={(project) => void update("projects", project.id, { status: "미완료", history: false, hidden: false })}
+          onRestoreTask={(task) => void update("projects", task.id, { status: "미완료", history: false, hidden: false })}
+          onRestoreRoutine={(routine) => void update("routines", routine.id, { history: false, hidden: false })}
         />
       ) : null}
 
@@ -926,6 +1011,132 @@ function HistoryView({
                   되살리기
                 </button>
               </li>
+            ))}
+          </ul>
+        )}
+      </section>
+    </div>
+  );
+}
+
+/* ───────────────────────── A16: 히스토리 전용 화면 ───────────────────────── */
+
+/** 숨긴 프로젝트 · 완료한 프로젝트 · History로 보낸 항목을 한 화면에 모읍니다. */
+function HistorySpace({
+  projects,
+  tasks,
+  routines,
+  onOpenProject,
+  onOpenTask,
+  onOpenRoutine,
+  onToggleHidden,
+  onRestoreProject,
+  onRestoreTask,
+  onRestoreRoutine,
+}: {
+  projects: ProjectTask[];
+  tasks: ProjectTask[];
+  routines: Routine[];
+  onOpenProject: (id: string) => void;
+  onOpenTask: (id: string) => void;
+  onOpenRoutine: (id: string) => void;
+  onToggleHidden: (project: ProjectTask) => void;
+  onRestoreProject: (project: ProjectTask) => void;
+  onRestoreTask: (task: ProjectTask) => void;
+  onRestoreRoutine: (routine: Routine) => void;
+}) {
+  const alive = projects.filter((project) => !project.trash);
+  const hiddenProjects = alive.filter((project) => project.hidden && !project.history);
+  const doneProjects = alive.filter(
+    (project) => !project.hidden && (project.history || project.status === "완료" || project.status === "취소"),
+  );
+  const sentTasks = tasks.filter((task) => !task.trash && task.history);
+  const sentRoutines = routines.filter((routine) => !routine.trash && routine.history);
+
+  const Row = ({
+    title,
+    meta,
+    onOpen,
+    children,
+  }: {
+    title: string;
+    meta: string;
+    onOpen: () => void;
+    children?: React.ReactNode;
+  }) => (
+    <li className="flex items-center gap-2 py-1.5">
+      <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-left">
+        <span className="block truncate text-[15px] text-ink-700">{title}</span>
+        <span className="text-[13px] text-ink-400">{meta}</span>
+      </button>
+      {children}
+    </li>
+  );
+
+  return (
+    <div className="mt-4 grid gap-4 lg:grid-cols-2">
+      <section className="rounded-2xl border border-paper-300 px-3.5 py-3">
+        <h3 className="mb-2 text-[15px] font-semibold text-ink-900">숨긴 프로젝트</h3>
+        {hiddenProjects.length === 0 ? (
+          <p className="text-[14.5px] text-ink-400">숨긴 프로젝트가 없습니다.</p>
+        ) : (
+          <ul className="divide-y divide-paper-300/60">
+            {hiddenProjects.map((project) => (
+              <Row key={project.id} title={project.title} meta={`${project.category} · 숨김`} onOpen={() => onOpenProject(project.id)}>
+                <button
+                  type="button"
+                  onClick={() => onToggleHidden(project)}
+                  aria-label={`${project.title} 숨김 해제`}
+                  className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[13px] text-ink-500 hover:bg-paper-200 hover:text-ink-800"
+                >
+                  <EyeIcon size={13} off /> 보이기
+                </button>
+              </Row>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="rounded-2xl border border-paper-300 px-3.5 py-3">
+        <h3 className="mb-2 text-[15px] font-semibold text-ink-900">완료한 프로젝트</h3>
+        {doneProjects.length === 0 ? (
+          <p className="text-[14.5px] text-ink-400">완료했거나 접은 프로젝트가 없습니다.</p>
+        ) : (
+          <ul className="divide-y divide-paper-300/60">
+            {doneProjects.map((project) => (
+              <Row key={project.id} title={project.title} meta={`${project.category} · ${project.history ? "History" : project.status}`} onOpen={() => onOpenProject(project.id)}>
+                <button
+                  type="button"
+                  onClick={() => onRestoreProject(project)}
+                  className="rounded px-1.5 py-0.5 text-[13px] text-ink-400 hover:bg-paper-200 hover:text-ink-700"
+                >
+                  되살리기
+                </button>
+              </Row>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className="rounded-2xl border border-paper-300 px-3.5 py-3">
+        <h3 className="mb-2 text-[15px] font-semibold text-ink-900">History로 보낸 항목</h3>
+        {sentTasks.length + sentRoutines.length === 0 ? (
+          <p className="text-[14.5px] text-ink-400">History로 보낸 항목이 없습니다.</p>
+        ) : (
+          <ul className="divide-y divide-paper-300/60">
+            {sentTasks.map((task) => (
+              <Row key={task.id} title={task.title} meta={`${task.kind} · ${task.category}`} onOpen={() => onOpenTask(task.id)}>
+                <button type="button" onClick={() => onRestoreTask(task)} className="rounded px-1.5 py-0.5 text-[13px] text-ink-400 hover:bg-paper-200 hover:text-ink-700">
+                  되살리기
+                </button>
+              </Row>
+            ))}
+            {sentRoutines.map((routine) => (
+              <Row key={routine.id} title={routine.title} meta={`루틴 · ${routine.category}`} onOpen={() => onOpenRoutine(routine.id)}>
+                <button type="button" onClick={() => onRestoreRoutine(routine)} className="rounded px-1.5 py-0.5 text-[13px] text-ink-400 hover:bg-paper-200 hover:text-ink-700">
+                  되살리기
+                </button>
+              </Row>
             ))}
           </ul>
         )}

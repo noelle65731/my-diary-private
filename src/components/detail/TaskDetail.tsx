@@ -18,7 +18,6 @@ import { ProjectPicker } from "@/components/editors/shared";
 import { editableMemo, plainOfSpans, spansFromMarkdown } from "@/lib/richtext";
 import { addDaysISO, formatFullKo, formatShort, todayISO, weekdayKo } from "@/lib/date";
 import {
-  TASK_CATEGORIES,
   TASK_STATUSES,
   type ExtraProperty,
   type ItemIcon,
@@ -31,6 +30,7 @@ import { DynamicProperties, type SchemaMap } from "@/components/detail/DynamicPr
 import { ProjectIconPicker } from "@/components/common/ProjectIcon";
 import { cn } from "@/lib/utils";
 import { useSettings } from "@/state/settings";
+import { useCategoryOptions } from "@/state/categories";
 
 interface TaskForm {
   title: string;
@@ -180,7 +180,9 @@ function TaskDetailInner({
   registerFlush?: (flush: (() => Promise<boolean>) | null) => void;
 }) {
   const { data, update, remove, fetchBody, saveBody, fetchSchema, demo, create } = useData();
-  const { settings, addCategory } = useSettings();
+  const { addCategory } = useSettings();
+  // A16: the same 분류 list as the top filters and the routine window.
+  const categoryOptions = useCategoryOptions();
   const [schema, setSchema] = useState<SchemaMap>({});
   const { draft, set, markSaved, reset, changedKeys, isDirty } = useDetailDraft(formFromTask(task));
   const [field, setField] = useState<string | null>(null);
@@ -260,10 +262,7 @@ function TaskDetailInner({
   };
 
   const project = task.projectIds.length > 0 ? data.projects.find((item) => item.id === task.projectIds[0]) ?? null : null;
-  const categories = useMemo(
-    () => [...TASK_CATEGORIES, ...settings.customCategories.filter((item) => !(TASK_CATEGORIES as string[]).includes(item))],
-    [settings.customCategories],
-  );
+  const categories = categoryOptions;
   /** 새 프로젝트를 만들고 이 할 일에 바로 연결합니다 (Notion DB에 생성). */
   const createProject = async (title: string): Promise<string | null> => {
     const created = await create("projects", {
@@ -287,7 +286,7 @@ function TaskDetailInner({
       onBack={() => leave(onBack)}
       onClose={() => leave(onCloseAll)}
       label={`${task.kind} · ${draft.category}`}
-      subtitle={project ? project.title : task.kind === "할 일" ? "받은함" : undefined}
+      subtitle={project ? project.title : task.kind === "할 일" ? "index" : undefined}
       sideBySide={sideBySide}
       footer={
         <>
@@ -439,8 +438,29 @@ function TaskDetailInner({
           </div>
         ) : null}
 
+        {/* A16: 연결된 프로젝트를 설정 영역의 맨 위에 둡니다. */}
+        <DetailSection title="연결 프로젝트">
+          <ProjectPicker
+            projects={data.projects.filter((item) => item.kind === "프로젝트" && !item.trash && item.id !== task.id)}
+            value={draft.projectIds}
+            onChange={(ids) => set("projectIds", ids)}
+            onCreate={createProject}
+          />
+        </DetailSection>
+
         <DetailSection title="일정">
+          {/* A16: 분류·유형을 날짜보다 위에 둡니다. */}
           <div className="grid gap-2 sm:grid-cols-2">
+            <InlineChoice label="유형" value={draft.kind} options={["할 일", "프로젝트"]} onChange={(value) => set("kind", value)} />
+            <InlineChoice<string>
+              label="분류"
+              value={draft.category}
+              options={categories}
+              onChange={(value) => set("category", value as TaskCategory)}
+              onCreate={(name) => addCategory(name)}
+            />
+          </div>
+          <div className="mt-1 grid gap-2 sm:grid-cols-2">
             <InlineText
               label="날짜"
               type="date"
@@ -451,6 +471,7 @@ function TaskDetailInner({
               onDone={() => setField(null)}
               display={draft.date ? `${formatShort(draft.date)} ${weekdayKo(draft.date)}` : undefined}
               placeholder="날짜 없음"
+              onClear={() => set("date", "")}
             />
             <InlineText
               label="마감일"
@@ -462,16 +483,7 @@ function TaskDetailInner({
               onDone={() => setField(null)}
               display={draft.due ? `${formatShort(draft.due)} ${weekdayKo(draft.due)}` : undefined}
               placeholder="마감일 없음"
-            />
-          </div>
-          <div className="mt-1 grid gap-2 sm:grid-cols-2">
-            <InlineChoice label="유형" value={draft.kind} options={["할 일", "프로젝트"]} onChange={(value) => set("kind", value)} />
-            <InlineChoice<string>
-              label="분류"
-              value={draft.category}
-              options={categories}
-              onChange={(value) => set("category", value as TaskCategory)}
-              onCreate={(name) => addCategory(name)}
+              onClear={() => set("due", "")}
             />
           </div>
         </DetailSection>
@@ -537,15 +549,6 @@ function TaskDetailInner({
           )}
         </DetailSection>
 
-        <DetailSection title="연결 프로젝트">
-          <ProjectPicker
-            projects={data.projects.filter((item) => item.kind === "프로젝트" && !item.trash && item.id !== task.id)}
-            value={draft.projectIds}
-            onChange={(ids) => set("projectIds", ids)}
-            onCreate={createProject}
-          />
-        </DetailSection>
-
         {draft.extra.length > 0 ? (
           <DetailSection title="추가 속성 (Notion)">
             <DynamicProperties extra={draft.extra} schema={schema} onChange={(next) => set("extra", next)} />
@@ -556,22 +559,15 @@ function TaskDetailInner({
           <InlineFlags
             flags={
               isProject
-                ? [
-                    { key: "hidden", label: "숨김", on: draft.hidden },
-                    { key: "history", label: "History", on: draft.history },
-                  ]
+                ? []
                 : [
                     { key: "urgent", label: "긴급", on: draft.urgent },
                     { key: "important", label: "중요", on: draft.important },
-                    { key: "hidden", label: "숨김", on: draft.hidden },
-                    { key: "history", label: "History", on: draft.history },
                   ]
             }
             onToggle={(key) => {
               if (key === "urgent") set("urgent", !draft.urgent);
               if (key === "important") set("important", !draft.important);
-              if (key === "hidden") set("hidden", !draft.hidden);
-              if (key === "history") set("history", !draft.history);
             }}
           />
         </DetailSection>

@@ -29,7 +29,7 @@ export const DB_ENV_KEYS: Record<Resource, string> = {
 /** One-line purpose of each database. */
 export const DB_PURPOSES: Record<Resource, string> = {
   calendar: "일정 · 주간 목표 · 주간 메모 · 월간 메모",
-  projects: "프로젝트 · 할 일 · 받은함",
+  projects: "프로젝트 · 할 일 · index",
   routines: "루틴 정의 · 날짜별 체크 기록",
   binder: "일기 · 노트 본문",
   archive: "메모 · 책 · 영화 · 레퍼런스 · 읽을거리",
@@ -66,7 +66,7 @@ export const DB_PROPERTIES: Record<Resource, DbProperty[]> = {
   projects: [
     { name: "제목", type: "title" },
     { name: "유형", type: "select", detail: "프로젝트 / 할 일" },
-    { name: "분류", type: "select", detail: "업무 / 개인 / 공부" },
+    { name: "분류", type: "select", detail: "업무 / 개인 / 공부 / 내가 만든 분류" },
     { name: "상태", type: "status", detail: "미완료 / 대기 중 / 완료 / 취소" },
     { name: "날짜", type: "date" },
     { name: "마감일", type: "date" },
@@ -89,7 +89,7 @@ export const DB_PROPERTIES: Record<Resource, DbProperty[]> = {
   routines: [
     { name: "제목", type: "title" },
     { name: "유형", type: "select", detail: "루틴 / 날짜별 체크" },
-    { name: "분류", type: "select", detail: "개인 / 공부" },
+    { name: "분류", type: "select", detail: "업무 / 개인 / 공부 / 내가 만든 분류" },
     { name: "날짜", type: "date" },
     { name: "반복 요일", type: "multi_select", detail: "월 / 화 / 수 / 목 / 금 / 토 / 일" },
     { name: "목표 횟수", type: "number" },
