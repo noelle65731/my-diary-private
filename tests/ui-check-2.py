@@ -275,6 +275,37 @@ def main():
         page.keyboard.press("Escape")
         page.wait_for_timeout(300)
 
+        # ── 프로젝트 자체에는 대기·긴급·중요가 없다 / 취소 질문 문구 ──
+        goto_tab(page, "프로젝트")
+        page.wait_for_timeout(400)
+        page.get_by_role("button", name="프로젝트 열기").first.click()
+        page.wait_for_timeout(500)
+        drawer2 = page.get_by_role("dialog", name="브랜드 포트폴리오")
+        drawer2.get_by_role("button", name="프로젝트 수정").click()
+        page.wait_for_timeout(800)
+        proj_detail = page.get_by_role("dialog", name=re.compile("^프로젝트"))
+        ptext = proj_detail.inner_text()
+        check("프로젝트 상세에 긴급·중요 없음", "긴급" not in ptext and "중요" not in ptext, ptext[:120])
+        proj_detail.get_by_role("button", name="상태 변경").click()
+        page.wait_for_timeout(300)
+        check("프로젝트 상태에 대기 중 없음", proj_detail.get_by_role("button", name="상태: 대기 중").count() == 0)
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(200)
+        page.keyboard.press("Escape")
+        page.wait_for_timeout(400)
+
+        goto_tab(page, "프로젝트")
+        page.get_by_role("button", name="+ 트랙").first.click()
+        page.wait_for_timeout(500)
+        editor = page.get_by_role("dialog")
+        editor.get_by_role("button", name="취소", exact=True).first.click()
+        page.wait_for_timeout(400)
+        cancel_input = editor.get_by_role("textbox", name="취소 사유")
+        check("취소 질문이 '왜 취소되었나요?'", cancel_input.get_attribute("placeholder") == "왜 취소되었나요?",
+              str(cancel_input.get_attribute("placeholder")))
+        editor.get_by_role("button", name="닫기").first.click()
+        page.wait_for_timeout(400)
+
         # ── 공휴일 이름·색 (2026 성탄절, 2027 설날) ──
         goto_tab(page, "캘린더")
         page.get_by_role("button", name="월간", exact=True).click()
