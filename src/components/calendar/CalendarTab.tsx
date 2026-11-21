@@ -34,7 +34,6 @@ import { HabitView } from "@/components/calendar/HabitView";
 import { EventEditor, type EventDraft } from "@/components/editors/EventEditor";
 import { EventDetail } from "@/components/detail/EventDetail";
 import { TaskDetail } from "@/components/detail/TaskDetail";
-import { TaskEditor } from "@/components/editors/TaskEditor";
 import { RoutineEditor } from "@/components/editors/RoutineEditor";
 
 /** A12: the view switch reads 연간 → 월간 → 주간 → 3일 → 일간; 루틴 sits apart. */
@@ -58,7 +57,7 @@ export function CalendarTab() {
   const { settings, addCategory, removeCategory } = useSettings();
   // A16: the 분류 filter shares one list with the routine/task pickers.
   const categoryOptions = useCategoryOptions();
-  const { focus, clearFocus, openBinderForDate, setSearchOpen, openTrash, views, setView: setTabView } = useUi();
+  const { focus, clearFocus, openBinderForDate, setSearchOpen, openTrash, views, setView: setTabView, openTaskDraft } = useUi();
 
   const today = todayISO();
   // A15: the view lives in the shared UI state, so the browser's back button returns to it.
@@ -604,7 +603,7 @@ export function CalendarTab() {
               onReorderAllDay={reorderAllDay}
               onToggleTask={toggleTask}
               onRoutineCount={(routine, date, count) => void setRoutineCount(routine, date, count)}
-              onCreateTaskForProject={(projectId, date) => setTaskId(`${projectId ? `new:${projectId}` : "new:"}${date ? `@${date}` : ""}`)}
+              onCreateTaskForProject={(projectId, date) => openTaskDraft({ kind: "할 일", projectId: projectId || undefined, date: date || undefined })}
               onCreateRoutine={() => setRoutineId("new")}
               mode={mode}
               hiddenProjectIds={customHidden.projects}
@@ -638,7 +637,7 @@ export function CalendarTab() {
               onReorderAllDay={reorderAllDay}
               onToggleTask={toggleTask}
               onRoutineCount={(routine, date, count) => void setRoutineCount(routine, date, count)}
-              onCreateTaskForProject={(projectId, date) => setTaskId(`${projectId ? `new:${projectId}` : "new:"}${date ? `@${date}` : ""}`)}
+              onCreateTaskForProject={(projectId, date) => openTaskDraft({ kind: "할 일", projectId: projectId || undefined, date: date || undefined })}
               onCreateRoutine={() => setRoutineId("new")}
               mode={mode}
               hiddenProjectIds={customHidden.projects}
@@ -665,7 +664,7 @@ export function CalendarTab() {
               onMoveEvent={moveEvent}
               onResizeEvent={resizeEvent}
               onWriteDiary={openBinderForDate}
-              onCreateTaskForProject={(projectId) => setTaskId(projectId ? `new:${projectId}` : "new:")}
+              onCreateTaskForProject={(projectId) => openTaskDraft({ kind: "할 일", projectId: projectId || undefined })}
             />
           ) : null}
 
@@ -740,23 +739,10 @@ export function CalendarTab() {
         onClose={() => setEventEditor({ open: false })}
       />
       <TaskDetail
-        open={taskId !== null && !taskId.startsWith("new:")}
-        taskId={taskId && !taskId.startsWith("new:") ? taskId : null}
+        open={taskId !== null}
+        taskId={taskId}
         onBack={() => setTaskId(null)}
         onCloseAll={closeEveryLayer}
-      />
-      <TaskEditor
-        open={taskId !== null && taskId.startsWith("new:")}
-        draft={
-          taskId?.startsWith("new:")
-            ? (() => {
-                /* A19: 주간 보기의 칸에서 더한 할 일은 그 날짜로 시작합니다 — "new:<projectId>@<date>". */
-                const [projectId, date] = taskId.slice(4).split("@");
-                return { kind: "할 일" as const, projectId: projectId || undefined, date: date || cursor };
-              })()
-            : undefined
-        }
-        onClose={() => setTaskId(null)}
       />
       <RoutineEditor
         open={routineId !== null}

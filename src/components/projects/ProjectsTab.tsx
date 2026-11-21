@@ -16,7 +16,6 @@ import { ProjectIcon } from "@/components/common/ProjectIcon";
 import { CheckIcon, ChevronRightIcon, EyeIcon, InboxIcon, PlusIcon, RepeatIcon, TrashIcon } from "@/components/icons";
 import { ModeChips } from "@/components/common/ModeChips";
 import { ProjectDrawer } from "@/components/projects/ProjectDrawer";
-import { TaskEditor } from "@/components/editors/TaskEditor";
 import { TaskDetail } from "@/components/detail/TaskDetail";
 import { RoutineEditor } from "@/components/editors/RoutineEditor";
 import { routineCountForDay } from "@/components/calendar/calendar-utils";
@@ -59,7 +58,7 @@ export function ProjectsTab() {
   const { settings, set: setSetting, addCategory, removeCategory } = useSettings();
   // A16: filters and pickers share one 분류 list, so a new one shows up everywhere.
   const categoryOptions = useCategoryOptions();
-  const { focus, clearFocus, openTrash, views, setView: setTabView } = useUi();
+  const { focus, clearFocus, openTrash, views, setView: setTabView, openTaskDraft } = useUi();
 
   // A15: tracks / priority / history is kept in the shared UI state for 뒤로 가기.
   const view = ((views.projects || "tracks") as ProjectView);
@@ -81,13 +80,7 @@ export function ProjectsTab() {
   const [mode, setMode] = useState<ModeFilter>("all");
   const [projectId, setProjectId] = useState<string | null>(null);
   const [taskId, setTaskId] = useState<string | null>(null);
-  const [taskDraft, setTaskDraft] = useState<{
-    kind?: "할 일" | "프로젝트";
-    category?: TaskCategory;
-    projectId?: string;
-    urgent?: boolean;
-    important?: boolean;
-  } | null>(null);
+  // A30: 새 할 일·프로젝트 창은 앱 공통 플로팅 창(ui 상태)에서 열어, 뒤 화면을 보거나 탭을 옮겨도 유지됩니다.
   const [routineId, setRoutineId] = useState<string | null>(null);
   /** A24: 우선순위 탭에만 걸리는 기간 — 다른 보기를 다녀와도 이 화면에서만 유지됩니다. */
   const [priorityRange, setPriorityRange] = useState<{ from: string; to: string }>({ from: "", to: "" });
@@ -109,7 +102,6 @@ export function ProjectsTab() {
       const ok = await flushRef.current();
       if (!ok) return;
     }
-    setTaskDraft(null);
     setTaskId(id);
   };
 
@@ -436,7 +428,7 @@ export function ProjectsTab() {
         />
         <button
           type="button"
-          onClick={() => setTaskDraft({ kind: "프로젝트", category: quickCategory })}
+          onClick={() => openTaskDraft({ kind: "프로젝트", category: quickCategory })}
           className="ml-auto rounded-full bg-paper-200 px-3 py-1 text-[calc(15px*var(--fs))] font-medium text-ink-700 transition hover:bg-paper-300/70"
         >
           + new
@@ -497,7 +489,7 @@ export function ProjectsTab() {
                   onOpenTask={(id) => void openTask(id)}
                   onToggleTask={toggleTask}
                   onCreateTask={(target) =>
-                    setTaskDraft({ kind: "할 일", category: target.category, projectId: target.id })
+                    openTaskDraft({ kind: "할 일", category: target.category, projectId: target.id })
                   }
                   drag={{
                     draggable: true,
@@ -613,7 +605,7 @@ export function ProjectsTab() {
           onOpenProject={setProjectId}
           onToggle={toggleTask}
           onCreateTask={(category, urgent, important) => {
-            setTaskDraft({ kind: "할 일", category, urgent, important });
+            openTaskDraft({ kind: "할 일", category, urgent, important });
           }}
         />
       ) : null}
@@ -669,8 +661,6 @@ export function ProjectsTab() {
         }}
         registerFlush={registerFlush}
       />
-
-      <TaskEditor open={taskDraft !== null} draft={taskDraft ?? undefined} onClose={() => setTaskDraft(null)} />
 
       <RoutineEditor
         open={routineId !== null}

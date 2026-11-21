@@ -1,10 +1,11 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useData } from "@/state/store";
 import { useSettings } from "@/state/settings";
 import { useCategoryOptions } from "@/state/categories";
-import { Modal, Segmented, TextInput, Toggle } from "@/components/common/primitives";
+import { Segmented, TextInput, Toggle } from "@/components/common/primitives";
+import { FloatingPanel } from "@/components/common/FloatingPanel";
 import { EditorFooter, ErrorNote, ProjectPicker } from "@/components/editors/shared";
 import { ProjectIconPicker } from "@/components/common/ProjectIcon";
 import { MemoEditor } from "@/components/editors/MemoField";
@@ -16,18 +17,13 @@ import {
   type ItemIcon,
   type ProjectTask,
   type TaskCategory,
+  type TaskDraft,
   type TaskKind,
   type TaskStatus,
 } from "@/lib/types";
 
-export interface TaskDraft {
-  kind?: TaskKind;
-  category?: TaskCategory;
-  date?: string | null;
-  projectId?: string;
-  urgent?: boolean;
-  important?: boolean;
-}
+// A30: 초안 타입은 ui 상태와 함께 쓰도록 lib에 있고, 기존 import 경로도 그대로 둡니다.
+export type { TaskDraft };
 
 interface FormState {
   title: string;
@@ -114,7 +110,6 @@ export function TaskEditor({
   if (!open) return null;
   return (
     <TaskEditorInner
-      key={taskId ?? `new-${draft?.kind ?? ""}-${draft?.date ?? ""}-${draft?.projectId ?? ""}-${draft?.urgent ? 1 : 0}${draft?.important ? 1 : 0}`}
       taskId={taskId ?? null}
       draft={draft}
       onClose={onClose}
@@ -140,6 +135,25 @@ function TaskEditorInner({
   if (initialForm.current === null) initialForm.current = existing ? formFromTask(existing) : formFromDraft(draft);
   const closing = useRef(false);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * A30: 창을 열어 둔 채 다른 곳에서 + new / + 할 일을 다시 눌러도 적던 내용은 지우지 않고,
+   * 새로 고른 종류·분류·날짜·프로젝트만 반영합니다.
+   */
+  const draftRef = useRef<TaskDraft | undefined>(draft);
+  useEffect(() => {
+    if (draft === draftRef.current) return;
+    draftRef.current = draft;
+    if (!draft) return;
+    setForm((current) => ({
+      ...current,
+      kind: draft.kind ?? current.kind,
+      category: draft.category ?? current.category,
+      date: draft.date ?? current.date,
+      urgent: draft.urgent ?? current.urgent,
+      important: draft.important ?? current.important,
+      projectIds: draft.projectId ? [draft.projectId] : current.projectIds,
+    }));
+  }, [draft]);
   // A6: History projects are not offered for a new task.
   const projects = data.projects.filter((item) => item.kind === "프로젝트" && !item.trash && !item.history && item.id !== existing?.id);
   // A7/A16: 업무·개인·공부 plus every category the user made or a record already has.
@@ -235,11 +249,11 @@ function TaskEditorInner({
   };
 
   return (
-    <Modal
+    <FloatingPanel
       open
       onClose={closeWithSave}
+      label={existing ? "수정" : form.kind}
       title={existing ? (form.kind === "프로젝트" ? "프로젝트 수정" : "할 일 수정") : form.kind === "프로젝트" ? "새 프로젝트" : "새 할 일"}
-      size="md"
       footer={
         <EditorFooter
           onClose={closeWithSave}
@@ -412,15 +426,12 @@ function TaskEditorInner({
           <MemoEditor value={form.memo} onChange={(value) => patch("memo", value)} rows={3} />
         </div>
 
-        <div className="grid grid-cols-2 gap-2 rounded-xl border border-paper-300/80 bg-paper-50/60 px-3 py-2">
-          {isProject ? null : (
-            <>
-              <Toggle checked={form.urgent} onChange={(value) => patch("urgent", value)} label="긴급" />
-              <Toggle checked={form.important} onChange={(value) => patch("important", value)} label="중요" />
-            </>
-          )}
-
-        </div>
+        {isProject ? null : (
+          <div className="grid grid-cols-2 gap-2 rounded-xl border border-paper-300/80 bg-paper-50/60 px-3 py-2">
+            <Toggle checked={form.urgent} onChange={(value) => patch("urgent", value)} label="긴급" />
+            <Toggle checked={form.important} onChange={(value) => patch("important", value)} label="중요" />
+          </div>
+        )}
 
         {form.kind === "할 일" ? (
           <div>
@@ -431,6 +442,6 @@ function TaskEditorInner({
 
         <ErrorNote message={error} />
       </div>
-    </Modal>
+    </FloatingPanel>
   );
 }

@@ -9,7 +9,7 @@ import {
   useRef,
   useState,
   type ReactNode,
-} from "react";import type { Resource } from "@/lib/types";
+} from "react";import type { Resource, TaskDraft } from "@/lib/types";
 import { uid } from "@/lib/utils";
 
 export type TabKey = "calendar" | "projects" | "binder" | "archive";
@@ -50,6 +50,13 @@ interface UiContextValue {
   pendingBinderDate: string | null;
   openBinderForDate: (date: string) => void;
   consumeBinderDate: () => void;
+  /**
+   * A30: 새 할 일·프로젝트는 앱 전체에 하나뿐인 플로팅 창에서 만듭니다.
+   * 어느 탭에서 열어도 창이 유지되고, 탭을 옮겨도 뒤 화면만 바뀝니다.
+   */
+  taskDraft: TaskDraft | null;
+  openTaskDraft: (draft?: TaskDraft) => void;
+  closeTaskDraft: () => void;
 }
 
 const UiContext = createContext<UiContextValue | null>(null);
@@ -76,6 +83,7 @@ export function UiProvider({ children }: { children: ReactNode }) {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [pendingBinderDate, setPendingBinderDate] = useState<string | null>(null);
+  const [taskDraft, setTaskDraft] = useState<TaskDraft | null>(null);
   const [views, setViews] = useState<Record<TabKey, string>>({ calendar: "week", projects: "tracks", binder: "weekly", archive: "" });
   const viewsRef = useRef(views);
   viewsRef.current = views;
@@ -203,6 +211,9 @@ export function UiProvider({ children }: { children: ReactNode }) {
 
   const consumeBinderDate = useCallback(() => setPendingBinderDate(null), []);
 
+  const openTaskDraft = useCallback((draft: TaskDraft = {}) => setTaskDraft(draft), []);
+  const closeTaskDraft = useCallback(() => setTaskDraft(null), []);
+
   const value = useMemo<UiContextValue>(
     () => ({
       tab,
@@ -227,6 +238,9 @@ export function UiProvider({ children }: { children: ReactNode }) {
       pendingBinderDate,
       openBinderForDate,
       consumeBinderDate,
+      taskDraft,
+      openTaskDraft,
+      closeTaskDraft,
     }),
     [
       tab,
@@ -249,6 +263,9 @@ export function UiProvider({ children }: { children: ReactNode }) {
       pendingBinderDate,
       openBinderForDate,
       consumeBinderDate,
+      taskDraft,
+      openTaskDraft,
+      closeTaskDraft,
     ],
   );
 

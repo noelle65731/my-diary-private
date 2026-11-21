@@ -15,6 +15,19 @@ export type TaskKind = "프로젝트" | "할 일";
 export type TaskCategory = "업무" | "개인" | "공부" | (string & {});
 export type TaskStatus = "미완료" | "대기 중" | "완료" | "취소";
 
+/**
+ * A30: 새 할 일·프로젝트를 어느 화면에서 열든 같은 플로팅 창으로 띄우기 위한 초안 값입니다.
+ * 예) 프로젝트 카드의 `+ 할 일`, 주간 보기의 칸, 하단 빠른 추가.
+ */
+export interface TaskDraft {
+  kind?: TaskKind;
+  category?: TaskCategory;
+  date?: string | null;
+  projectId?: string;
+  urgent?: boolean;
+  important?: boolean;
+}
+
 export type RoutineKind = "루틴" | "날짜별 체크";
 export type BinderKind = "일기" | "노트";
 export type ArchiveKind = "메모" | "책" | "영화" | "레퍼런스" | "읽을거리";

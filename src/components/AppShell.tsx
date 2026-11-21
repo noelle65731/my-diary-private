@@ -65,7 +65,7 @@ function Splash() {
 
 export function AppShell() {
   const { status, loading, fatalError, demo, resourceErrors, refresh, data } = useData();
-  const { tab, setTab, requestReset, setSearchOpen, openTrash, setSettingsOpen, toasts, dismissToast } = useUi();
+  const { tab, setTab, requestReset, setSearchOpen, openTrash, setSettingsOpen, toasts, dismissToast, taskDraft, openTaskDraft, closeTaskDraft } = useUi();
   const [today, setToday] = useState(todayISO());
   const [quickOpen, setQuickOpen] = useState(false);
   const [quick, setQuick] = useState<QuickKind | null>(null);
@@ -172,6 +172,11 @@ export function AppShell() {
 
   const startQuick = (kind: QuickKind) => {
     setQuickOpen(false);
+    // A30: 할 일은 다른 화면의 + new 와 같은 플로팅 창에서 만듭니다.
+    if (kind === "task") {
+      openTaskDraft({ kind: "할 일", date: todayISO() });
+      return;
+    }
     setQuick(kind);
   };
 
@@ -377,10 +382,12 @@ export function AppShell() {
       <SettingsDialog />
 
       <EventEditor open={quick === "event"} onClose={() => setQuick(null)} draft={{ date: todayISO() }} />
-      <TaskEditor open={quick === "task"} onClose={() => setQuick(null)} draft={{ kind: "할 일", date: todayISO() }} />
       <RoutineEditor open={quick === "routine"} onClose={() => setQuick(null)} routineId={null} />
       <BinderEditor open={quick === "diary" || quick === "note"} onClose={() => setQuick(null)} draft={{ date: todayISO(), kind: quick === "note" ? "노트" : "일기" }} />
       <ArchiveEditor open={quick === "memo"} onClose={() => setQuick(null)} draft={{ date: todayISO() }} />
+
+      {/* A30: 새 할 일·프로젝트 — 탭을 옮겨도 유지되는 비차단 플로팅 창 */}
+      <TaskEditor open={taskDraft !== null} draft={taskDraft ?? undefined} onClose={closeTaskDraft} />
 
       <div className="pointer-events-none fixed bottom-[calc(4.4rem+env(safe-area-inset-bottom))] left-1/2 z-50 flex w-[min(92vw,26rem)] -translate-x-1/2 flex-col gap-2 md:inset-x-8 md:bottom-6 md:left-auto md:translate-x-0">
         {toasts.map((toast) => (

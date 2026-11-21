@@ -96,6 +96,7 @@ export function ProjectPicker({
             key={project.id}
             type="button"
             onClick={() => onChange(active ? value.filter((id) => id !== project.id) : [...value, project.id])}
+            aria-pressed={active}
             className={cn(
               "chip border transition",
               active ? "border-accent-300 bg-accent-100 text-accent-600" : "border-paper-400 bg-white/60 text-ink-500 hover:border-ink-400",
