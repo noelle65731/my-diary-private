@@ -325,7 +325,7 @@ export function Timeline({
                 if (!id) return;
                 onMoveEvent(id, day, toTime(dropTime(event as unknown as { clientY: number; currentTarget: HTMLDivElement }, bounds.start)));
               }}
-              className={cn("relative touch-pan-y border-l border-paper-300", isToday && "bg-[#e8edf4]")}
+              className={cn("relative touch-pan-y border-l border-paper-300", isToday && "bg-[#f4f6fa]")}
               style={{
                 height: totalHeight,
                 backgroundImage:

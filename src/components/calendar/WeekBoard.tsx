@@ -87,8 +87,9 @@ export function WeekBoard({
   onReorderAllDay,
 }: WeekBoardProps) {
   const today = todayISO();
-  /** 오늘 열은 일정·프로젝트·루틴이 같은 톤으로 이어지도록 한 가지 색을 같이 씁니다. */
-  const todayCell = "bg-[#e8edf4]";
+  /** 오늘 열은 일정·프로젝트·루틴이 같은 톤으로 이어지도록 한 가지 색을 같이 씁니다.
+   *  A20: #e8edf4가 너무 진하다는 요청에 흰 바탕 대비 농도를 절반으로 낮췄습니다(#f4f6fa). */
+  const todayCell = "bg-[#f4f6fa]";
   /** A6: the first project row carries the collapse-all control for the whole project area. */
   const [projectsCollapsed, setProjectsCollapsed] = useState(false);
   /** The routine area folds away as a whole, the same way the project area does. */
