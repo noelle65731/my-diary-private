@@ -24,18 +24,18 @@ export function MiniMonth({ cursor, weekStart, marks, onPick, onMonth }: MiniMon
   return (
     <div>
       <div className="flex items-center justify-between px-1">
-        <button type="button" onClick={() => onMonth(-1)} className="icon-btn h-6 w-6" aria-label="이전 달">
-          <ChevronLeftIcon size={22} />
+        <button type="button" onClick={() => onMonth(-1)} className="icon-btn h-5 w-5" aria-label="이전 달">
+          <ChevronLeftIcon size={15} />
         </button>
-        <p className="text-[0.86rem] font-semibold text-ink-900">{formatMonthKo(cursor)}</p>
-        <button type="button" onClick={() => onMonth(1)} className="icon-btn h-6 w-6" aria-label="다음 달">
-          <ChevronRightIcon size={22} />
+        <p className="text-[0.8rem] font-semibold text-ink-900">{formatMonthKo(cursor)}</p>
+        <button type="button" onClick={() => onMonth(1)} className="icon-btn h-5 w-5" aria-label="다음 달">
+          <ChevronRightIcon size={15} />
         </button>
       </div>
 
-      <div className="mt-2 grid grid-cols-7 text-center">
+      <div className="mt-1 grid grid-cols-7 text-center">
         {["월", "화", "수", "목", "금", "토", "일"].map((label) => (
-          <span key={label} className={cn("pb-1 text-[0.66rem]", label === "토" ? "text-blue-500" : label === "일" ? "text-red-400" : "text-ink-400")}>
+          <span key={label} className={cn("pb-0.5 text-[0.6rem]", label === "토" ? "text-blue-500" : label === "일" ? "text-red-400" : "text-ink-400")}>
             {label}
           </span>
         ))}
@@ -55,7 +55,7 @@ export function MiniMonth({ cursor, weekStart, marks, onPick, onMonth }: MiniMon
                 type="button"
                 onClick={() => onPick(day)}
                 className={cn(
-                  "relative flex h-7 flex-col items-center justify-center text-[0.72rem] tabular-nums transition",
+                  "relative flex h-[1.35rem] flex-col items-center justify-center text-[0.68rem] tabular-nums transition",
                   inWeek && "bg-paper-200/80",
                   inWeek && day === weekStart && "rounded-l-lg",
                   inWeek && day === weekEnd && "rounded-r-lg",
@@ -63,7 +63,7 @@ export function MiniMonth({ cursor, weekStart, marks, onPick, onMonth }: MiniMon
               >
                 <span
                   className={cn(
-                    "flex h-[1.35rem] min-w-[1.35rem] items-center justify-center rounded-full px-1",
+                    "flex h-[1.12rem] min-w-[1.12rem] items-center justify-center rounded-full px-1",
                     isToday
                       ? "bg-ink-900 font-semibold text-white"
                       : !inMonth

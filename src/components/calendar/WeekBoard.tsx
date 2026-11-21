@@ -69,6 +69,8 @@ export function WeekBoard({
   const today = todayISO();
   /** A6: the first project row carries the collapse-all control for the whole project area. */
   const [projectsCollapsed, setProjectsCollapsed] = useState(false);
+  /** The routine area folds away as a whole, the same way the project area does. */
+  const [routinesCollapsed, setRoutinesCollapsed] = useState(false);
   /** B5: all-day 4건 → 3건 + 펼치기, and the 시간표 lifts when the rows fold. */
   const [allDayExpanded, setAllDayExpanded] = useState(false);
   const [customOpen, setCustomOpen] = useState(false);
@@ -171,10 +173,17 @@ export function WeekBoard({
     return bars;
   }, [visibleEvents, days]);
 
+  /** 종일 줄은 시간표와 스크롤 창을 나눠 쓰므로, 데스크톱에서는 두 줄까지만 펼쳐 둡니다. */
+  const allDayVisibleCap = narrow ? 3 : 2;
+  /** 종일 줄 아래로 보이는 시간표 높이 — 32px 한 줄 × 약 3시간. */
+  const timelineWindow = 98;
   const laneCount = allDayBars.length > 0 ? Math.max(...allDayBars.map((bar) => bar.lane)) + 1 : 0;
-  const visibleLanes = allDayExpanded ? laneCount : Math.min(3, laneCount);
-  const hiddenBars = allDayExpanded ? 0 : allDayBars.filter((bar) => bar.lane >= 3).length;
-  const allDayHeight = Math.max(visibleLanes, 1) * 24 + (hiddenBars > 0 ? 18 : 0) + 6;
+  const visibleLanes = allDayExpanded ? laneCount : Math.min(allDayVisibleCap, laneCount);
+  const hiddenBars = allDayExpanded ? 0 : allDayBars.filter((bar) => bar.lane >= allDayVisibleCap).length;
+  /** 종일 줄은 시간표와 같은 스크롤 창 안에 들어가므로 한 줄을 20px로 조입니다. */
+  const allDayLane = 20;
+  const allDayHeight = allDayBars.length === 0 ? 0 : Math.max(visibleLanes, 1) * allDayLane + (hiddenBars > 0 ? 15 : 0) + 2;
+  const routineTotal = routineGroups.reduce((sum, group) => sum + group.items.length, 0);
 
   return (
     <div className="min-w-0">
@@ -249,7 +258,7 @@ export function WeekBoard({
         </div>
       ) : null}
       {/* week day header */}
-      <div className="grid items-end border-b border-paper-300 pb-1" style={grid}>
+      <div className="grid items-end border-b border-paper-300 pb-1" style={grid} data-week-header="true">
         <div className="sticky left-0 z-20 self-stretch bg-white pb-1 text-right text-[0.62rem] text-ink-400">
           {allDayBars.length > 0 ? "" : ""}
         </div>
@@ -288,111 +297,118 @@ export function WeekBoard({
         })}
       </div>
 
-      {/* all-day */}
-      <div className="grid border-b border-paper-300" style={grid}>
-        <div className="sticky left-0 z-20 flex items-start justify-end bg-white pr-2 pt-1.5 text-[0.62rem] text-ink-400">종일</div>
-        <div className="relative" style={{ gridColumn: `2 / span ${days.length}`, height: allDayHeight }}>
-          <div className="absolute inset-0 grid" style={{ gridTemplateColumns: `repeat(${days.length}, minmax(0, 1fr))` }}>
-            {days.map((day) => (
-              <div key={day} className="border-l border-paper-300" />
-            ))}
-          </div>
-          {allDayBars.map(({ event, startIdx, span, lane }) => {
-            const tone = categoryTone(event.category);
-            return (
-              <button
-                key={event.id}
-                type="button"
-                draggable={!!onReorderAllDay}
-                onDragStart={(dragEvent) => {
-                  dragEvent.dataTransfer.setData("text/diary-allday", event.id);
-                  dragEvent.dataTransfer.effectAllowed = "move";
-                }}
-                onDragOver={(dragEvent) => {
-                  if (dragEvent.dataTransfer.types.includes("text/diary-allday")) dragEvent.preventDefault();
-                }}
-                onDrop={(dropEvent) => {
-                  const dragged = dropEvent.dataTransfer.getData("text/diary-allday");
-                  if (!dragged || dragged === event.id) return;
-                  dropEvent.preventDefault();
-                  const ids = allDayBars.map((bar) => bar.event.id).filter((id) => id !== dragged);
-                  const at = ids.indexOf(event.id);
-                  ids.splice(at < 0 ? ids.length : at, 0, dragged);
-                  onReorderAllDay?.(ids);
-                }}
-                onClick={() => onOpenEvent(event.id)}
-                title={allDayExpanded ? undefined : "끌어서 종일 일정 순서 바꾸기"}
-                className={cn(
-                  "absolute h-[22px] overflow-hidden rounded-md border px-1.5 text-left text-[0.62rem] font-medium leading-[20px] md:px-2 md:text-[0.68rem]",
-                  tone.bg,
-                  tone.border,
-                  tone.text,
-                  event.canceled && "line-through opacity-50",
-                )}
-                style={{
-                  left: `calc(${(startIdx * 100) / days.length}% + 2px)`,
-                  width: `calc(${(span * 100) / days.length}% - 4px)`,
-                  top: lane * 24 + 3,
-                  display: lane >= visibleLanes ? "none" : "block",
-                }}
-              >
-                <span className="line-clamp-1">{event.title}</span>
-              </button>
-            );
-          })}
-          {laneCount > 3 ? (
-            <button
-              type="button"
-              onClick={() => setAllDayExpanded((open) => !open)}
-              className="absolute bottom-0 right-1 rounded px-1 text-[0.58rem] font-medium text-ink-400 hover:text-ink-700"
-            >
-              {allDayExpanded ? "접기" : `+${hiddenBars} 더 · 펼치기`}
-            </button>
-          ) : null}
-        </div>
-      </div>
-
-      {/* timeline — a 4–5 hour window on a laptop, so 종일·시간·프로젝트·루틴·목표·메모
-          stay inside the first screen. On a phone the board scrolls as one piece so the
-          sticky time column keeps working while the days move sideways. */}
-      <div className="flex items-center justify-end gap-2 border-b border-paper-300/70 px-1 py-[3px]">
+      {/* 종일·시간표 — 한 스크롤 창: 종일을 따로 고정하지 않고 시간표와 함께 위아래로 움직이며,
+          창 높이는 약 3시간(≈3줄)만 보이도록 압축했습니다. */}
+      <div className="flex items-center justify-between gap-2 border-b border-paper-300/70 px-1 py-[2px]">
+        <span className="truncate text-[0.6rem] text-ink-300">{narrow ? "" : "종일과 시간표는 함께 스크롤돼요"}</span>
         <button
           type="button"
           onClick={() => setTimeExpanded((open) => !open)}
           aria-expanded={timeExpanded}
-          className="inline-flex items-center gap-1 rounded-full bg-paper-200 px-2 py-[3px] text-[0.62rem] font-medium text-ink-600 transition hover:bg-paper-300/70 hover:text-ink-900"
+          className="inline-flex flex-none items-center gap-1 rounded-full bg-paper-200 px-2 py-[3px] text-[0.62rem] font-medium text-ink-600 transition hover:bg-paper-300/70 hover:text-ink-900"
         >
           {timeExpanded ? "기본 비율로" : "전체 일정 보기"}
           <ChevronDownIcon size={10} className={cn("transition", timeExpanded && "rotate-180")} />
         </button>
       </div>
       <div
+        data-week-scroll="true"
+        style={
+          narrow
+            ? undefined
+            : { maxHeight: timeExpanded ? "86dvh" : `${Math.min(allDayHeight + timelineWindow, 166)}px` }
+        }
         className={cn(
           "relative border-b border-paper-300/60",
           narrow ? "overflow-visible" : "overflow-y-auto overflow-x-clip overscroll-contain",
-          !narrow && (timeExpanded ? "max-h-[86dvh]" : "max-h-[9.6rem]"),
         )}
       >
-        <div className="pt-0.5">
-          <Timeline
-            days={days}
-            events={visibleEvents.filter((event) => event.kind === "일정")}
-            startHour={startHour}
-            endHour={endHour}
-            hourHeight={timeExpanded ? 40 : 32}
-            gutterWidth={gutter}
-            onOpenEvent={onOpenEvent}
-            onCreate={onCreate}
-            onMoveEvent={onMoveEvent}
-            onResizeEvent={onResizeEvent}
-          />
-        </div>
+        {/* all-day — 스크롤 창 안, 시간표 바로 위. 접지 않고 같이 올라갑니다. */}
+        {allDayBars.length === 0 ? null : (
+          <div className="grid border-b border-paper-300/70" style={grid} data-all-day-block="true">
+            <div className="sticky left-0 z-20 flex items-start justify-end bg-white pr-2 pt-1 text-[0.6rem] text-ink-400">종일</div>
+            <div className="relative" style={{ gridColumn: `2 / span ${days.length}`, height: allDayHeight }}>
+              <div className="absolute inset-0 grid" style={{ gridTemplateColumns: `repeat(${days.length}, minmax(0, 1fr))` }}>
+                {days.map((day) => (
+                  <div key={day} className="border-l border-paper-300" />
+                ))}
+              </div>
+              {allDayBars.map(({ event, startIdx, span, lane }) => {
+                const tone = categoryTone(event.category);
+                return (
+                  <button
+                    key={event.id}
+                    type="button"
+                    data-all-day-bar={event.id}
+                    draggable={!!onReorderAllDay}
+                    onDragStart={(dragEvent) => {
+                      dragEvent.dataTransfer.setData("text/diary-allday", event.id);
+                      dragEvent.dataTransfer.effectAllowed = "move";
+                    }}
+                    onDragOver={(dragEvent) => {
+                      if (dragEvent.dataTransfer.types.includes("text/diary-allday")) dragEvent.preventDefault();
+                    }}
+                    onDrop={(dropEvent) => {
+                      const dragged = dropEvent.dataTransfer.getData("text/diary-allday");
+                      if (!dragged || dragged === event.id) return;
+                      dropEvent.preventDefault();
+                      const ids = allDayBars.map((bar) => bar.event.id).filter((id) => id !== dragged);
+                      const at = ids.indexOf(event.id);
+                      ids.splice(at < 0 ? ids.length : at, 0, dragged);
+                      onReorderAllDay?.(ids);
+                    }}
+                    onClick={() => onOpenEvent(event.id)}
+                    title={allDayExpanded ? undefined : "끌어서 종일 일정 순서 바꾸기"}
+                    className={cn(
+                      "absolute h-[19px] overflow-hidden rounded-md border px-1.5 text-left text-[0.6rem] font-medium leading-[17px] md:px-2 md:text-[0.66rem]",
+                      tone.bg,
+                      tone.border,
+                      tone.text,
+                      event.canceled && "line-through opacity-50",
+                    )}
+                    style={{
+                      left: `calc(${(startIdx * 100) / days.length}% + 2px)`,
+                      width: `calc(${(span * 100) / days.length}% - 4px)`,
+                      top: lane * allDayLane + 2,
+                      display: lane >= visibleLanes ? "none" : "block",
+                    }}
+                  >
+                    <span className="line-clamp-1">{event.title}</span>
+                  </button>
+                );
+              })}
+              {laneCount > allDayVisibleCap ? (
+                <button
+                  type="button"
+                  onClick={() => setAllDayExpanded((open) => !open)}
+                  className="absolute bottom-0 right-1 rounded px-1 text-[0.56rem] font-medium text-ink-400 hover:text-ink-700"
+                >
+                  {allDayExpanded ? "접기" : `+${hiddenBars} 더 · 펼치기`}
+                </button>
+              ) : null}
+            </div>
+          </div>
+        )}
+
+        {/* timeline — the same scroll window as 종일, so the two move together. */}
+        <Timeline
+          days={days}
+          events={visibleEvents.filter((event) => event.kind === "일정")}
+          startHour={startHour}
+          endHour={endHour}
+          hourHeight={timeExpanded ? 40 : 32}
+          gutterWidth={gutter}
+          onOpenEvent={onOpenEvent}
+          onCreate={onCreate}
+          onMoveEvent={onMoveEvent}
+          onResizeEvent={onResizeEvent}
+        />
       </div>
 
       {/* attached project rows */}
       <div className="border-t border-paper-300">
         <div className="flex items-center justify-between border-b border-paper-300/70 bg-paper-50/50 px-2 py-[3px]">
-          <span className="text-[0.64rem] text-ink-400">프로젝트 · 루틴</span>
+          <span className="text-[0.64rem] text-ink-400">프로젝트</span>
           <button
             type="button"
             onClick={() => setProjectsCollapsed((open) => !open)}
@@ -577,12 +593,27 @@ export function WeekBoard({
         })}
       </div>
 
-      {/* routine rows */}
-      {routineGroups.map((group) => (
+      {/* routine rows — the whole routine area folds away like the project area */}
+      <div className="border-t border-paper-300">
+        <div className="flex items-center justify-between border-b border-paper-300/70 bg-paper-50/50 px-2 py-[3px]">
+          <span className="text-[0.64rem] text-ink-400">
+            루틴{routineTotal > 0 ? ` · ${routineTotal}개` : ""}
+          </span>
+          <button
+            type="button"
+            onClick={() => setRoutinesCollapsed((open) => !open)}
+            aria-expanded={!routinesCollapsed}
+            className="inline-flex items-center gap-1 rounded-full bg-paper-200 px-2 py-[2px] text-[0.62rem] font-medium text-ink-600 transition hover:bg-paper-300/70 hover:text-ink-900"
+          >
+            {routinesCollapsed ? "루틴 영역 펴기" : "루틴 영역 접기"}
+            <ChevronDownIcon size={10} className={cn("transition", routinesCollapsed && "rotate-180")} />
+          </button>
+        </div>
+      </div>
+      {routinesCollapsed ? null : routineGroups.map((group) => (
         <div key={group.category} className="border-b border-paper-300/80">
           <div className="grid" style={grid}>
-            <div className="sticky left-0 z-20 flex items-center gap-1.5 bg-white py-1.5 pl-0.5 text-[0.68rem] text-ink-500">
-              루틴
+            <div className="sticky left-0 z-20 flex items-center gap-1.5 bg-white py-1 pl-0.5 text-[0.66rem] text-ink-500">
               <span className={cn("h-[5px] w-[5px] rounded-full", group.category === "개인" ? "bg-amber-400" : "bg-dusk-500")} />
               {group.category}
             </div>
@@ -645,7 +676,7 @@ export function WeekBoard({
         </div>
       ))}
 
-      {routineGroups.length === 0 ? (
+      {routinesCollapsed ? null : routineGroups.length === 0 ? (
         <div className="grid border-b border-paper-300/80" style={grid}>
           <div className="sticky left-0 z-20 bg-white py-1.5 text-[0.68rem] text-ink-400">루틴</div>
           <button
@@ -664,7 +695,7 @@ export function WeekBoard({
       <p className="mt-2 text-[0.64rem] text-ink-300">
         {narrow
           ? "요일을 옆으로 밀어도 왼쪽 시간은 그대로 보입니다. 할 일 제목을 한 번 누르면 완료, 다시 누르면 해제되고 오른쪽 › 를 누르면 상세가 열립니다."
-          : "시간표는 위아래로 스크롤되고 ‘전체 일정 보기’로 넓게 볼 수 있습니다. 빈 칸을 누르면 일정이 추가되고, 일정 블록은 끌어서 옮길 수 있습니다."}
+          : "종일과 시간표는 한 칸에서 함께 스크롤되고 ‘전체 일정 보기’로 넓게 볼 수 있습니다. 빈 칸을 누르면 일정이 추가되고, 일정 블록은 끌어서 옮길 수 있습니다."}
       </p>
     </div>
   );

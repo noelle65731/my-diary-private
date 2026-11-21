@@ -229,7 +229,7 @@ def main():
         check("NOW 글자가 화면에 한 번", page.locator("text=NOW").count() == 1 or True)
 
         # 종일/시간/프로젝트/루틴/목표/메모가 첫 화면 안에
-        for label in ["종일", "프로젝트 · 루틴", "이번 주 목표", "주간 메모", "이번 주 꼭"]:
+        for label in ["종일", "프로젝트", "루틴", "이번 주 목표", "주간 메모", "이번 주 꼭"]:
             box = page.locator("aside").locator(f"text={label}").first.bounding_box() if label in ("이번 주 목표", "주간 메모", "이번 주 꼭") else page.locator(f"text={label}").first.bounding_box()
             check(f"첫 화면에 '{label}'", bool(box) and box["y"] + box["height"] <= 900, str(box))
 

@@ -575,7 +575,7 @@ export function CalendarTab() {
       </div>
 
       {view === "week" ? (
-        <aside className="side-panel sticky top-12 hidden max-h-[calc(100dvh-6.5rem)] w-[19rem] flex-none overflow-y-auto pb-8 pl-5 xl:block">
+        <aside className="side-panel sticky top-12 hidden h-[calc(100dvh-8rem)] w-[19rem] flex-none overflow-y-auto pb-2 pl-5 xl:block">
           {renderWeekPanel()}
         </aside>
       ) : null}

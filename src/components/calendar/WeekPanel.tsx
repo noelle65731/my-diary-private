@@ -139,7 +139,7 @@ function MemoBox({
       }}
       placeholder={placeholder}
       aria-label="이번 주 메모"
-      className="mt-1.5 min-h-[6.5rem] w-full resize-none rounded-xl border border-transparent bg-paper-200/70 px-3 py-2 text-[0.76rem] leading-relaxed text-ink-700 outline-none transition focus:border-paper-400 focus:bg-white"
+      className="mt-1.5 min-h-[4.5rem] w-full flex-1 resize-none rounded-xl border border-transparent bg-paper-200/70 px-2.5 py-1.5 text-[0.74rem] leading-snug text-ink-700 outline-none transition focus:border-paper-400 focus:bg-white"
     />
   );
 }
@@ -256,27 +256,26 @@ export function WeekPanel({
   };
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex h-full min-h-0 flex-col gap-3">
       <MiniMonth cursor={todayISO()} weekStart={weekStart} marks={marks} onPick={onPickDay} onMonth={onMonth} />
 
-      <section className="border-t border-paper-300 pt-3.5">
+      <section className="border-t border-paper-300 pt-2.5">
         <header className="flex items-center justify-between">
-          <h3 className="text-[0.92rem] font-semibold text-ink-900">이번 주 꼭</h3>
+          <h3 className="text-[0.84rem] font-semibold text-ink-900">이번 주 꼭</h3>
         </header>
-        <p className="mt-1 text-[0.7rem] leading-relaxed text-ink-400">
-          제목만 넣으면 <b className="font-semibold text-ink-600">긴급·중요·별표</b>가 함께 켜져요. 받은함으로 옮겨도 이번 주에는 계속
-          보입니다.
+        <p className="mt-0.5 text-[0.62rem] leading-snug text-ink-400" title="제목만 넣으면 긴급·중요·별표가 함께 켜지고, 받은함으로 옮겨도 이번 주에는 계속 보입니다.">
+          제목만 넣으면 <b className="font-semibold text-ink-600">긴급·중요·별표</b>가 함께 켜져요.
         </p>
 
         {favorites.length === 0 ? (
-          <p className="mt-2 text-[0.7rem] leading-relaxed text-ink-300">아직 없습니다. 아래에 제목만 적고 Enter를 누르세요.</p>
+          <p className="mt-1 text-[0.66rem] leading-snug text-ink-300">아직 없습니다. 아래에 제목만 적고 Enter를 누르세요.</p>
         ) : (
-          <ul className="mt-2 divide-y divide-paper-300/60">
+          <ul className="mt-1.5 divide-y divide-paper-300/60">
             {favorites.slice(0, 8).map(({ kind, item }) => {
               const done = kind === "event" ? (item as CalendarEvent).done : (item as ProjectTask).status === "완료";
               const date = kind === "event" ? (item as CalendarEvent).date : ((item as ProjectTask).due ?? (item as ProjectTask).date);
               return (
-                <li key={`${kind}-${item.id}`} className="flex items-center gap-2 py-[7px]">
+                <li key={`${kind}-${item.id}`} className="flex items-center gap-2 py-[3px]">
                   <button
                     type="button"
                     onClick={() => (kind === "event" ? onToggleEventDone(item as CalendarEvent) : onToggleTask(item as ProjectTask))}
@@ -292,14 +291,14 @@ export function WeekPanel({
                     type="button"
                     onClick={() => (kind === "event" ? onOpenEvent(item.id) : onOpenTask(item.id))}
                     className={cn(
-                      "min-w-0 flex-1 truncate text-left text-[0.76rem] text-ink-700",
+                      "min-w-0 flex-1 truncate text-left text-[0.74rem] leading-[1.3] text-ink-700",
                       done && "text-ink-400 line-through",
                     )}
                   >
                     {item.title}
                   </button>
                   {date ? (
-                    <span className="flex-none text-[0.66rem] tabular-nums text-ink-400">
+                    <span className="flex-none text-[0.62rem] tabular-nums text-ink-400">
                       {formatShort(date)} {["일", "월", "화", "수", "목", "금", "토"][new Date(`${date}T12:00:00`).getDay()]}
                     </span>
                   ) : (
@@ -316,27 +315,27 @@ export function WeekPanel({
             event.preventDefault();
             addFavorite();
           }}
-          className="mt-2"
+          className="mt-1.5"
         >
           <input
             value={favoriteDraft}
             onChange={(event) => setFavoriteDraft(event.target.value)}
             placeholder="+ 이번 주 꼭 (Enter)"
-            className="w-full rounded-lg border border-transparent bg-paper-200/70 px-2.5 py-1.5 text-[0.76rem] text-ink-900 placeholder:text-ink-400 focus:border-paper-400 focus:bg-white focus:outline-none"
+            className="w-full rounded-lg border border-transparent bg-paper-200/70 px-2.5 py-1 text-[0.74rem] text-ink-900 placeholder:text-ink-400 focus:border-paper-400 focus:bg-white focus:outline-none"
           />
         </form>
       </section>
 
-      <section className="border-t border-paper-300 pt-3.5">
+      <section className="border-t border-paper-300 pt-2.5">
         <header className="flex items-center justify-between">
-          <h3 className="text-[0.92rem] font-semibold text-ink-900">이번 주 목표</h3>
+          <h3 className="text-[0.84rem] font-semibold text-ink-900">이번 주 목표</h3>
           <span className="text-[0.66rem] text-ink-400">
             {goals.filter((goal) => goal.done).length}/{goals.length}
           </span>
         </header>
-        <ul className="mt-2 space-y-1">
+        <ul className="mt-1.5 space-y-[3px]">
           {goals.map((goal) => (
-            <li key={goal.id} className="flex items-center gap-2">
+            <li key={goal.id} className="flex items-center gap-2 leading-[1.3]">
               <button
                 type="button"
                 onClick={() => onToggleEventDone(goal)}
@@ -374,14 +373,14 @@ export function WeekPanel({
             placeholder="+ 목표 추가 (Enter)"
             aria-label="주간 목표 추가"
             disabled={goalBusy}
-            className="w-full rounded-lg border border-transparent bg-paper-200/70 px-2.5 py-1.5 text-[0.76rem] text-ink-900 placeholder:text-ink-400 focus:border-paper-400 focus:bg-white focus:outline-none disabled:opacity-60"
+            className="w-full rounded-lg border border-transparent bg-paper-200/70 px-2.5 py-1 text-[0.74rem] text-ink-900 placeholder:text-ink-400 focus:border-paper-400 focus:bg-white focus:outline-none disabled:opacity-60"
           />
         </form>
       </section>
 
-      <section className="border-t border-paper-300 pt-3.5">
+      <section className="flex min-h-0 flex-1 flex-col border-t border-paper-300 pt-2.5">
         <header className="flex items-center justify-between gap-2">
-          <h3 className="text-[0.92rem] font-semibold text-ink-900">주간 메모</h3>
+          <h3 className="text-[0.84rem] font-semibold text-ink-900">주간 메모</h3>
           {memos.length > 0 ? <span className="text-[0.64rem] text-ink-400">이전 메모 {memos.length}개</span> : null}
         </header>
 
@@ -390,7 +389,7 @@ export function WeekPanel({
             value={activeMemo?.id ?? ""}
             onChange={(event) => setSelectedMemoId(event.target.value || null)}
             aria-label="주간 메모 기록 선택"
-            className="mt-2 w-full rounded-lg border border-paper-300 bg-white px-2 py-1.5 text-[0.72rem] text-ink-700 focus:border-paper-400 focus:outline-none"
+            className="mt-1.5 w-full rounded-lg border border-paper-300 bg-white px-2 py-1 text-[0.7rem] text-ink-700 focus:border-paper-400 focus:outline-none"
           >
             {!currentMemo ? <option value="">이번 주 메모 없음</option> : null}
             {memos.map((memo) => (
@@ -408,7 +407,7 @@ export function WeekPanel({
           placeholder={savingMemo ? "저장 중…" : "이번 주에 남기고 싶은 생각을 바로 적으세요"}
           onCommit={(text) => void commitMemo(text)}
         />
-        <p className="mt-1 text-[0.64rem] text-ink-300">
+        <p className="mt-1 truncate text-[0.6rem] text-ink-300">
           {activeMemo
             ? activeMemo.id === currentMemo?.id
               ? activeMemo.title
