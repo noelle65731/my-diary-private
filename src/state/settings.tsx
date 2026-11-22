@@ -24,6 +24,8 @@ export interface Settings {
   weekEndHour: number;
   /** How many items a month cell shows before the rest collapses into a count. */
   monthDayItems: 3 | 4 | 5;
+  /** A42: 주간·3일 보기의 하루 `일정` 목록에 기본으로 보여 줄 일정 수 (3~7). */
+  weekDayItems: 3 | 4 | 5 | 6 | 7;
   calendarDefaultView: CalendarViewKey;
   calendarShowHidden: boolean;
   /** A19: 카드 한 장에 보여 줄 남은 할 일 수 (3~8). */
@@ -55,6 +57,8 @@ export const DEFAULT_SETTINGS: Settings = {
   weekStartHour: 9,
   weekEndHour: 19,
   monthDayItems: 3,
+  /** A42: 주간 하루 일정은 기본 다섯 개까지만 펼치고 나머지는 +N개 더 보기로 접습니다. */
+  weekDayItems: 5,
   calendarDefaultView: "week",
   calendarShowHidden: false,
   projectTaskPreview: 6,
@@ -95,6 +99,8 @@ function settingsToast(key: keyof Settings, value: Settings[keyof Settings]): st
       return value === "far" ? "할 일을 먼 날짜순으로 정렬합니다" : "할 일을 가까운 날짜순으로 정렬합니다";
     case "monthDayItems":
       return `월간 하루 표시를 ${value}개로 했습니다`;
+    case "weekDayItems":
+      return `주간 하루 일정을 ${value}개까지 보여 줍니다`;
     case "calendarDefaultView":
       return "기본 보기를 바꿨습니다";
     case "calendarShowHidden":
@@ -175,6 +181,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
           showCompletedTasks: completed,
           projectTaskPreview: Math.max(3, Math.min(8, Number(parsed.projectTaskPreview) || DEFAULT_SETTINGS.projectTaskPreview)),
           priorityTaskPreview: Math.max(3, Math.min(10, Number(parsed.priorityTaskPreview) || DEFAULT_SETTINGS.priorityTaskPreview)),
+          weekDayItems: Math.max(3, Math.min(7, Number(parsed.weekDayItems) || DEFAULT_SETTINGS.weekDayItems)) as Settings["weekDayItems"],
           projectTaskOrder: (parsed.projectTaskOrder === "far" ? "far" : "near") as TaskDateOrder,
           projectViewVersion: 2,
         };

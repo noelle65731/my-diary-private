@@ -8,20 +8,15 @@ import { cn } from "@/lib/utils";
 import { mergeCategories } from "@/state/categories";
 import { priorityOf, projectEmoji, routineTone, taskTone } from "@/components/common/tone";
 import { CheckIcon, ChevronDownIcon, ChevronRightIcon, XIcon } from "@/components/icons";
-import {
-  eventCoversDay,
-  eventEndMinutes,
-  eventStartMinutes,
-  routineCountForDay,
-} from "@/components/calendar/calendar-utils";
-import { Timeline, minutesFromDrop } from "@/components/calendar/Timeline";
-import { spanSegments } from "@/components/calendar/span-bars";
+import { eventStartMinutes, routineCountForDay } from "@/components/calendar/calendar-utils";
+import { isSpanned, spanSegments } from "@/components/calendar/span-bars";
 import { pushToast } from "@/lib/toast-bus";
 import { useDnd, type DropTarget } from "@/components/common/dnd";
 import { useEventColors } from "@/state/event-colors";
 import { useProjectColors } from "@/state/project-colors";
 import { useAutoHideScrollbar } from "@/lib/use-auto-hide-scroll";
 import { useCategoryColors } from "@/state/category-colors";
+import { useSettings } from "@/state/settings";
 
 interface WeekBoardProps {
   days: string[];
@@ -29,8 +24,6 @@ interface WeekBoardProps {
   tasks: ProjectTask[];
   projects: ProjectTask[];
   routines: Routine[];
-  startHour: number;
-  endHour: number;
   onSelectDay: (day: string) => void;
   /** A32: 요일 머리글·일정 칸을 누르면 그 날의 정리 목록(종일·시간 일정 + 할 일)을 엽니다. */
   onOpenDaySummary?: (day: string, startTime?: string | null) => void;
@@ -76,6 +69,30 @@ interface WeekBoardProps {
 const INBOX_KEY = "inbox";
 /** A40: 주간·3일 보기의 프로젝트 행·루틴 행 순서는 이 브라우저에 남깁니다. */
 const ROW_ORDER_KEY = "my-diary:week-row-order:v1";
+/**
+ * A42: 하루 일정 목록의 순서도 이 브라우저에 남깁니다 — 날짜 → 일정 id 배열.
+ * 같은 시각에 겹친 일정을 끌어 위아래로 바꾸면 이 순서가 먼저 적용됩니다.
+ */
+const EVENT_ORDER_KEY = "my-diary:week-event-order:v1";
+
+type DayEventOrder = Record<string, string[]>;
+
+function readEventOrder(): DayEventOrder {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(EVENT_ORDER_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== "object") return {};
+    const out: DayEventOrder = {};
+    for (const [day, list] of Object.entries(parsed as Record<string, unknown>)) {
+      if (Array.isArray(list)) out[day] = list.filter((id): id is string => typeof id === "string");
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
 
 type RowOrder = { projects: string[]; routines: string[] };
 
@@ -102,8 +119,8 @@ function orderOf(list: string[], key: string): number {
 const rowKeyOf = (task: ProjectTask, projects: ProjectTask[]) =>
   projects.find((item) => item.id === (task.projectIds[0] ?? ""))?.id ?? INBOX_KEY;
 
-const snapMinutes = (minutes: number) => Math.round(minutes / 15) * 15;
-const toClock = (minutes: number) => `${String(Math.floor(minutes / 60) % 24).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+/** 하루 일정 목록의 기본 순서 — 종일(시간 없음)이 먼저, 그다음 시작 시각이 빠른 순. */
+const listKeyOf = (event: CalendarEvent) => (event.allDay || !event.startTime ? -1 : eventStartMinutes(event));
 
 export function WeekBoard({
   days,
@@ -111,8 +128,6 @@ export function WeekBoard({
   tasks,
   projects,
   routines,
-  startHour,
-  endHour,
   onSelectDay,
   onOpenDaySummary,
   onOpenEvent,
@@ -163,8 +178,6 @@ export function WeekBoard({
   };
   /** The routine area folds away as a whole, the same way the project area does. */
   const [routinesCollapsed, setRoutinesCollapsed] = useState(false);
-  /** B5: all-day 4건 → 3건 + 펼치기, and the 시간표 lifts when the rows fold. */
-  const [allDayExpanded, setAllDayExpanded] = useState(false);
   const [customOpen, setCustomOpen] = useState(false);
   /**
    * A19 · A32: 주간 칸을 누르면 열리는 '그 날 이 프로젝트의 할 일' 시트.
@@ -245,10 +258,12 @@ export function WeekBoard({
     );
   };
   const [narrow, setNarrow] = useState(false);
-  /** Lets the timetable take the full height when the user wants every event at once. */
-  const [timeExpanded, setTimeExpanded] = useState(false);
   /** A14: the 일정 area folds away like 프로젝트 and 루틴 do. */
   const [scheduleCollapsed, setScheduleCollapsed] = useState(false);
+  /** A42: 하루 일정이 설정한 개수를 넘으면 그 요일만 펼칩니다. */
+  const [expandedDays, setExpandedDays] = useState<string[]>([]);
+  /** A42: 끌어서 바꾼 하루 일정 순서 — 날짜마다 id 배열로 남깁니다. */
+  const [eventOrder, setEventOrder] = useState<DayEventOrder>(() => readEventOrder());
   /**
    * A2: on a phone the task title itself is the checkbox — one tap completes, another
    * clears it. A tap that turned into a swipe or a scroll must never toggle anything,
@@ -256,16 +271,14 @@ export function WeekBoard({
    */
   const tapOrigin = useRef<{ id: string; x: number; y: number; at: number } | null>(null);
   const { toneFor } = useEventColors();
+  const { settings } = useSettings();
   const { pastelOf } = useProjectColors();
   /** A19: 분류에 직접 고른 색이 있으면 프로젝트 점·할 일 체크·루틴 배지에 그 색을 씁니다. */
   const categoryColor = useCategoryColors();
   const dnd = useDnd();
-  /** A20: 게시판·일정 창 모두 스크롤바가 움직일 때만 보입니다. */
+  /** A20: 게시판 스크롤바가 움직일 때만 보입니다. */
   const boardBar = useAutoHideScrollbar();
-  const scheduleBar = useAutoHideScrollbar();
   const scroller = useRef<HTMLDivElement | null>(null);
-  /** A19: 일정 영역(종일+시간표)의 스크롤 창 — 지금 시각이 보이도록 처음에 옮깁니다. */
-  const scheduleScroll = useRef<HTMLDivElement | null>(null);
   const dayKey = days.join(",");
   useEffect(() => {
     const query = window.matchMedia("(max-width: 767px)");
@@ -285,22 +298,6 @@ export function WeekBoard({
     const delta = box.left - frame.left;
     scroller.current.scrollLeft += delta - (scroller.current.clientWidth - box.width) / 2;
   }, [narrow, dayKey]);
-  /**
-   * A19: 데스크톱 기본 보기는 세 시간 남짓만 보이는 스크롤 창입니다. 예전에는 늘 시작 시각(9시)
-   * 에서 열려 하루가 지난 뒤에는 현재 시각 빨간 선을 볼 수 없었습니다. 창을 지금 근처로 옮깁니다.
-   */
-  useEffect(() => {
-    if (narrow || timeExpanded || scheduleCollapsed) return;
-    const node = scheduleScroll.current;
-    if (!node) return;
-    const clock = new Date();
-    const minutes = clock.getHours() * 60 + clock.getMinutes();
-    const top = ((minutes - startHour * 60) / 60) * 32;
-    const max = Math.max(0, node.scrollHeight - node.clientHeight);
-    node.scrollTop = Math.min(max, Math.max(0, top - 48));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [narrow, timeExpanded, scheduleCollapsed]);
-
   /* the frozen left column: wide enough on a phone to read a project or routine name;
      on a desktop a little wider so '브랜드 포트폴리오' is not cut to '브랜드 포…' */
   const gutter = narrow ? "6rem" : "9rem";
@@ -376,33 +373,55 @@ export function WeekBoard({
       .filter((group) => group.items.length > 0);
   }, [routines, mode, hiddenRoutineIds]);
 
-  const allDayBars = useMemo(
-    () =>
-      spanSegments(
-        visibleEvents.filter((event) => event.kind === "일정" && event.allDay),
-        days,
-        { includeSingleDay: true },
-      ),
+  /**
+   * A42: 두 날 이상 이어지는 일정(종일·시간 유무 무관)은 월간처럼 하나의 연결 막대로,
+   * 하루짜리 일정은 그 아래 요일 칸 목록으로 놓습니다. 시간표(0~24시 눈금)는 없앴습니다.
+   */
+  const spanBars = useMemo(
+    () => spanSegments(visibleEvents.filter((event) => event.kind === "일정"), days),
     [visibleEvents, days],
   );
+  /** 연결 막대 한 줄 높이와, 그 줄이 차지하는 자리(아래 목록이 그만큼 내려갑니다). */
+  const barLane = 19;
+  const laneCount = spanBars.length > 0 ? Math.max(...spanBars.map((bar) => bar.lane)) + 1 : 0;
+  const barsHeight = laneCount > 0 ? laneCount * barLane + 5 : 0;
+  /** A42: 설정 → 캘린더의 `주간 하루 일정` 개수(3~7). */
+  const dayItemCap = Math.max(3, Math.min(7, Number(settings.weekDayItems) || 5));
 
-  /** 종일 줄은 시간표와 스크롤 창을 나눠 쓰므로, 데스크톱에서는 두 줄까지만 펼쳐 둡니다.
-   *  모바일은 일정 영역이 딱 네 칸이라 종일 한 줄만 남기고 나머지는 +N으로 접습니다. */
-  const allDayVisibleCap = narrow ? 1 : 2;
-  /** 종일 줄 아래로 보이는 시간표 높이 — 32px 한 줄 × 세 칸(3시간). */
-  const timelineWindow = 96;
-  const laneCount = allDayBars.length > 0 ? Math.max(...allDayBars.map((bar) => bar.lane)) + 1 : 0;
-  const visibleLanes = allDayExpanded ? laneCount : Math.min(allDayVisibleCap, laneCount);
-  /** 종일 줄은 시간표와 같은 스크롤 창 안에 들어가므로 한 줄을 20px로 조입니다. */
-  const allDayLane = 20;
-  /** 넘친 종일 일정은 그 요일 칸 바로 밑에 +N 버튼으로 펼칩니다. */
-  const overflows = laneCount > allDayVisibleCap;
-  const hiddenByDay = days.map((_, index) =>
-    allDayExpanded
-      ? 0
-      : allDayBars.filter((bar) => bar.lane >= visibleLanes && index >= bar.startIdx && index < bar.startIdx + bar.span).length,
-  );
-  const allDayHeight = allDayBars.length === 0 ? 0 : Math.max(visibleLanes, 1) * allDayLane + (overflows ? 15 : 0) + 2;
+  /**
+   * 그 날의 하루 일정 — 종일이 먼저, 그다음 시작 시각이 빠른 순입니다.
+   * 끌어서 바꾼 순서가 있으면 그 순서를 그대로 쓰고, 새로 생긴 일정은 시각 자리에 들어갑니다.
+   */
+  const dayEventsFor = (day: string): CalendarEvent[] => {
+    const items = visibleEvents.filter((event) => event.kind === "일정" && !isSpanned(event) && event.date === day);
+    const byTime = [...items].sort(
+      (a, b) => listKeyOf(a) - listKeyOf(b) || String(a.createdAt).localeCompare(String(b.createdAt)),
+    );
+    const stored = eventOrder[day];
+    if (!stored || stored.length === 0) return byTime;
+    const remaining = new Map(byTime.map((event) => [event.id, event]));
+    const out: CalendarEvent[] = [];
+    for (const id of stored) {
+      const event = remaining.get(id);
+      if (!event) continue;
+      out.push(event);
+      remaining.delete(id);
+    }
+    for (const event of byTime) {
+      if (!remaining.has(event.id)) continue;
+      const at = out.findIndex((other) => listKeyOf(other) > listKeyOf(event));
+      out.splice(at < 0 ? out.length : at, 0, event);
+    }
+    return out;
+  };
+  const dayLists = days.map((day) => ({ day, list: dayEventsFor(day) }));
+  /** 구역 머리에 보여 줄 이번 창의 일정 수(막대 + 목록, 중복 없이). */
+  const weekEventCount = (() => {
+    const ids = new Set(spanBars.map((bar) => bar.event.id));
+    for (const entry of dayLists) for (const event of entry.list) ids.add(event.id);
+    return ids.size;
+  })();
+
   const routineTotal = routineGroups.reduce((sum, group) => sum + group.items.length, 0);
   /** A16: no 분류 header rows — each row carries its own badge, sorted by 분류 first. */
   /** A40: 루틴 행도 끌어서 정한 순서를 따릅니다(정한 적 없으면 분류·원래 순서). */
@@ -453,38 +472,169 @@ export function WeekBoard({
     );
   };
 
+  /** A42: 끌어서 바꾼 하루 일정 순서를 이 브라우저에 남깁니다. */
+  const saveEventOrder = (day: string, ids: string[]) => {
+    pushToast("일정 순서를 변경했습니다");
+    setEventOrder((current) => {
+      const next = { ...current, [day]: ids };
+      try {
+        window.localStorage.setItem(EVENT_ORDER_KEY, JSON.stringify(next));
+      } catch {
+        /* 저장 공간이 없으면 이번 화면에서만 유지됩니다. */
+      }
+      return next;
+    });
+  };
+
   /**
-   * 모바일 기본 모드: 시간표를 세 칸만 그립니다(종일 한 칸 + 시간 세 칸 = 네 칸).
-   * 지금 한 시간 전부터 세 시간을 보여 주고, 그 안에 아직 끝나지 않은 오늘 일정이 하나도 없으면
-   * 다음 일정이 있는 시간대로 창을 옮깁니다. '전체'를 누르면 하루 전체가 펼쳐집니다.
-   * 세로 스크롤 창을 만들지 않고 그리는 줄 자체를 줄여, 가로 스크롤에서 왼쪽 열이 붙어 있는
-   * sticky 동작이 그대로 남습니다.
+   * A42: 하루 일정 한 줄을 끕니다 — 같은 날 다른 줄 위에 놓으면 그 자리로 순서를 바꾸고,
+   * 다른 날 칸에 놓으면 그 날짜로 옮깁니다(시작·끝 시각 유지).
    */
-  const mobileWindow = (() => {
-    if (!narrow || timeExpanded) return null;
-    const span = Math.min(3, Math.max(1, endHour - startHour));
-    const now = new Date();
-    const nowHour = now.getHours();
-    const nowMinutes = nowHour * 60 + now.getMinutes();
-    const upcoming = visibleEvents
-      .filter(
-        (event) =>
-          event.kind === "일정" &&
-          !event.allDay &&
-          eventCoversDay(event, today) &&
-          eventEndMinutes(event) > nowMinutes,
-      )
-      .map((event) => eventStartMinutes(event) / 60)
-      .sort((a, b) => a - b);
-    let start = now.getHours() - 1;
-    if (upcoming.length > 0 && !upcoming.some((hour) => hour >= start && hour < start + span)) {
-      start = Math.floor(upcoming[0]!);
-    }
-    /* A19: 설정한 끝 시각을 지나도 창은 지금 시각을 따라갑니다 — 지금 빨간 띠가 사라지지 않게. */
-    start = Math.max(startHour, Math.min(start, Math.max(endHour - span, nowHour - span + 1)));
-    start = Math.max(startHour, Math.min(start, Math.max(startHour, 24 - span)));
-    return { start, end: Math.min(24, start + span) };
-  })();
+  const startEventDrag = (pointerEvent: ReactPointerEvent<HTMLElement>, item: CalendarEvent, day: string) => {
+    if (!onMoveEvent && !onConvertEventToTask) return;
+    dnd.start(
+      pointerEvent,
+      { kind: "event", id: item.id, label: item.title },
+      (target, point) => {
+        if (!target) return;
+        /* A39: 프로젝트 칸·index 칸에 놓으면 그 프로젝트의 할 일로 바꿉니다. */
+        if (target.zone === "week-task-day" || target.zone === "week-project-row") {
+          onConvertEventToTask?.(item.id, target.data.project ?? INBOX_KEY, target.data.day ?? null);
+          return;
+        }
+        const nextDay = target.data.day;
+        if (!nextDay) return;
+        if (target.zone === "week-event-item" && nextDay === day) {
+          const over = target.data.id;
+          if (!over || over === item.id) return;
+          const ids = dayEventsFor(day)
+            .map((event) => event.id)
+            .filter((id) => id !== item.id);
+          const at = ids.indexOf(over);
+          if (at < 0) return;
+          const after = point.y > target.rect.top + target.rect.height / 2;
+          ids.splice(at + (after ? 1 : 0), 0, item.id);
+          saveEventOrder(day, ids);
+          return;
+        }
+        if (nextDay === day) return;
+        onMoveEvent?.(item.id, nextDay, null);
+      },
+      {
+        getHint: (target, point) => {
+          if (target.zone === "week-task-day" || target.zone === "week-project-row") {
+            return `${rowTitleOf(target.data.project ?? INBOX_KEY)} 할 일로 옮기기`;
+          }
+          const nextDay = target.data.day;
+          if (!nextDay) return null;
+          if (target.zone === "week-event-item" && nextDay === day) {
+            return point.y > target.rect.top + target.rect.height / 2 ? "아래로 순서 바꾸기" : "위로 순서 바꾸기";
+          }
+          if (nextDay === day) return null;
+          const keeps = item.startTime && !item.allDay ? ` (${item.startTime} 유지)` : "";
+          return `${nextDay.slice(5).replace("-", "/")}로 옮기기${keeps}`;
+        },
+      },
+    );
+  };
+
+  /**
+   * A42: 연결 막대(두 날 이상 일정)를 끕니다 — 다른 날 칸에 놓으면 날짜만 옮기고
+   * 예전에 정한 시작·끝 시각과 일수는 그대로 둡니다. 다른 막대 위에 놓으면 순서만 바뀝니다.
+   */
+  const startBarDrag = (pointerEvent: ReactPointerEvent<HTMLElement>, event: CalendarEvent) => {
+    dnd.start(
+      pointerEvent,
+      { kind: "event", id: event.id, label: event.title },
+      (target) => {
+        if (!target) return;
+        /* A39: 프로젝트 칸·index 칸에 놓으면 그 프로젝트의 할 일로 바꿉니다. */
+        if (target.zone === "week-task-day" || target.zone === "week-project-row") {
+          onConvertEventToTask?.(event.id, target.data.project ?? INBOX_KEY, target.data.day ?? null);
+          return;
+        }
+        const nextDay = target.data.day;
+        if (!nextDay) return;
+        if (target.zone === "span-bar") {
+          const over = target.data.id;
+          if (!over || over === event.id || !onReorderAllDay) return;
+          const ids = spanBars.map((bar) => bar.event.id).filter((id) => id !== event.id);
+          const at = ids.indexOf(over);
+          ids.splice(at < 0 ? ids.length : at, 0, event.id);
+          onReorderAllDay(ids);
+          return;
+        }
+        if (onMoveDateOnly) onMoveDateOnly(event.id, nextDay);
+        else onMoveAllDayDate?.(event.id, nextDay);
+      },
+      {
+        getHint: (target) => {
+          if (target.zone === "week-task-day" || target.zone === "week-project-row") {
+            const key = target.data.project ?? INBOX_KEY;
+            const stamp = target.data.day ? ` · ${target.data.day.slice(5).replace("-", "/")}` : "";
+            return `${rowTitleOf(key)}${stamp} 할 일로 옮기기`;
+          }
+          if (target.zone === "span-bar") return "막대 순서 바꾸기";
+          const nextDay = target.data.day;
+          if (!nextDay) return null;
+          return `${nextDay.slice(5).replace("-", "/")}부터 시작으로 옮기기`;
+        },
+      },
+    );
+  };
+
+  /** A42: 하루 일정 목록 한 줄 — 왼쪽에 얇은 색 선, 위(또는 앞)에 작은 시간, 그 아래 제목. */
+  const renderDayEvent = (event: CalendarEvent, day: string) => {
+    const tone = toneFor(event);
+    const timeText = event.allDay || !event.startTime ? "" : timeRangeLabel(event.startTime, event.endTime);
+    const stacked = days.length > 3 || narrow;
+    return (
+      <button
+        key={event.id}
+        type="button"
+        data-week-event={event.id}
+        data-week-event-day={day}
+        data-drop-zone="week-event-item"
+        data-drop-id={event.id}
+        data-drop-day={day}
+        onPointerDown={(pointerEvent) => startEventDrag(pointerEvent, event, day)}
+        onClick={(clickEvent) => {
+          clickEvent.stopPropagation();
+          onOpenEvent(event.id);
+        }}
+        title={`${event.title}${timeText ? ` · ${timeText}` : ""} · 끌어서 순서·날짜 바꾸기`}
+        className={cn(
+          "relative flex w-full min-w-0 rounded-[4px] pl-[7px] pr-1 py-[1px] text-left transition hover:bg-paper-200/70",
+          stacked ? "flex-col gap-0" : "items-center gap-1",
+          (event.canceled || event.done) && "opacity-60",
+        )}
+      >
+        <span
+          aria-hidden="true"
+          className={cn("pointer-events-none absolute bottom-[2px] left-0 top-[2px] w-[3px] rounded-full", tone.solid)}
+        />
+        {timeText ? (
+          <span
+            className={cn(
+              "flex-none tabular-nums text-ink-400",
+              stacked ? "text-[calc(10.5px*var(--fs))] leading-[1.25]" : "text-[calc(11.5px*var(--fs))] leading-none",
+            )}
+          >
+            {timeText}
+          </span>
+        ) : null}
+        <span
+          className={cn(
+            "block min-w-0 break-keep line-clamp-2 text-[calc(12.5px*var(--fs))] leading-[1.25]",
+            tone.text,
+            (event.canceled || event.done) && "line-through",
+          )}
+        >
+          {event.title}
+        </span>
+      </button>
+    );
+  };
 
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col">
@@ -572,9 +722,7 @@ export function WeekBoard({
         style={grid}
         data-week-header="true"
       >
-        <div className="sticky left-0 z-40 self-stretch border-r border-paper-300 bg-white pb-1 text-right text-[calc(13px*var(--fs))] text-ink-400">
-          {allDayBars.length > 0 ? "" : ""}
-        </div>
+        <div className="sticky left-0 z-40 self-stretch border-r border-paper-300 bg-white pb-1 text-right text-[calc(13px*var(--fs))] text-ink-400" />
         {days.map((day) => {
           const isToday = isSameISO(day, today);
           const holiday = holidayName(day);
@@ -639,74 +787,107 @@ export function WeekBoard({
       >
       <section data-week-section="schedule" className="flex-none overflow-clip border-b-2 border-[#6b7280]">
       <div className="flex flex-none items-center justify-between gap-2 border-b border-paper-300/70 bg-paper-50/60 py-[3px] pl-2 pr-1.5">
-        <span className="truncate text-[calc(13.5px*var(--fs))] font-medium text-ink-500">일정</span>
-        <div className="seg-track flex-none p-[2px]">
-          {([
-            { key: "base", label: "기본" },
-            { key: "full", label: "전체" },
-            { key: "fold", label: "접기" },
-          ] as const).map((option) => {
-            const active = option.key === "fold" ? scheduleCollapsed : option.key === "full" ? timeExpanded && !scheduleCollapsed : !timeExpanded && !scheduleCollapsed;
-            return (
-              <button
-                key={option.key}
-                type="button"
-                aria-pressed={active}
-                onClick={() => {
-                  if (option.key === "fold") {
-                    setScheduleCollapsed(true);
-                    return;
-                  }
-                  setScheduleCollapsed(false);
-                  setTimeExpanded(option.key === "full");
-                }}
-                className={cn("seg-item px-2 py-[2px] text-[calc(12.5px*var(--fs))]", active && "seg-item-active")}
-              >
-                {option.label}
-              </button>
-            );
-          })}
-        </div>
+        <span className="truncate text-[calc(13.5px*var(--fs))] font-medium text-ink-500">
+          일정{weekEventCount > 0 ? ` · ${weekEventCount}개` : ""}
+        </span>
+        <button
+          type="button"
+          data-week-list-toggle="true"
+          onClick={() => setScheduleCollapsed((open) => !open)}
+          aria-expanded={!scheduleCollapsed}
+          className="inline-flex flex-none items-center gap-1 rounded-full bg-paper-200 px-2 py-[2px] text-[calc(13px*var(--fs))] font-medium text-ink-600 transition hover:bg-paper-300/70 hover:text-ink-900"
+        >
+          {scheduleCollapsed ? "일정 영역 펴기" : "일정 영역 접기"}
+          <ChevronDownIcon size={10} className={cn("transition", scheduleCollapsed && "rotate-180")} />
+        </button>
       </div>
       {scheduleCollapsed ? null : (
-      <div
-        ref={scheduleScroll}
-        data-week-scroll="true"
-        onScroll={scheduleBar.onScroll}
-        style={
-          narrow
-            ? undefined
-            : { height: timeExpanded ? "62dvh" : `${Math.min(allDayHeight + timelineWindow, 150)}px` }
-        }
-        className={cn(
-          "relative flex-none",
-          narrow ? "overflow-visible" : "overflow-y-auto overflow-x-clip overscroll-contain",
-          scheduleBar.className,
-        )}
-      >
-        {/* all-day — 스크롤 창 안, 시간표 바로 위. 접지 않고 같이 올라갑니다. */}
-        {/* A41: 종일 줄은 스크롤해도 위에 붙어 있어, 시간표가 지금 시각으로 넘어가도 연결 막대가 늘 보입니다. */}
-        {allDayBars.length === 0 ? null : (
-          <div className="sticky top-0 z-30 grid border-b border-paper-300/70 bg-white" style={grid} data-all-day-block="true">
-            <div className="sticky left-0 z-20 flex items-start justify-end border-r border-paper-300 bg-white pr-2 pt-1 text-[calc(13px*var(--fs))] text-ink-400">종일</div>
-            <div className="relative" style={{ gridColumn: `2 / span ${days.length}`, height: allDayHeight }}>
-              <div className="absolute inset-0 grid" style={{ gridTemplateColumns: `repeat(${days.length}, minmax(0, 1fr))` }}>
-                {days.map((day) => (
-                  <div
-                    key={day}
-                    data-drop-zone="allday-day"
-                    data-drop-day={day}
-                    onClick={() => {
-                      /* A32: 종일 칸의 빈 자리를 눌러도 그 날의 정리 목록이 먼저 열립니다. */
-                      if (narrow) return;
-                      onOpenDaySummary?.(day);
+      /* A42: 시간표(0~24시 눈금) 없이 — 왼쪽 라벨 `일정` 하나에, 두 날 이상은 위 연결 막대,
+         하루짜리는 그 아래 요일 칸 목록으로 모읍니다. */
+      <div className="grid" style={grid} data-week-list-block="true">
+        <div className="sticky left-0 z-20 flex items-start justify-end border-r border-paper-300 bg-white px-2 pt-1 text-[calc(13px*var(--fs))] text-ink-400">
+          일정
+        </div>
+        <div className="relative min-w-0" style={{ gridColumn: `2 / span ${days.length}` }}>
+          <div className="grid" style={{ gridTemplateColumns: `repeat(${days.length}, minmax(0, 1fr))` }}>
+            {dayLists.map(({ day, list }) => {
+              const isToday = isSameISO(day, today);
+              const expanded = expandedDays.includes(day);
+              const shown = expanded ? list : list.slice(0, dayItemCap);
+              const rest = list.length - shown.length;
+              return (
+                <div
+                  key={day}
+                  data-drop-zone="week-day-list"
+                  data-drop-day={day}
+                  data-week-day-list={day}
+                  onClick={(clickEvent) => {
+                    /* A32: 빈 자리를 누르면 그 날의 정리 목록 — 일정 줄·+ 일정은 각자 맡습니다. */
+                    if ((clickEvent.target as HTMLElement).closest("[data-week-event], [data-week-add-event], [data-week-event-more]")) return;
+                    onOpenDaySummary?.(day);
+                  }}
+                  className={cn(
+                    "group/daycol flex min-w-0 flex-col border-l border-paper-300 pb-1",
+                    /* 오늘 열은 배경과 얇은 테두리로만 표시합니다 — 현재 시각 빨간 선은 일간 보기에만. */
+                    isToday && cn(todayCell, "ring-1 ring-inset ring-[#cdd9ea]"),
+                  )}
+                  style={{ paddingTop: barsHeight + 4 }}
+                >
+                  <div className={cn("px-1", narrow ? "space-y-[3px]" : "space-y-0.5")}>
+                    {shown.map((event) => renderDayEvent(event, day))}
+                  </div>
+                  <div className="mt-auto">
+                  {rest > 0 ? (
+                    <button
+                      type="button"
+                      data-week-event-more={day}
+                      onClick={(clickEvent) => {
+                        clickEvent.stopPropagation();
+                        setExpandedDays((current) => (current.includes(day) ? current : [...current, day]));
+                      }}
+                      aria-label={`${weekdayKo(day)}요일 일정 ${rest}개 더 보기`}
+                      className="mt-0.5 block w-full rounded bg-paper-200/80 py-[1px] text-center text-[calc(11.5px*var(--fs))] font-medium text-ink-500 transition hover:bg-paper-300/80 hover:text-ink-800"
+                    >
+                      +{rest}개 더 보기
+                    </button>
+                  ) : expanded && list.length > dayItemCap ? (
+                    <button
+                      type="button"
+                      data-week-event-fold={day}
+                      onClick={(clickEvent) => {
+                        clickEvent.stopPropagation();
+                        setExpandedDays((current) => current.filter((item) => item !== day));
+                      }}
+                      className="mt-0.5 block w-full rounded py-[1px] text-center text-[calc(11.5px*var(--fs))] font-medium text-ink-400 transition hover:bg-paper-200/70 hover:text-ink-700"
+                    >
+                      접기
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    data-week-add-event={day}
+                    onClick={(clickEvent) => {
+                      clickEvent.stopPropagation();
+                      onCreate(day, null);
                     }}
-                    className={cn("border-l border-paper-300", isSameISO(day, today) && todayCell)}
-                  />
-                ))}
-              </div>
-              {allDayBars.map(({ event, startIdx, span, lane, cutStart, cutEnd }) => {
+                    aria-label={`${weekdayKo(day)}요일 일정 추가`}
+                    title="이 날짜로 일정 추가"
+                    className="mt-0.5 flex w-full items-center justify-center gap-0.5 rounded py-[1px] text-[calc(12px*var(--fs))] text-ink-400/80 transition hover:bg-paper-200/70 hover:text-ink-800 group-hover/daycol:text-ink-500"
+                  >
+                    + 일정
+                  </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* 연결 막대 — 두 날 이상 이어지는 일정(종일·시간 무관)을 하나의 긴 막대로. */}
+          {spanBars.length === 0 ? null : (
+            <div className="pointer-events-none absolute inset-x-0 top-0" style={{ height: barsHeight }} data-span-bars="true">
+              {spanBars.map(({ event, startIdx, span, lane, cutStart, cutEnd }) => {
                 const tone = toneFor(event);
+                const timeText = event.allDay || !event.startTime ? "" : timeRangeLabel(event.startTime, event.endTime);
                 return (
                   <button
                     key={event.id}
@@ -714,92 +895,31 @@ export function WeekBoard({
                     data-all-day-bar={event.id}
                     data-all-day-start={startIdx}
                     data-all-day-end={startIdx + span - 1}
-                    onPointerDown={(pointerEvent) => {
-                      dnd.start(
-                        pointerEvent,
-                        { kind: "event", id: event.id, label: event.title },
-                        (target, point) => {
-                          if (!target) return;
-                          /* A39: 프로젝트 칸·index 칸에 놓으면 그 프로젝트의 할 일로 바꿉니다. */
-                          if (target.zone === "week-task-day" || target.zone === "week-project-row") {
-                            onConvertEventToTask?.(event.id, target.data.project ?? INBOX_KEY, target.data.day ?? null);
-                            return;
-                          }
-                          const nextDay = target.data.day;
-                          if (!nextDay) return;
-                          if (target.zone === "allday-bar") {
-                            const over = target.data.id;
-                            if (!over || over === event.id || !onReorderAllDay) return;
-                            const ids = allDayBars.map((item) => item.event.id).filter((id) => id !== event.id);
-                            const at = ids.indexOf(over);
-                            ids.splice(at < 0 ? ids.length : at, 0, event.id);
-                            onReorderAllDay(ids);
-                            return;
-                          }
-                          if (target.zone === "allday-day") {
-                            /* A41: 날짜만 옮깁니다 — 정해 둔 시각·기간은 그대로(종일 일정은 종일 그대로). */
-                            if (onMoveDateOnly) onMoveDateOnly(event.id, nextDay);
-                            else onMoveAllDayDate?.(event.id, nextDay);
-                            return;
-                          }
-                          if (target.zone === "timeline-day") {
-                            const minutes = minutesFromDrop(target, point);
-                            // 다른 날로 옮길 때는 날짜만 — 종일 막대는 종일로 남습니다.
-                            if (minutes !== null && nextDay === event.date) onMoveEvent(event.id, nextDay, toClock(snapMinutes(minutes)));
-                            else onMoveEvent(event.id, nextDay, null);
-                          }
-                        },
-                        {
-                          getHint: (target, point) => {
-                            /* A39: 할 일 칸에 놓을 때는 '○○ 할 일로 옮기기'라고 분명히 적습니다. */
-                            if (target.zone === "week-task-day" || target.zone === "week-project-row") {
-                              const key = target.data.project ?? INBOX_KEY;
-                              const day = target.data.day ? ` · ${target.data.day.slice(5).replace("-", "/")}` : "";
-                              return `${rowTitleOf(key)}${day} 할 일로 옮기기`;
-                            }
-                            const nextDay = target.data.day;
-                            if (!nextDay) return null;
-                            const stamp = nextDay.slice(5).replace("-", "/");
-                            if (target.zone === "timeline-day") {
-                              const minutes = minutesFromDrop(target, point);
-                              if (minutes === null || nextDay !== event.date) return `${stamp}로 옮기기`;
-                              return `${stamp} ${toClock(snapMinutes(minutes))} 일정으로`;
-                            }
-                            return target.zone === "allday-day" ? `${stamp} 종일로 옮기기` : null;
-                          },
-                        },
-                      );
-                    }}
-                    data-drop-zone="allday-bar"
+                    data-drop-zone="span-bar"
                     data-drop-id={event.id}
+                    data-drop-day={days[startIdx] ?? event.date}
+                    onPointerDown={(pointerEvent) => startBarDrag(pointerEvent, event)}
                     onClick={(clickEvent) => {
-                      /* A32: 종일 막대도 그 일정의 수정 화면이 아니라, 누른 날의 정리 목록을 먼저 엽니다. */
-                      if (!narrow && onOpenDaySummary) {
-                        const box = clickEvent.currentTarget.getBoundingClientRect();
-                        const ratio = box.width > 0 ? (clickEvent.clientX - box.left) / box.width : 0;
-                        const offset = Math.max(0, Math.min(span - 1, Math.floor(ratio * span)));
-                        onOpenDaySummary(days[startIdx + offset] ?? event.date);
-                        return;
-                      }
+                      clickEvent.stopPropagation();
                       onOpenEvent(event.id);
                     }}
-                    title={allDayExpanded ? undefined : "끌어서 종일 일정 순서 바꾸기"}
+                    title={`${event.title}${timeText ? ` · ${timeText}` : ""} · 끌어서 기간·순서 바꾸기`}
                     className={cn(
-                      "absolute h-[19px] overflow-hidden border px-1.5 text-left text-[calc(13px*var(--fs))] font-medium leading-[17px] md:px-2 md:text-[calc(13.5px*var(--fs))]",
+                      "pointer-events-auto absolute flex items-center gap-1 overflow-hidden border px-1.5 text-left text-[calc(12.5px*var(--fs))] font-medium leading-[17px]",
                       cutStart ? "rounded-l-none border-l-0" : "rounded-l-md",
                       cutEnd ? "rounded-r-none border-r-0" : "rounded-r-md",
                       tone.bg,
                       tone.border,
                       tone.text,
                       event.canceled && "line-through opacity-50",
-                      /* A34: 완료한 종일 일정도 할 일처럼 줄을 긋습니다. */
+                      /* A34: 완료한 일정도 할 일처럼 줄을 긋습니다. */
                       event.done && "line-through opacity-60",
                     )}
                     style={{
                       left: `calc(${(startIdx * 100) / days.length}% + 2px)`,
                       width: `calc(${(span * 100) / days.length}% - 4px)`,
-                      top: lane * allDayLane + 2,
-                      display: lane >= visibleLanes ? "none" : "block",
+                      top: lane * barLane + 3,
+                      height: barLane - 2,
                     }}
                   >
                     {onResizeSpan ? (
@@ -824,6 +944,10 @@ export function WeekBoard({
                       />
                     ) : null}
                     <span className={cn("line-clamp-1", onResizeSpan && "px-1.5")}>{event.title}</span>
+                    {timeText ? (
+                      /* A42: 좁은 폰에서는 제목 자리를 지키도록 시각을 숨깁니다(막대를 누르면 상세에 보입니다). */
+                      <span className="ml-auto hidden flex-none text-[calc(11px*var(--fs))] tabular-nums opacity-80 md:inline">{timeText}</span>
+                    ) : null}
                     {cutEnd ? <span className="absolute right-[9px] top-0 leading-[17px] opacity-70">›</span> : null}
                     {onResizeSpan ? (
                       <span
@@ -849,65 +973,9 @@ export function WeekBoard({
                   </button>
                 );
               })}
-              {/* A16: +N sits under the day column that overflows, not at the row's right end. */}
-              {allDayExpanded ? (
-                overflows ? (
-                  <button
-                    type="button"
-                    onClick={() => setAllDayExpanded(false)}
-                    className="absolute right-1 rounded px-1 text-[calc(12px*var(--fs))] font-medium text-ink-400 hover:text-ink-700"
-                    style={{ top: laneCount * allDayLane + 1 }}
-                  >
-                    접기
-                  </button>
-                ) : null
-              ) : (
-                hiddenByDay.map((count, index) =>
-                  count > 0 ? (
-                    <button
-                      key={days[index]}
-                      type="button"
-                      data-allday-more={days[index]}
-                      onClick={() => setAllDayExpanded(true)}
-                      aria-label={`${weekdayKo(days[index] ?? "")}요일 종일 일정 ${count}개 더 보기`}
-                      className="absolute rounded bg-paper-200/90 text-center text-[calc(11.5px*var(--fs))] font-medium leading-[15px] text-ink-500 transition hover:bg-paper-300/80 hover:text-ink-800"
-                      style={{
-                        left: `calc(${(index * 100) / days.length}% + 2px)`,
-                        width: `calc(${100 / days.length}% - 4px)`,
-                        top: visibleLanes * allDayLane + 1,
-                      }}
-                    >
-                      +{count} 더
-                    </button>
-                  ) : null,
-                )
-              )}
             </div>
-          </div>
-        )}
-
-        {/* timeline — the same scroll window as 종일, so the two move together. */}
-        <Timeline
-          days={days}
-          events={visibleEvents.filter((event) => event.kind === "일정")}
-          startHour={mobileWindow ? mobileWindow.start : startHour}
-          endHour={mobileWindow ? mobileWindow.end : endHour}
-          fixedWindow={!!mobileWindow}
-          hourHeight={timeExpanded ? 40 : 32}
-          gutterWidth={gutter}
-          onOpenEvent={onOpenEvent}
-          onOpenEventDay={
-            narrow || !onOpenDaySummary ? undefined : (_id, day) => onOpenDaySummary(day)
-          }
-          onClickEmptyDay={
-            narrow || !onOpenDaySummary ? undefined : (day, time) => onOpenDaySummary(day, time)
-          }
-          onCreate={onCreate}
-          onMoveEvent={onMoveEvent}
-          onDropEventToTask={onConvertEventToTask}
-          onMoveAllDayDate={onMoveAllDayDate}
-          onResizeEvent={onResizeEvent}
-        />
+          )}
+        </div>
       </div>
       )}
       </section>
@@ -1035,36 +1103,23 @@ export function WeekBoard({
                               dnd.start(
                                 event,
                                 { kind: "task", id: task.id, label: task.title },
-                                (target, point) => {
+                                (target) => {
                                   /* A35: 게시판에서 바로 다른 프로젝트 행·다른 날로 끌어도 됩니다. */
                                   if (!target) return;
                                   if (target.zone === "week-task-day" || target.zone === "week-project-row") {
                                     applyTaskDrop(task, day, key, target);
                                     return;
                                   }
-                                  /* A39: 종일 칸에 놓으면 종일 일정, 시간표 칸에 놓으면 그 시각의 시간 일정으로 바꿉니다. */
-                                  if (target.zone === "allday-day" || target.zone === "allday-bar") {
+                                  /* A42: 일정 목록 칸에 놓으면 그 날의 종일 일정으로 바꿉니다. */
+                                  if (target.zone === "week-day-list") {
                                     onConvertTaskToEvent?.(task.id, target.data.day ?? day, null);
-                                    return;
-                                  }
-                                  if (target.zone === "timeline-day") {
-                                    const minutes = minutesFromDrop(target, point);
-                                    onConvertTaskToEvent?.(
-                                      task.id,
-                                      target.data.day ?? day,
-                                      minutes === null ? null : toClock(snapMinutes(minutes)),
-                                    );
                                   }
                                 },
                                 {
                                   getHint: (target) => {
-                                    if (target.zone === "allday-day" || target.zone === "allday-bar") {
+                                    if (target.zone === "week-day-list") {
                                       const stamp = (target.data.day ?? day).slice(5).replace("-", "/");
                                       return `${stamp} 종일 일정으로 옮기기`;
-                                    }
-                                    if (target.zone === "timeline-day") {
-                                      const stamp = (target.data.day ?? day).slice(5).replace("-", "/");
-                                      return `${stamp} 시간 일정으로 옮기기`;
                                     }
                                     return taskDropHint(day, key, target);
                                   },

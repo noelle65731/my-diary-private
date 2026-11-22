@@ -144,6 +144,28 @@ export function SettingsDialog() {
                 />
               </div>
               <Toggle checked={settings.showWeekends} onChange={(value) => set("showWeekends", value)} label="주말 표시" description="주간·3일 보기에서 토·일을 접습니다" />
+              {/* A42: 주간·3일 `일정` 목록에 하루 몇 개까지 보여 줄지 — 넘치는 일정은 +N개 더 보기로 접힙니다. */}
+              <div data-week-day-items="true">
+                <div className="mb-1 flex items-baseline justify-between">
+                  <p className="text-[calc(15.5px*var(--fs))] text-ink-800">주간 하루 일정 표시 개수</p>
+                  <span className="text-[calc(14px*var(--fs))] text-ink-400">{settings.weekDayItems}개</span>
+                </div>
+                <Segmented<"3" | "4" | "5" | "6" | "7">
+                  value={String(settings.weekDayItems) as "3" | "4" | "5" | "6" | "7"}
+                  onChange={(value) => set("weekDayItems", Number(value) as 3 | 4 | 5 | 6 | 7)}
+                  size="sm"
+                  options={[
+                    { value: "3", label: "3" },
+                    { value: "4", label: "4" },
+                    { value: "5", label: "5" },
+                    { value: "6", label: "6" },
+                    { value: "7", label: "7" },
+                  ]}
+                />
+                <p className="mt-1 text-[calc(14px*var(--fs))] leading-relaxed text-ink-400">
+                  주간·3일 보기의 하루 `일정` 목록에 이 개수까지만 보여 줍니다. 넘치는 일정은 ‘+N개 더 보기’로 접히고, 두 날 이상 이어지는 일정은 위 연결 막대에 늘 보입니다.
+                </p>
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <label className="block">
                   <span className="label">시작 시각</span>

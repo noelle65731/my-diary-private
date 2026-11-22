@@ -794,8 +794,6 @@ export function CalendarTab() {
               tasks={tasks}
               projects={projects}
               routines={calendarRoutines}
-              startHour={settings.weekStartHour}
-              endHour={settings.weekEndHour}
               onSelectDay={(day) => {
                 setCursor(day);
                 setView("day");
@@ -839,8 +837,6 @@ export function CalendarTab() {
               tasks={tasks}
               projects={projects}
               routines={calendarRoutines}
-              startHour={settings.weekStartHour}
-              endHour={settings.weekEndHour}
               onSelectDay={(day) => {
                 setCursor(day);
                 setView("day");
