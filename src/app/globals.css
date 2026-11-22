@@ -211,11 +211,29 @@
     @apply border-l border-paper-300;
   }
 
-  /* project cards: the person decides how many read across (3 or 4) */
+  /* project cards: the person decides how many read across (3, 4 or 5) */
   .cards-grid {
     @apply grid gap-3;
     /* a phone reads one card at a time — a half-width card squeezes every task line */
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* A41: 격자 칸(슬롯) 배치 — 폰은 한 줄, 넓은 화면은 고른 칸 수(3·4·5) */
+  .slot-grid {
+    @apply grid gap-3;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  @media (min-width: 640px) {
+    .slot-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .slot-grid {
+      grid-template-columns: repeat(var(--slot-cols, 4), minmax(0, 1fr));
+    }
   }
 
   @media (min-width: 640px) {

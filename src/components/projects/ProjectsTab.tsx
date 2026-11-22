@@ -31,11 +31,96 @@ type ProjectView = "tracks" | "priority" | "history" | "journal";
 const CARD_OPEN_PREVIEW = 5;
 /** A19: 기본 보기의 '최근 기록'은 최근 완료·취소한 할 일 두 개까지. */
 const RECENT_LOG_MAX = 2;
-/** A40: 카드 순서(일정·프로젝트·루틴)와 줄바꿈은 이 브라우저에 남깁니다. */
-const CARD_ORDER_KEY = "my-diary:project-card-order:v1";
-const CARD_BREAK = "__break__";
+/**
+ * A41: 카드 배치는 `__break__` 같은 표시가 아니라 진짜 격자 칸(슬롯) 좌표로 남깁니다.
+ * 0번 칸은 index 카드 자리이고, 3·4·5칸 보기 어디서든 빈 칸을 포함한 아무 칸으로나 옮길 수 있습니다.
+ */
+const SLOT_KEY = "my-diary:project-card-slots:v1";
+const COLS_KEY = "my-diary:project-cols:v1";
+/** index 카드가 늘 차지하는 칸 */
+const INDEX_SLOT = 0;
+/** 처음 열었을 때의 줄 수 — 카드가 더 많으면 그만큼 늘어납니다. */
+const DEFAULT_ROWS = 3;
 /** 카드 한 장에 들어가는 루틴 수. */
 const ROUTINES_PER_CARD = 3;
+
+type SlotCols = 3 | 4 | 5;
+interface SlotLayout {
+  cols: SlotCols;
+  rows: number;
+  /** 카드 키 → 칸 번호(0부터, 행 우선) */
+  cells: Record<string, number>;
+}
+
+function readSlotLayout(): SlotLayout {
+  const fallbackCols = (() => {
+    if (typeof window === "undefined") return 4 as SlotCols;
+    try {
+      const saved = Number(window.localStorage.getItem(COLS_KEY));
+      return saved === 3 || saved === 5 ? (saved as SlotCols) : (4 as SlotCols);
+    } catch {
+      return 4 as SlotCols;
+    }
+  })();
+  if (typeof window === "undefined") return { cols: fallbackCols, rows: DEFAULT_ROWS, cells: {} };
+  try {
+    const raw = window.localStorage.getItem(SLOT_KEY);
+    if (!raw) return { cols: fallbackCols, rows: DEFAULT_ROWS, cells: {} };
+    const parsed = JSON.parse(raw) as Partial<SlotLayout> | null;
+    const cells: Record<string, number> = {};
+    const rawCells = parsed && typeof parsed.cells === "object" && parsed.cells ? parsed.cells : {};
+    for (const [key, value] of Object.entries(rawCells)) {
+      if (typeof value === "number" && Number.isFinite(value) && value >= 0) cells[key] = Math.round(value);
+    }
+    const cols = parsed && (parsed.cols === 3 || parsed.cols === 4 || parsed.cols === 5) ? (parsed.cols as SlotCols) : fallbackCols;
+    const rows = parsed && typeof parsed.rows === "number" && parsed.rows >= 1 ? Math.min(30, Math.round(parsed.rows)) : DEFAULT_ROWS;
+    return { cols, rows, cells };
+  } catch {
+    return { cols: fallbackCols, rows: DEFAULT_ROWS, cells: {} };
+  }
+}
+
+/** 칸 수가 달라지면(3↔4↔5) 같은 줄·같은 열에 최대한 남도록 좌표를 옮겨 적습니다. */
+function remapCells(cells: Record<string, number>, fromCols: number, toCols: number): Record<string, number> {
+  if (fromCols === toCols) return cells;
+  const next: Record<string, number> = {};
+  for (const [key, value] of Object.entries(cells)) {
+    const row = Math.floor(value / fromCols);
+    const col = value % fromCols;
+    next[key] = row * toCols + Math.min(col, toCols - 1);
+  }
+  return next;
+}
+
+/** 이번 줄 수·칸 수에서 카드를 놓을 칸 목록 — 모자라면 뒤에 이어 붙입니다. */
+function buildSlots(cells: Record<string, number>, rows: number, cols: number, keys: string[]): (string | null)[] {
+  const total = Math.max(1, rows * cols);
+  const slots: (string | null)[] = Array.from({ length: total }, () => null);
+  slots[INDEX_SLOT] = "index";
+  const used = new Set<number>([INDEX_SLOT]);
+  const pending: string[] = [];
+  for (const key of keys) {
+    const at = cells[key];
+    if (at !== undefined && at > INDEX_SLOT && at < total && !used.has(at)) {
+      slots[at] = key;
+      used.add(at);
+      continue;
+    }
+    pending.push(key);
+  }
+  let cursor = INDEX_SLOT + 1;
+  for (const key of pending) {
+    while (cursor < slots.length && slots[cursor]) cursor += 1;
+    if (cursor >= slots.length) {
+      slots.push(key);
+      cursor += 1;
+      continue;
+    }
+    slots[cursor] = key;
+    cursor += 1;
+  }
+  return slots;
+}
 
 function dateLabel(date: string | null): string {
   if (!date) return "";
@@ -63,62 +148,30 @@ function finishedAt(task: ProjectTask): string | null {
   return task.doneAt ?? task.cancelAt ?? task.updatedAt ?? null;
 }
 
-/** A40: 분류 필터·NOW 와 상관없이, 카드 순서는 이 브라우저에 남깁니다. */
-function readCardOrder(): string[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = window.localStorage.getItem(CARD_ORDER_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as unknown;
-    return Array.isArray(parsed) ? parsed.filter((key): key is string => typeof key === "string") : [];
-  } catch {
-    return [];
-  }
-}
-
-/**
- * 저장된 순서를 지금 있는 카드에 맞춥니다 — 사라진 카드는 빼고, 새로 생긴 카드는 뒤에 붙입니다.
- * index 카드는 이 목록에 없습니다(늘 맨 앞 고정).
- */
-function reconcileCardOrder(saved: string[], keys: string[]): string[] {
-  const allowed = new Set(keys);
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const key of saved) {
-    if (key === CARD_BREAK) {
-      if (out.length > 0 && out[out.length - 1] !== CARD_BREAK) out.push(key);
-      continue;
-    }
-    if (!allowed.has(key) || seen.has(key)) continue;
-    seen.add(key);
-    out.push(key);
-  }
-  for (const key of keys) if (!seen.has(key)) out.push(key);
-  while (out.length > 0 && out[out.length - 1] === CARD_BREAK) out.pop();
-  return out;
-}
 
 export function ProjectsTab() {
   const { data, update, setRoutineCount, create } = useData();
   const { settings, set: setSetting, addCategory, removeCategory } = useSettings();
   // A16: filters and pickers share one 분류 list, so a new one shows up everywhere.
   const categoryOptions = useCategoryOptions();
-  const { focus, clearFocus, openTrash, views, setView: setTabView, openTaskDraft } = useUi();
+  const { focus, clearFocus, openTrash, views, setView: setTabView, openTaskDraft, notify } = useUi();
 
   // A15: tracks / priority / history is kept in the shared UI state for 뒤로 가기.
   const view = ((views.projects || "tracks") as ProjectView);
   const setView = (next: ProjectView) => setTabView("projects", next);
-  /** A12: 3~4 cards per row — the user picks how wide each card reads. */
-  const [cols, setCols] = useState<3 | 4>(() => {
-    if (typeof window === "undefined") return 4;
-    return window.localStorage.getItem("my-diary:project-cols:v1") === "3" ? 3 : 4;
-  });
-  const pickCols = (next: 3 | 4) => {
-    setCols(next);
+  /**
+   * A12/A41: 3·4·5 cards per row — the user picks how wide each card reads.
+   * 배치(칸 좌표)도 같은 곳에 남겨, 새로 고쳐도 카드가 제자리에 있습니다.
+   */
+  const [layout, setLayout] = useState<SlotLayout>(() => readSlotLayout());
+  const cols = layout.cols;
+  const saveLayout = (next: SlotLayout) => {
+    setLayout(next);
     try {
-      window.localStorage.setItem("my-diary:project-cols:v1", String(next));
+      window.localStorage.setItem(SLOT_KEY, JSON.stringify(next));
+      window.localStorage.setItem(COLS_KEY, String(next.cols));
     } catch {
-      /* ignore */
+      /* 저장 공간이 없으면 이번 화면에서만 유지됩니다. */
     }
   };
   // A6: 전체(all) is the default filter on every device.
@@ -135,17 +188,8 @@ export function ProjectsTab() {
   const [quickTitle, setQuickTitle] = useState("");
   const [quickCategory, setQuickCategory] = useState<TaskCategory>("개인");
   const [busy, setBusy] = useState(false);
-  /** A40: 카드 순서 — 일정·프로젝트·루틴 카드를 서로 원하는 자리로 옮깁니다. */
-  const [cardOrder, setCardOrder] = useState<string[]>(() => readCardOrder());
+  /** A41: 카드 자체를 끌고 있는 동안 — 빈 칸을 눈에 보이게 합니다. */
   const [cardDragging, setCardDragging] = useState<string | null>(null);
-  const saveCardOrder = (next: string[]) => {
-    setCardOrder(next);
-    try {
-      window.localStorage.setItem(CARD_ORDER_KEY, JSON.stringify(next));
-    } catch {
-      /* 저장 공간이 없으면 이번 화면에서만 유지됩니다. */
-    }
-  };
   /**
    * A4: the open detail registers its save-and-validate step here, so tapping another
    * task in the right list stores what changed before the centre swaps.
@@ -259,21 +303,40 @@ export function ProjectsTab() {
     return chunks;
   }, [orderedRoutines]);
 
-  /** A40: 지금 있는 카드의 키 — 일정 하나, 프로젝트마다 하나, 루틴 묶음마다 하나. */
+  /** A41: 지금 있는 카드의 키 — 일정 하나(켜져 있을 때), 프로젝트마다 하나, 루틴 묶음마다 하나. */
   const cardKeys = useMemo(
     () => [
-      "schedule",
+      ...(settings.showScheduleCard ? ["schedule"] : []),
       ...projects.map((project) => `p:${project.id}`),
       ...routineChunks.map((_, index) => `r:${index}`),
     ],
-    [projects, routineChunks],
+    [settings.showScheduleCard, projects, routineChunks],
   );
-  /** 저장된 순서를 지금 카드에 맞춘 목록 — 줄바꿈 표시(__break__)도 그대로 둡니다. */
-  const orderedCards = useMemo(() => reconcileCardOrder(cardOrder, cardKeys), [cardOrder, cardKeys]);
-  useEffect(() => {
-    if (orderedCards.join("|") !== cardOrder.join("|")) saveCardOrder(orderedCards);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orderedCards]);
+  /** 카드가 모자라지 않을 만큼의 줄 — 저장한 줄이 더 많으면 그대로 둡니다. */
+  const rows = Math.max(layout.rows, Math.ceil((cardKeys.length + 1) / cols), 1);
+  const slots = useMemo(() => buildSlots(layout.cells, rows, cols, cardKeys), [layout.cells, rows, cols, cardKeys]);
+  /** 마지막 줄이 통째로 비었는지 — `빈 줄 접기`를 보여 줄지 정합니다. */
+  const lastRowEmpty = slots.every((key, index) => index < (rows - 1) * cols || key === null);
+
+  /** A41: 칸 수를 바꾸면 같은 줄·열에 최대한 남도록 옮겨 적습니다. */
+  const pickCols = (next: SlotCols) => {
+    if (next === layout.cols) return;
+    const nextRows = Math.max(layout.rows, Math.ceil((cardKeys.length + 1) / next));
+    saveLayout({ cols: next, rows: nextRows, cells: remapCells(layout.cells, layout.cols, next) });
+    notify(`${next}칸 보기로 했습니다`);
+  };
+
+  /** A41: 한 줄 더 — 빈 줄까지 원하는 만큼 늘려 카드를 내려 놓을 수 있습니다. */
+  const addRow = () => {
+    saveLayout({ ...layout, rows: rows + 1 });
+    notify("카드 줄을 하나 더했습니다");
+  };
+  /** A41: 마지막 줄이 비어 있으면 접습니다. */
+  const trimRow = () => {
+    if (rows <= 1 || !lastRowEmpty) return;
+    saveLayout({ ...layout, rows: rows - 1 });
+    notify("빈 줄을 접었습니다");
+  };
 
   const openTasks = tasks.filter((task) => !task.trash && task.status !== "완료" && task.status !== "취소" && !task.history);
   /**
@@ -335,30 +398,22 @@ export function ProjectsTab() {
   };
 
   /**
-   * A40: 카드 자체를 끌어 순서를 바꿉니다. 카드는 dnd 의 포인터 시스템을 함께 써서
+   * A41: 카드 자체를 끌어 격자 칸(슬롯)으로 옮깁니다. 카드는 dnd 의 포인터 시스템을 함께 써서
    * 마우스·손가락 모두 같은 방식으로 옮깁니다(HTML5 드래그는 손가락에서 동작하지 않습니다).
-   * index 카드는 늘 맨 앞이므로 끌지 않습니다.
+   * index 카드는 1행 1열에 고정이라 끌지 않고, 빈 칸이든 카드가 있는 칸이든 그 자리로 갑니다.
+   * 카드가 있는 칸에 놓으면 두 카드의 자리를 맞바꿉니다.
    */
-  const moveCard = (dragKey: string, targetKey: string | null, after: boolean) => {
-    if (targetKey && dragKey === targetKey) return;
-    const rest = orderedCards.filter((key) => key !== dragKey);
-    let next: string[];
-    if (!targetKey) {
-      next = [...rest, CARD_BREAK, dragKey];
-    } else {
-      const index = rest.indexOf(targetKey);
-      if (index < 0) return;
-      next = [...rest];
-      next.splice(index + (after ? 1 : 0), 0, dragKey);
-    }
-    // 줄바꿈이 겹치거나 맨 끝에 홀로 남지 않게 정리합니다.
-    const cleaned: string[] = [];
-    for (const key of next) {
-      if (key === CARD_BREAK && (cleaned.length === 0 || cleaned[cleaned.length - 1] === CARD_BREAK)) continue;
-      cleaned.push(key);
-    }
-    while (cleaned.length > 0 && cleaned[cleaned.length - 1] === CARD_BREAK) cleaned.pop();
-    saveCardOrder(cleaned);
+  const moveCard = (dragKey: string, targetSlot: number) => {
+    if (targetSlot <= INDEX_SLOT || targetSlot >= slots.length) return;
+    const from = slots.indexOf(dragKey);
+    const occupant = slots[targetSlot] ?? null;
+    if (from === targetSlot || occupant === dragKey) return;
+    const cells = { ...layout.cells };
+    cells[dragKey] = targetSlot;
+    if (occupant && occupant !== "index") cells[occupant] = from > 0 ? from : targetSlot;
+    saveLayout({ cols: layout.cols, rows: Math.max(layout.rows, rows), cells });
+    if (occupant) notify(`${cardLabelOf(dragKey)} 카드와 ${cardLabelOf(occupant)} 카드의 자리를 바꿨습니다`);
+    else notify(`${cardLabelOf(dragKey)} 카드를 ${Math.floor(targetSlot / cols) + 1}줄 ${(targetSlot % cols) + 1}칸으로 옮겼습니다`);
   };
 
   const cardLabelOf = (key: string) => {
@@ -373,44 +428,40 @@ export function ProjectsTab() {
     const target = event.target as HTMLElement | null;
     if (target?.closest("input, textarea, select, label, form, a, [data-task-id], [data-schedule-event], [data-routine-day], [data-routine-now], [data-nodrag]")) return;
     if (event.pointerType === "mouse" && event.button !== 0) return;
-    /** 끌기 시작한 카드의 자리 — 같은 줄인지(가로) 아래줄인지(세로)를 가릅니다. */
-    const sourceRect = event.currentTarget.getBoundingClientRect();
+    /** 끌고 있는 카드가 놓일 칸 — 빈 칸이면 그 칸, 카드 위면 그 카드의 칸입니다. */
+    const slotOfTarget = (dropTarget: { zone: string; data: Record<string, string> }): number | null => {
+      if (dropTarget.zone === "card-slot") {
+        const value = Number(dropTarget.data.slot ?? "");
+        return Number.isFinite(value) ? value : null;
+      }
+      let targetKey: string | null = null;
+      if (dropTarget.zone === "schedule-card") targetKey = "schedule";
+      else if (dropTarget.zone === "routine-card") targetKey = `r:${dropTarget.data.routineCard ?? ""}`;
+      else if (dropTarget.zone === "project-card" && dropTarget.data.project && dropTarget.data.project !== "index") {
+        targetKey = `p:${dropTarget.data.project}`;
+      }
+      if (!targetKey) return null;
+      const at = slots.indexOf(targetKey);
+      return at < 0 ? null : at;
+    };
     dnd.start(
       event,
       { kind: "card", id: key, label: cardLabelOf(key) },
-      (dropTarget, point) => {
+      (dropTarget) => {
         setCardDragging(null);
         if (!dropTarget) return;
-        if (dropTarget.zone === "card-row-break") {
-          moveCard(key, null, false);
-          return;
-        }
-        let targetKey: string | null = null;
-        if (dropTarget.zone === "schedule-card") targetKey = "schedule";
-        else if (dropTarget.zone === "routine-card") targetKey = `r:${dropTarget.data.routineCard ?? ""}`;
-        else if (dropTarget.zone === "project-card" && dropTarget.data.project) targetKey = `p:${dropTarget.data.project}`;
-        if (!targetKey) return;
-        const rect = dropTarget.rect;
-        // A40: PC 는 카드가 옆으로, 폰은 위아래로 놓이므로 같은 줄이면 가로, 줄이 다르면 세로로 봅니다.
-        const overlap = Math.min(sourceRect.bottom, rect.bottom) - Math.max(sourceRect.top, rect.top);
-        const sameRow = overlap > Math.min(sourceRect.height, rect.height) * 0.5;
-        const after = sameRow ? point.x > rect.left + rect.width / 2 : point.y > rect.top + rect.height / 2;
-        moveCard(key, targetKey, after);
+        const targetSlot = slotOfTarget(dropTarget);
+        if (targetSlot === null) return;
+        moveCard(key, targetSlot);
       },
       {
         onStart: () => setCardDragging(key),
         onEnd: () => setCardDragging(null),
         getHint: (dropTarget) => {
-          if (dropTarget.zone === "card-row-break") return "새 줄로 내리기";
-          if (dropTarget.zone === "schedule-card") return "일정 카드 앞으로 옮기기";
-          if (dropTarget.zone === "routine-card") {
-            const index = Number(dropTarget.data.routineCard ?? "0");
-            return `루틴 카드 ${index + 1} 앞으로 옮기기`;
-          }
-          if (dropTarget.zone === "project-card" && dropTarget.data.project) {
-            return `${projectTitleOf(dropTarget.data.project)} 앞으로 옮기기`;
-          }
-          return null;
+          const targetSlot = slotOfTarget(dropTarget);
+          if (targetSlot === null) return null;
+          if (targetSlot === INDEX_SLOT) return null;
+          return `${Math.floor(targetSlot / cols) + 1}줄 ${(targetSlot % cols) + 1}칸으로 옮기기`;
         },
       },
     );
@@ -626,6 +677,95 @@ export function ProjectsTab() {
     setBusy(false);
   };
 
+  /**
+   * A41: 칸 하나에 놓일 카드 — 일정·프로젝트·루틴 카드를 키로 그립니다.
+   * 빈 칸은 놓을 자리만 만들고, index 카드는 1행 1열에 고정입니다.
+   */
+  const renderCard = (key: string) => {
+              if (key === "schedule") {
+                return (
+                  <ScheduleCard
+                    key="schedule"
+                    events={data.calendar}
+                    nowOnly={settings.nowOnly}
+                    showCompleted={settings.showCompletedTasks}
+                    previewCount={settings.projectTaskPreview}
+                    highlight={dropCard === "schedule"}
+                    open={scheduleOpen}
+                    dropProps={scheduleDropProps}
+                    onOpenDrawer={() => setScheduleOpen(true)}
+                    onOpenEvent={(id) => setEventId(id)}
+                    onToggleDone={toggleEventDone}
+                    onCreate={(title) => void createEventQuick(title)}
+                    onPointerDragStart={startEventPointerDrag}
+                    onCardPointerDown={startCardDrag("schedule")}
+                    onDragStartEvent={(dragEvent, item) => {
+                      dragEvent.dataTransfer.setData("text/diary-event", item.id);
+                      dragEvent.dataTransfer.effectAllowed = "move";
+                    }}
+                  />
+                );
+              }
+              if (key.startsWith("p:")) {
+                const project = projects.find((item) => item.id === key.slice(2));
+                if (!project) return null;
+                return (
+                  <ProjectCard
+                    key={key}
+                    project={project}
+                    tasks={tasks}
+                    onOpenProject={setProjectId}
+                    onOpenTask={(id) => void openTask(id)}
+                    onToggleTask={toggleTask}
+                    onCreateTask={(target) =>
+                      openTaskDraft({ kind: "할 일", category: target.category, projectId: target.id })
+                    }
+                    onPointerDragStart={startTaskPointerDrag}
+                    onCardPointerDown={startCardDrag(key)}
+                    drag={{
+                      highlight: dropCard === project.id,
+                      ...dropProps(
+                        project.id,
+                        (taskId) => moveTaskToCard(taskId, project),
+                        undefined,
+                        (droppedId) => dropEventOnCard(droppedId, project.id),
+                      ),
+                    }}
+                  />
+                );
+              }
+              if (key.startsWith("r:")) {
+                const chunkIndex = Number(key.slice(2));
+                const chunk = routineChunks[chunkIndex];
+                if (!chunk || chunk.length === 0) return null;
+                const first = chunkIndex * ROUTINES_PER_CARD + 1;
+                const last = first + chunk.length - 1;
+                return (
+                  <RoutineCard
+                    key={key}
+                    chunkIndex={chunkIndex}
+                    chunk={chunk}
+                    first={first}
+                    last={last}
+                    total={orderedRoutines.length}
+                    totalChunks={routineChunks.length}
+                    routines={data.routines}
+                    weekStartsOn={settings.weekStartsOn}
+                    onCardPointerDown={startCardDrag(key)}
+                    onOpenRoutine={setRoutineId}
+                    onCount={(routine, date, count) => void setRoutineCount(routine, date, count)}
+                    onReorderRoutine={reorderRoutines}
+                    onToggleNow={(routine) => {
+                      writeRoutineNow(routine.id, !routine.hidden);
+                      void update("routines", routine.id, { hidden: !routine.hidden });
+                    }}
+                    onCreate={() => setRoutineId("new")}
+                  />
+                );
+              }
+    return null;
+  };
+
   return (
     <div className="pb-24">
       <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
@@ -667,7 +807,7 @@ export function ProjectsTab() {
           </button>
 
           <div className="seg-track hidden sm:inline-flex" aria-label="카드 칸 수">
-            {([3, 4] as const).map((option) => (
+            {([3, 4, 5] as const).map((option) => (
               <button
                 key={option}
                 type="button"
@@ -746,8 +886,14 @@ export function ProjectsTab() {
       </div>
 
       {view === "tracks" ? (
-        <div className="mt-4 space-y-4">
-          <div className="cards-grid" style={{ "--proj-cols": cols } as React.CSSProperties}>
+        <div className="mt-4 space-y-2">
+          {/* A41: 진짜 격자 칸 — 빈 칸까지 포함해 어느 칸으로든 카드를 끌어 놓습니다.
+              index 는 1행 1열 고정, 폰(1열)은 빈 칸을 건너뛰고 카드 순서대로만 깔립니다. */}
+          <div className="slot-grid" style={{ "--slot-cols": cols } as React.CSSProperties}>
+            {slots.map((slotKey, slotIndex) => {
+              if (slotIndex === INDEX_SLOT) {
+                return (
+                  <div key="slot-index" data-card-slot={slotIndex} className="min-w-0">
             <article
               data-drop-card="index"
               data-index-card
@@ -831,109 +977,55 @@ export function ProjectsTab() {
                 />
               </form>
             </article>
-
-            {/* A40: 일정·프로젝트·루틴 카드를 한 줄에서 자유롭게 옮깁니다(index 는 늘 맨 앞). */}
-            {orderedCards.map((key, position) => {
-              if (key === CARD_BREAK) {
-                return <div key={`${CARD_BREAK}-${position}`} data-card-break="true" aria-hidden className="col-span-full h-0" />;
+                  </div>
+                );
               }
-              if (key === "schedule") {
+              if (!slotKey) {
                 return (
-                  <ScheduleCard
-                    key="schedule"
-                    events={data.calendar}
-                    nowOnly={settings.nowOnly}
-                    showCompleted={settings.showCompletedTasks}
-                    previewCount={settings.projectTaskPreview}
-                    highlight={dropCard === "schedule"}
-                    open={scheduleOpen}
-                    dropProps={scheduleDropProps}
-                    onOpenDrawer={() => setScheduleOpen(true)}
-                    onOpenEvent={(id) => setEventId(id)}
-                    onToggleDone={toggleEventDone}
-                    onCreate={(title) => void createEventQuick(title)}
-                    onPointerDragStart={startEventPointerDrag}
-                    onCardPointerDown={startCardDrag("schedule")}
-                    onDragStartEvent={(dragEvent, item) => {
-                      dragEvent.dataTransfer.setData("text/diary-event", item.id);
-                      dragEvent.dataTransfer.effectAllowed = "move";
-                    }}
+                  <div
+                    key={`slot-empty-${slotIndex}`}
+                    data-drop-zone="card-slot"
+                    data-drop-slot={slotIndex}
+                    data-card-slot={slotIndex}
+                    aria-hidden
+                    className={cn(
+                      "hidden rounded-2xl border border-dashed transition lg:block",
+                      cardDragging ? "min-h-[10rem] border-ink-300 bg-paper-200/40" : "border-paper-300/40",
+                    )}
                   />
                 );
               }
-              if (key.startsWith("p:")) {
-                const project = projects.find((item) => item.id === key.slice(2));
-                if (!project) return null;
-                return (
-                  <ProjectCard
-                    key={key}
-                    project={project}
-                    tasks={tasks}
-                    onOpenProject={setProjectId}
-                    onOpenTask={(id) => void openTask(id)}
-                    onToggleTask={toggleTask}
-                    onCreateTask={(target) =>
-                      openTaskDraft({ kind: "할 일", category: target.category, projectId: target.id })
-                    }
-                    onPointerDragStart={startTaskPointerDrag}
-                    onCardPointerDown={startCardDrag(key)}
-                    drag={{
-                      highlight: dropCard === project.id,
-                      ...dropProps(
-                        project.id,
-                        (taskId) => moveTaskToCard(taskId, project),
-                        undefined,
-                        (droppedId) => dropEventOnCard(droppedId, project.id),
-                      ),
-                    }}
-                  />
-                );
-              }
-              if (key.startsWith("r:")) {
-                const chunkIndex = Number(key.slice(2));
-                const chunk = routineChunks[chunkIndex];
-                if (!chunk || chunk.length === 0) return null;
-                const first = chunkIndex * ROUTINES_PER_CARD + 1;
-                const last = first + chunk.length - 1;
-                return (
-                  <RoutineCard
-                    key={key}
-                    chunkIndex={chunkIndex}
-                    chunk={chunk}
-                    first={first}
-                    last={last}
-                    total={orderedRoutines.length}
-                    totalChunks={routineChunks.length}
-                    routines={data.routines}
-                    weekStartsOn={settings.weekStartsOn}
-                    onCardPointerDown={startCardDrag(key)}
-                    onOpenRoutine={setRoutineId}
-                    onCount={(routine, date, count) => void setRoutineCount(routine, date, count)}
-                    onReorderRoutine={reorderRoutines}
-                    onToggleNow={(routine) => {
-                      writeRoutineNow(routine.id, !routine.hidden);
-                      void update("routines", routine.id, { hidden: !routine.hidden });
-                    }}
-                    onCreate={() => setRoutineId("new")}
-                  />
-                );
-              }
-              return null;
+              return (
+                <div key={slotKey} data-card-slot={slotIndex} className="min-w-0">
+                  {renderCard(slotKey)}
+                </div>
+              );
             })}
+          </div>
 
-            {/* A40: 마지막 줄에 빈칸이 있어도 다음 줄 첫 칸에서 시작하고 싶을 때 놓는 자리. */}
-            <div
-              data-drop-zone="card-row-break"
-              data-card-row-break="true"
-              className={cn(
-                "col-span-full flex items-center justify-center rounded-xl border border-dashed text-[calc(13.5px*var(--fs))] transition",
-                cardDragging
-                  ? "border-ink-300 bg-paper-200/60 py-2.5 text-ink-600"
-                  : "border-paper-300/50 py-1 text-transparent",
-              )}
+          {/* A41: 한 줄 더 내려 카드를 놓거나, 통째로 빈 마지막 줄을 접습니다. */}
+          <div className="flex flex-wrap items-center gap-2" data-card-rows="true">
+            <button
+              type="button"
+              data-card-add-row="true"
+              onClick={addRow}
+              className="rounded-full bg-paper-200 px-2.5 py-1 text-[calc(13.5px*var(--fs))] font-medium text-ink-500 transition hover:bg-paper-300/70 hover:text-ink-900"
             >
-              {cardDragging ? "새 줄로 내리기 · 여기에 놓으면 다음 줄 첫 칸에서 시작합니다" : "새 줄"}
-            </div>
+              + 줄 추가
+            </button>
+            {lastRowEmpty && rows > 1 ? (
+              <button
+                type="button"
+                data-card-trim-row="true"
+                onClick={trimRow}
+                className="rounded-full px-2 py-1 text-[calc(13.5px*var(--fs))] text-ink-400 transition hover:text-ink-700"
+              >
+                빈 줄 접기
+              </button>
+            ) : null}
+            <span className="ml-auto text-[calc(13px*var(--fs))] tabular-nums text-ink-300">
+              {cols}칸 · {rows}줄 · 카드 {Math.max(0, slots.filter(Boolean).length - 1)}장
+            </span>
           </div>
         </div>
       ) : null}
@@ -2143,29 +2235,6 @@ function HistorySpace({
   const doneProjects = alive.filter(
     (project) => !project.hidden && (project.history || project.status === "완료" || project.status === "취소"),
   );
-  const sentTasks = tasks.filter((task) => !task.trash && task.history);
-  const sentRoutines = routines.filter((routine) => !routine.trash && routine.history);
-
-  const Row = ({
-    title,
-    meta,
-    onOpen,
-    children,
-  }: {
-    title: string;
-    meta: string;
-    onOpen: () => void;
-    children?: React.ReactNode;
-  }) => (
-    <li className="flex items-center gap-2 py-1.5">
-      <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-left">
-        <span className="block truncate text-[calc(15px*var(--fs))] text-ink-700">{title}</span>
-        <span className="text-[calc(13px*var(--fs))] text-ink-400">{meta}</span>
-      </button>
-      {children}
-    </li>
-  );
-
   return (
     <div className="mt-4 space-y-4">
       <section>
@@ -2213,31 +2282,6 @@ function HistorySpace({
         )}
       </section>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-      <section className="rounded-2xl border border-paper-300 px-3.5 py-3">
-        <h3 className="mb-2 text-[calc(15px*var(--fs))] font-semibold text-ink-900">History로 보낸 항목</h3>
-        {sentTasks.length + sentRoutines.length === 0 ? (
-          <p className="text-[calc(14.5px*var(--fs))] text-ink-400">History로 보낸 항목이 없습니다.</p>
-        ) : (
-          <ul className="divide-y divide-paper-300/60">
-            {sentTasks.map((task) => (
-              <Row key={task.id} title={task.title} meta={`${task.kind} · ${task.category}`} onOpen={() => onOpenTask(task.id)}>
-                <button type="button" onClick={() => onRestoreTask(task)} className="rounded px-1.5 py-0.5 text-[calc(13px*var(--fs))] text-ink-400 hover:bg-paper-200 hover:text-ink-700">
-                  되살리기
-                </button>
-              </Row>
-            ))}
-            {sentRoutines.map((routine) => (
-              <Row key={routine.id} title={routine.title} meta={`루틴 · ${routine.category}`} onOpen={() => onOpenRoutine(routine.id)}>
-                <button type="button" onClick={() => onRestoreRoutine(routine)} className="rounded px-1.5 py-0.5 text-[calc(13px*var(--fs))] text-ink-400 hover:bg-paper-200 hover:text-ink-700">
-                  되살리기
-                </button>
-              </Row>
-            ))}
-          </ul>
-        )}
-      </section>
-      </div>
     </div>
   );
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { pushToast } from "@/lib/toast-bus";
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Tone } from "@/components/common/tone";
 import { EVENT_COLORS, eventColorTone, type EventColorKey } from "@/components/common/event-colors";
@@ -60,6 +61,8 @@ export function CategoryColorProvider({ children }: { children: ReactNode }) {
 
   const setColor = useCallback(
     (category: string, key: EventColorKey) => {
+      /* A41: 분류 색 변경도 바로 알립니다. */
+      pushToast(`${category} 분류 색을 바꿨습니다`);
       setColors((current) => {
         const next = { ...current };
         if (!key || key === "default") delete next[category];
@@ -75,7 +78,10 @@ export function CategoryColorProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  const resetAll = useCallback(() => write({}), [write]);
+  const resetAll = useCallback(() => {
+    pushToast("분류 색을 모두 기본색으로 되돌렸습니다");
+    write({});
+  }, [write]);
 
   const colorOf = useCallback((category: string) => colors[category] ?? "default", [colors]);
 

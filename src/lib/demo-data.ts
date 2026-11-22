@@ -58,6 +58,26 @@ export function buildDemoData(): AllData {
     event("demo-ev-1", "아침 요가", today, { startTime: "08:30", endTime: "09:20", allDay: false, category: "개인", favorite: true }),
     event("demo-ev-2", "브랜드팀 인터뷰 준비", addDaysISO(today, -1), { startTime: "10:00", endTime: "12:00", allDay: false, category: "성과" }),
     event("demo-ev-3", "포트폴리오 사이트 수정", addDaysISO(today, 1), { startTime: "14:00", endTime: "17:00", allDay: false, category: "성과" }),
+    /* A41: 여러 날에 걸친 일정 — 월간·주간에서 하나의 긴 막대로 이어 보이는 예시입니다. */
+    event("demo-ev-span-1", "포트폴리오 주간 점검", addDaysISO(today, -2), {
+      endDate: addDaysISO(today, 2),
+      category: "성과",
+      sort: 10,
+    }),
+    event("demo-ev-span-2", "브랜드팀 리서치 주간", addDaysISO(today, 4), {
+      endDate: addDaysISO(today, 9),
+      category: "업무",
+      sort: 20,
+    }),
+    /* A41: 시간이 있는 여러 날 일정 — 날짜를 옮겨도 시작·끝 시각이 그대로인지 확인하는 예시입니다. */
+    event("demo-ev-span-3", "브랜드 워크숍", addDaysISO(today, -1), {
+      endDate: addDaysISO(today, 1),
+      startTime: "10:00",
+      endTime: "16:00",
+      allDay: false,
+      category: "업무",
+      sort: 30,
+    }),
     event("demo-ev-4", "친구와 저녁", addDaysISO(today, 2), { startTime: "19:00", endTime: "21:00", allDay: false, category: "휴먼네트워크" }),
     event("demo-ev-5", "치과 예약", addDaysISO(today, 3), { startTime: "11:30", endTime: "12:00", allDay: false, category: "개인" }),
     event("demo-ev-6", "주간 장보기", addDaysISO(today, 4), { category: "개인" }),

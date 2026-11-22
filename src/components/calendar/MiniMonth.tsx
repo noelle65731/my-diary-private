@@ -53,10 +53,14 @@ export function MiniMonth({ cursor, weekStart, marks, onPick, onMonth }: MiniMon
               <button
                 key={day}
                 type="button"
+                data-mini-day={day}
+                data-mini-in-week={inWeek ? "true" : undefined}
                 onClick={() => onPick(day)}
                 className={cn(
                   "relative flex h-[1.35rem] flex-col items-center justify-center text-[calc(14px*var(--fs))] tabular-nums transition",
-                  inWeek && "bg-paper-200/80",
+                  /* A41: 지금 보고 있는 주의 줄을 한눈에 — 예전 연한 회색 대신 또렷한 파랑으로 칠합니다. */
+                  inWeek && "bg-[#d3e1f8] font-semibold",
+                  inWeek && !inMonth && "bg-[#dde6f7]",
                   inWeek && day === weekStart && "rounded-l-lg",
                   inWeek && day === weekEnd && "rounded-r-lg",
                 )}
@@ -73,7 +77,7 @@ export function MiniMonth({ cursor, weekStart, marks, onPick, onMonth }: MiniMon
                           : dow === 6
                             ? "text-blue-600"
                             : "text-ink-700",
-                    !isToday && "hover:bg-paper-300/60",
+                    !isToday && "hover:bg-white/60",
                   )}
                 >
                   {Number(day.slice(8, 10))}

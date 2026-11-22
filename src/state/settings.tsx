@@ -11,6 +11,7 @@ import {
 } from "react";
 import type { ArchiveKind } from "@/lib/types";
 import type { TaskDateOrder } from "@/lib/order";
+import { pushToast } from "@/lib/toast-bus";
 
 export type CalendarViewKey = "year" | "month" | "week" | "three" | "day" | "habit";
 
@@ -37,6 +38,8 @@ export interface Settings {
   hiddenCategories: string[];
   /** A16: NOW 모드 — 켜면 `NOW 숨김` 항목만 화면에서 가립니다 (프로젝트 탭 토글). */
   nowOnly: boolean;
+  /** A39: 프로젝트 탭 맨 앞 `일정` 카드를 보여 줄지 — 설정과 일정 서랍 양쪽에서 켜고 끕니다. */
+  showScheduleCard: boolean;
   showCompletedTasks: boolean;
   binderPreviewLines: number;
   binderShowSchedule: boolean;
@@ -60,6 +63,8 @@ export const DEFAULT_SETTINGS: Settings = {
   customCategories: [],
   hiddenCategories: [],
   nowOnly: false,
+  /** A41: 일정 카드는 기본으로 보입니다. */
+  showScheduleCard: true,
   showCompletedTasks: false,
   binderPreviewLines: 3,
   binderShowSchedule: true,
@@ -68,6 +73,50 @@ export const DEFAULT_SETTINGS: Settings = {
 };
 
 const STORAGE_KEY = "my-diary:settings:v1";
+
+/**
+ * A41: 설정을 바꾸면 무엇이 바뀌었는지 한 줄로 알립니다 — 모든 변경에 토스트를 붙이는
+ * 작업의 일부입니다. 슬라이더처럼 계속 움직이는 값(글자 크기·미리보기 줄 수)은
+ * 소리 없이 저장해 토스트가 쏟아지지 않게 합니다.
+ */
+function settingsToast(key: keyof Settings, value: Settings[keyof Settings]): string | null {
+  switch (key) {
+    case "showScheduleCard":
+      return value ? "일정 카드를 표시합니다" : "일정 카드를 숨겼습니다";
+    case "showCompletedTasks":
+      return value ? "완료한 일도 함께 보기로 했습니다" : "남은 일만 보기로 했습니다";
+    case "nowOnly":
+      return value ? "NOW 숨김만 보기로 했습니다" : "NOW 숨김을 다시 보이게 했습니다";
+    case "projectTaskPreview":
+      return `남은 할 일 표시를 ${value}개로 했습니다`;
+    case "priorityTaskPreview":
+      return `우선순위 표시를 ${value}개로 했습니다`;
+    case "projectTaskOrder":
+      return value === "far" ? "할 일을 먼 날짜순으로 정렬합니다" : "할 일을 가까운 날짜순으로 정렬합니다";
+    case "monthDayItems":
+      return `월간 하루 표시를 ${value}개로 했습니다`;
+    case "calendarDefaultView":
+      return "기본 보기를 바꿨습니다";
+    case "calendarShowHidden":
+      return value ? "숨긴 항목도 함께 보여 줍니다" : "숨긴 항목은 전체 모드에서만 보여 줍니다";
+    case "weekStartsOn":
+      return value === 1 ? "한 주의 시작을 월요일로 했습니다" : "한 주의 시작을 일요일로 했습니다";
+    case "showWeekends":
+      return value ? "주말을 함께 보여 줍니다" : "주말을 접었습니다";
+    case "weekStartHour":
+      return `주간 시작 시각을 ${String(value).padStart(2, "0")}:00으로 했습니다`;
+    case "weekEndHour":
+      return `주간 끝 시각을 ${String(value).padStart(2, "0")}:00으로 했습니다`;
+    case "binderShowSchedule":
+      return value ? "바인더에 오늘 일정을 함께 보여 줍니다" : "바인더의 오늘 일정을 접었습니다";
+    case "binderWeekSchedule":
+      return value ? "주간 일정 창을 펼쳐 둡니다" : "주간 일정 창을 접었습니다";
+    case "archiveDefaultCategory":
+      return `아카이브 기본 분류를 ${value}로 했습니다`;
+    default:
+      return null;
+  }
+}
 
 interface SettingsContextValue {
   settings: Settings;
@@ -153,11 +202,14 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       }
       return next;
     });
+    const message = settingsToast(key, value);
+    if (message) pushToast(message);
   }, []);
 
   const addCategory = useCallback((name: string) => {
     const clean = name.trim().slice(0, 12);
     if (!clean) return;
+    pushToast(`${clean} 분류를 더했습니다`);
     setSettings((current) => {
       const next = {
         ...current,
@@ -177,6 +229,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   const removeCategory = useCallback((name: string) => {
     const clean = name.trim();
     if (!clean) return;
+    pushToast(`${clean} 분류를 지웠습니다`);
     setSettings((current) => {
       const next = {
         ...current,
@@ -193,6 +246,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const reset = useCallback(() => {
+    pushToast("설정을 처음 값으로 되돌렸습니다");
     setSettings(DEFAULT_SETTINGS);
     try {
       window.localStorage.removeItem(STORAGE_KEY);

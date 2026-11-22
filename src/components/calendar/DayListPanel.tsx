@@ -63,6 +63,7 @@ export function DayListPanel({
   items,
   onClose,
   onGoDay,
+  onGoWeek,
   onOpenEvent,
   onOpenTask,
   onToggleTask,
@@ -76,6 +77,8 @@ export function DayListPanel({
   items: DayListItem[];
   onClose: () => void;
   onGoDay: () => void;
+  /** A41: `이 주간으로 이동` — 이 날이 속한 주의 주간 보기를 엽니다. */
+  onGoWeek?: () => void;
   onOpenEvent: (id: string) => void;
   onOpenTask: (id: string) => void;
   onToggleTask?: (task: ProjectTask) => void;
@@ -336,6 +339,11 @@ export function DayListPanel({
             <button type="button" onClick={onGoDay} className="btn-primary btn-xs">
               이 날짜로 이동
             </button>
+            {onGoWeek ? (
+              <button type="button" data-day-list-go-week="true" onClick={onGoWeek} className="btn-outline btn-xs">
+                이 주간으로 이동
+              </button>
+            ) : null}
           </div>
         </div>
       </div>

@@ -11,6 +11,7 @@ import {
   type ReactNode,
 } from "react";import type { Resource, TaskDraft } from "@/lib/types";
 import { uid } from "@/lib/utils";
+import { setToastListener } from "@/lib/toast-bus";
 
 export type TabKey = "calendar" | "projects" | "binder" | "archive";
 
@@ -108,13 +109,28 @@ export function UiProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  /**
+   * A41: 같은 안내가 1.5초 안에 다시 오면 쌓지 않습니다 — 일괄 변경이나 글자 크기 슬라이더처럼
+   * 여러 번 저장되는 동작이 토스트를 화면에 가득 채우지 않게.
+   */
+  const lastNotify = useRef<{ message: string; at: number }>({ message: "", at: 0 });
   const notify = useCallback((message: string, tone: Toast["tone"] = "info") => {
+    if (!message) return;
+    const now = Date.now();
+    if (lastNotify.current.message === message && now - lastNotify.current.at < 1500) {
+      lastNotify.current.at = now;
+      return;
+    }
+    lastNotify.current = { message, at: now };
     const id = uid("toast");
     setToasts((current) => [...current, { id, message, tone }]);
     setTimeout(() => {
       setToasts((current) => current.filter((toast) => toast.id !== id));
     }, 3800);
   }, []);
+
+  /** A41: 설정·색처럼 notify 를 들고 있지 않은 곳도 같은 토스트를 쓸 수 있게 등록합니다. */
+  useEffect(() => setToastListener(notify), [notify]);
 
   const dismissToast = useCallback((id: string) => {
     setToasts((current) => current.filter((toast) => toast.id !== id));

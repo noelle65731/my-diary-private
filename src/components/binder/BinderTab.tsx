@@ -153,7 +153,8 @@ export function BinderTab() {
   );
 
   return (
-    <div>
+    /* A41: PC에서도 마지막 줄(토요일 칸 등)이 하단 탭 바에 가리지 않게 넉넉한 아래 여백을 둡니다. */
+    <div className="pb-24 md:pb-28">
       <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
         <div className="min-w-0">
           <p className="text-[calc(13.5px*var(--fs))] text-ink-400">

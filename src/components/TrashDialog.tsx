@@ -42,7 +42,7 @@ function dateOf(resource: Resource, item: AnyItem): string | null {
 
 export function TrashDialog() {
   const { data, update, destroy } = useData();
-  const { trashFilter, closeTrash, openTrash, notify } = useUi();
+  const { trashFilter, closeTrash, openTrash } = useUi();
   const [confirm, setConfirm] = useState<{ resource: Resource; item: AnyItem } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
@@ -69,18 +69,18 @@ export function TrashDialog() {
 
   if (!trashFilter) return null;
 
+  /* A41: 복구·영구 삭제 토스트는 저장소(update·destroy)가 한 번만 알립니다 —
+     여기서 또 띄우면 같은 일이 두 줄로 겹쳐 보입니다. */
   const restore = async (resource: Resource, item: AnyItem) => {
     setBusy(`${resource}:${item.id}`);
-    const ok = await update(resource, item.id, { trash: false });
+    await update(resource, item.id, { trash: false });
     setBusy(null);
-    if (ok) notify(`‘${item.title}’을(를) 복원했습니다.`, "success");
   };
 
   const remove = async (resource: Resource, item: AnyItem) => {
     setBusy(`${resource}:${item.id}`);
     await destroy(resource, item.id);
     setBusy(null);
-    notify(`‘${item.title}’을(를) 완전히 삭제했습니다.`, "success");
   };
 
   return (

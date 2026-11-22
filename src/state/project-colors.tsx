@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useData } from "@/state/store";
+import { pushToast } from "@/lib/toast-bus";
 import { PASTELS, pastelByKey, type Pastel, type PastelKey } from "@/components/common/pastels";
 
 /**
@@ -82,6 +83,8 @@ export function ProjectColorProvider({ children }: { children: ReactNode }) {
   const chosenOf = useCallback((id: string) => colors[id] ?? null, [colors]);
 
   const setColor = useCallback((id: string, key: PastelKey | null) => {
+    /* A41: 색을 바꾼 것도 데이터 변경 — 짧게 알립니다. */
+    pushToast(key ? "프로젝트 색을 바꿨습니다" : "프로젝트 색을 자동으로 되돌렸습니다");
     setColors((current) => {
       const next = { ...current };
       if (!key) delete next[id];

@@ -407,6 +407,8 @@ export function AppShell() {
         {toasts.map((toast) => (
           <div
             key={toast.id}
+            data-toast="true"
+            role="status"
             className={cn(
               "pointer-events-auto flex items-start gap-2 rounded-xl border px-3.5 py-2 text-[calc(15px*var(--fs))] shadow-lift animate-slide-up",
               toast.tone === "error"

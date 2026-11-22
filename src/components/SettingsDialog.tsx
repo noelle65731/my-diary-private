@@ -296,6 +296,15 @@ export function SettingsDialog() {
                 label="완료한 일도 기본으로 보기"
                 description="프로젝트 서랍에서 완료 항목을 접지 않습니다"
               />
+              {/* A41: 프로젝트 탭 맨 앞 `일정` 카드를 보일지 — 일정 서랍 맨 위의 스위치와 같은 값입니다. */}
+              <div data-project-schedule-card="true">
+                <Toggle
+                  checked={settings.showScheduleCard}
+                  onChange={(value) => set("showScheduleCard", value)}
+                  label="일정 카드 표시"
+                  description="프로젝트 탭 맨 앞의 `일정` 카드를 보여 줍니다 (일정 서랍 맨 위에서도 켜고 끌 수 있습니다)"
+                />
+              </div>
               <div>
                 <p className="label">내 분류</p>
                 <div className="flex flex-wrap items-center gap-1.5">

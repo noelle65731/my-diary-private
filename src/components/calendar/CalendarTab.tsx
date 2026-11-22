@@ -35,6 +35,8 @@ import { eventCoversDay } from "@/components/calendar/calendar-utils";
 import { HabitView } from "@/components/calendar/HabitView";
 import { EventEditor, type EventDraft } from "@/components/editors/EventEditor";
 import { EventDetail } from "@/components/detail/EventDetail";
+import { ProjectDrawer, INDEX_DRAWER_ID } from "@/components/projects/ProjectDrawer";
+import { pushToast } from "@/lib/toast-bus";
 import { TaskDetail } from "@/components/detail/TaskDetail";
 import { RoutineEditor } from "@/components/editors/RoutineEditor";
 import { useConvert } from "@/state/convert";
@@ -102,6 +104,29 @@ export function CalendarTab() {
   const [routineId, setRoutineId] = useState<string | null>(null);
   /** A8: the week panel (꼭·목표·메모) folds open inside the week view below xl. */
   const [weekPanelOpen, setWeekPanelOpen] = useState(false);
+  /** A41: PC 주간·3일의 오른쪽 패널 접기 — 접힌 상태는 이 브라우저에 남습니다. */
+  const [panelCollapsed, setPanelCollapsed] = useState(false);
+  /** A41: 주간 칸의 프로젝트·index 이름을 누르면 프로젝트 탭과 같은 서랍이 열립니다. */
+  const [projectDrawerId, setProjectDrawerId] = useState<string | null>(null);
+  useEffect(() => {
+    try {
+      setPanelCollapsed(window.localStorage.getItem("my-diary:week-panel-collapsed:v1") === "1");
+    } catch {
+      /* private mode */
+    }
+  }, []);
+  const togglePanel = () => {
+    setPanelCollapsed((current) => {
+      const next = !current;
+      try {
+        window.localStorage.setItem("my-diary:week-panel-collapsed:v1", next ? "1" : "0");
+      } catch {
+        /* ignore */
+      }
+      pushToast(next ? "오른쪽 패널을 접었습니다" : "오른쪽 패널을 펼쳤습니다");
+      return next;
+    });
+  };
   /** A4: X closes every layer that came with the detail, including the month day list. */
   const [dayListSignal, setDayListSignal] = useState(0);
   /**
@@ -137,6 +162,7 @@ export function CalendarTab() {
     setRoutineId(null);
     setWeekPanelOpen(false);
     setDaySummary(null);
+    setProjectDrawerId(null);
   });
 
   useEffect(() => {
@@ -389,6 +415,37 @@ export function CalendarTab() {
     void update("calendar", id, { startTime, endTime });
   };
 
+  /**
+   * A41: 연결 막대(여러 날 일정)를 끌어도 날짜만 바뀝니다 — 정해 둔 시작·끝 시각과
+   * 일수는 그대로 남습니다.
+   */
+  const moveEventDate = (id: string, date: string) => {
+    const item = findItem("calendar", id) as CalendarEvent | undefined;
+    if (!item) return;
+    const span = item.endDate && item.date ? Math.max(0, diffDays(item.endDate, item.date)) : 0;
+    if (item.date === date && span === 0) return;
+    void update("calendar", id, {
+      date,
+      endDate: span > 0 ? addDaysISO(date, span) : date,
+    });
+  };
+
+  /** A41: 연결 막대 양끝을 끌어 기간을 늘리거나 줄입니다(예: 2일 → 3일). */
+  const resizeSpan = (id: string, side: "start" | "end", day: string) => {
+    const item = findItem("calendar", id) as CalendarEvent | undefined;
+    if (!item) return;
+    const end = item.endDate && item.endDate > item.date ? item.endDate : item.date;
+    if (side === "end") {
+      const nextEnd = day < item.date ? item.date : day;
+      if (nextEnd === end) return;
+      void update("calendar", id, { endDate: nextEnd });
+      return;
+    }
+    const nextStart = day > end ? end : day;
+    if (nextStart === item.date) return;
+    void update("calendar", id, { date: nextStart, endDate: end });
+  };
+
   /** A32: 하루 목록에서 종일 일정 순서를 ↑↓로 바꿉니다 — 월간 보기와 같은 규칙(`정렬`). */
   const moveAllDayInDay = (day: string, id: string, direction: -1 | 1) => {
     const list = events
@@ -476,11 +533,14 @@ export function CalendarTab() {
   const routineTemplates = routines.filter((routine) => routine.kind === "루틴" && !routine.history);
 
   return (
-    <div className="flex min-h-0 flex-1 items-stretch gap-6 xl:gap-8">
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+    /* A41: 툴바는 사이드 패널과 같은 줄 밖에 — 월간(루틴 패널)↔일간(패널 없음)을 오가도
+       뷰 전환 스위치가 같은 자리에 있습니다. */
+    <div className="flex min-h-0 flex-1 flex-col">
       {/* toolbar — A40: 위로 바짝 올려 캘린더가 화면을 더 씁니다. */}
       <div className="flex flex-none flex-col gap-1.5">
-        <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-1.5">
+        {/* A41: 날짜 제목 길이가 달라져도 연간·월간·주간·3일·일간 스위치는 늘 같은 자리에 —
+            넓은 화면은 3열(제목 | 스위치 | 도구), 폰은 스위치가 제 줄을 씁니다. */}
+        <div className="grid items-center gap-x-3 gap-y-1.5 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
           <div className="flex min-w-0 items-baseline gap-2.5">
             <h1 className="truncate text-[calc(22px*var(--fs))] font-semibold leading-none tracking-[-0.02em] text-ink-900">
               {title}
@@ -488,7 +548,7 @@ export function CalendarTab() {
             <p className="truncate text-[calc(13px*var(--fs))] tracking-[0.02em] text-ink-500">{meta}</p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div data-view-switch="true" className="flex flex-none items-center justify-start md:justify-center">
             <div className="seg-track">
               {VIEWS.map((item) => (
                 <button
@@ -501,6 +561,9 @@ export function CalendarTab() {
                 </button>
               ))}
             </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 md:justify-end">
             <div className="seg-track">
               <button
                 type="button"
@@ -511,6 +574,21 @@ export function CalendarTab() {
                 루틴
               </button>
             </div>
+
+            {/* A41: PC 주간·3일의 오른쪽 패널 접기·펼치기 — 달력이 그 폭까지 넓어집니다. */}
+            {view === "week" || view === "three" ? (
+              <button
+                type="button"
+                data-week-panel-toggle="true"
+                onClick={togglePanel}
+                aria-pressed={panelCollapsed}
+                title={panelCollapsed ? "오른쪽 패널(미니 달력·이번 주 꼭·목표·메모) 펼치기" : "오른쪽 패널 접기"}
+                className="hidden h-7 items-center gap-1 rounded-full bg-paper-200 px-2 text-[calc(13.5px*var(--fs))] font-medium text-ink-600 transition hover:bg-paper-300/70 hover:text-ink-900 xl:inline-flex"
+              >
+                <ChevronRightIcon size={13} className={cn("transition", panelCollapsed ? "rotate-0" : "rotate-180")} />
+                {panelCollapsed ? "패널 펼치기" : "패널 접기"}
+              </button>
+            ) : null}
 
             <div className="flex items-center gap-0.5 rounded-full bg-paper-200 p-0.5">
               <button type="button" onClick={() => step(-1)} className="icon-btn h-7 w-7" aria-label="이전">
@@ -606,6 +684,9 @@ export function CalendarTab() {
         </div>
       </div>
 
+      <div className="flex min-h-0 flex-1 items-stretch gap-6 xl:gap-8">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+
       {view === "week" ? (
         <div className="mt-3 rounded-2xl border border-paper-300 bg-white/70 xl:hidden">
           <button
@@ -697,6 +778,12 @@ export function CalendarTab() {
               onCreateTask={(date) => openTaskDraft({ kind: "할 일", date })}
               onRoutineCount={(routine, date, count) => void setRoutineCount(routine, date, count)}
               onMoveItem={(type, id, date, fromDay) => moveItemToDate(type, id, date, fromDay)}
+              onMoveSpan={moveEventDate}
+              onResizeSpan={resizeSpan}
+              onGoWeek={(day) => {
+                setCursor(day);
+                setView("week");
+              }}
             />
           ) : null}
 
@@ -714,6 +801,7 @@ export function CalendarTab() {
                 setView("day");
               }}
               onOpenDaySummary={(day, startTime) => setDaySummary({ day, startTime: startTime ?? null })}
+              onOpenProject={(key) => setProjectDrawerId(key === "inbox" ? INDEX_DRAWER_ID : key)}
               onOpenEvent={openEvent}
               onOpenTask={openTask}
               onOpenRoutine={(id) => setRoutineId(id)}
@@ -728,6 +816,8 @@ export function CalendarTab() {
                 void taskToEvent(id, time ? { date: day, allDay: false, startTime: time } : { date: day, allDay: true })
               }
               onMoveAllDayDate={moveEventToAllDay}
+              onMoveDateOnly={moveEventDate}
+              onResizeSpan={resizeSpan}
               onResizeEvent={resizeEvent}
               onReorderAllDay={reorderAllDay}
               onToggleTask={toggleTask}
@@ -756,6 +846,7 @@ export function CalendarTab() {
                 setView("day");
               }}
               onOpenDaySummary={(day, startTime) => setDaySummary({ day, startTime: startTime ?? null })}
+              onOpenProject={(key) => setProjectDrawerId(key === "inbox" ? INDEX_DRAWER_ID : key)}
               onOpenEvent={openEvent}
               onOpenTask={openTask}
               onOpenRoutine={(id) => setRoutineId(id)}
@@ -770,6 +861,8 @@ export function CalendarTab() {
                 void taskToEvent(id, time ? { date: day, allDay: false, startTime: time } : { date: day, allDay: true })
               }
               onMoveAllDayDate={moveEventToAllDay}
+              onMoveDateOnly={moveEventDate}
+              onResizeSpan={resizeSpan}
               onResizeEvent={resizeEvent}
               onReorderAllDay={reorderAllDay}
               onToggleTask={toggleTask}
@@ -819,7 +912,7 @@ export function CalendarTab() {
       </div>
       </div>
 
-      {view === "week" ? (
+      {(view === "week" || view === "three") && !panelCollapsed ? (
         <aside
           onScroll={weekPanelBar.onScroll}
           className={cn(
@@ -884,11 +977,29 @@ export function CalendarTab() {
           onOpenTask={openTask}
           onToggleTask={toggleTask}
           onMoveAllDay={(id, direction) => moveAllDayInDay(daySummary.day, id, direction)}
+          onGoWeek={() => {
+            const day = daySummary.day;
+            setDaySummary(null);
+            setCursor(day);
+            setView("week");
+          }}
           onCreateEvent={(time) => createEvent(daySummary.day, time)}
           onCreateTask={() => openTaskDraft({ kind: "할 일", date: daySummary.day })}
           onMoveItem={(type, id, date) => moveItemToDate(type, id, date, daySummary.day)}
         />
       ) : null}
+
+      {/* A41: 주간·3일 칸의 프로젝트 이름 → 프로젝트 탭과 같은 서랍(index 포함) */}
+      <ProjectDrawer
+        projectId={projectDrawerId}
+        mode={mode}
+        onClose={() => setProjectDrawerId(null)}
+        onOpenTask={(id) => setTaskId(id)}
+        onEditProject={(id) => {
+          setProjectDrawerId(null);
+          setTaskId(id);
+        }}
+      />
 
       <EventDetail
         open={eventEditor.open && !!eventEditor.id}
@@ -912,6 +1023,7 @@ export function CalendarTab() {
         routineId={routineId && routineId !== "new" ? routineId : null}
         onClose={() => setRoutineId(null)}
       />
+      </div>
     </div>
   );
 }

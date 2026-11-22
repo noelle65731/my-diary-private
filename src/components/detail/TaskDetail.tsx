@@ -308,7 +308,10 @@ function TaskDetailInner({
   const weeklyMust = draft.urgent && draft.important;
 
   const badges = [
-    draft.urgent || draft.important ? [draft.urgent ? "긴급" : "", draft.important ? "중요" : ""].filter(Boolean).join("·") : null,
+    /* A41: 프로젝트 자체에는 긴급·중요가 없습니다 — 배지도 개별 할 일에만 붙입니다. */
+    !isProject && (draft.urgent || draft.important)
+      ? [draft.urgent ? "긴급" : "", draft.important ? "중요" : ""].filter(Boolean).join("·")
+      : null,
     draft.hidden ? "숨김" : null,
     draft.history ? "History" : null,
     draft.extra.length > 0 ? `추가 속성 ${draft.extra.length}` : null,

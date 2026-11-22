@@ -15,6 +15,8 @@ import {
   routineCountForDay,
 } from "@/components/calendar/calendar-utils";
 import { Timeline, minutesFromDrop } from "@/components/calendar/Timeline";
+import { spanSegments } from "@/components/calendar/span-bars";
+import { pushToast } from "@/lib/toast-bus";
 import { useDnd, type DropTarget } from "@/components/common/dnd";
 import { useEventColors } from "@/state/event-colors";
 import { useProjectColors } from "@/state/project-colors";
@@ -34,6 +36,8 @@ interface WeekBoardProps {
   onOpenDaySummary?: (day: string, startTime?: string | null) => void;
   onOpenEvent: (id: string) => void;
   onOpenTask: (id: string) => void;
+  /** A41: 행 이름(프로젝트·index)을 누르면 프로젝트 탭과 같은 프로젝트 서랍을 엽니다. */
+  onOpenProject?: (key: string) => void;
   onOpenRoutine: (id: string) => void;
   onCreate: (date: string, time?: string | null) => void;
   onMoveEvent: (id: string, date: string, time: string | null) => void;
@@ -47,6 +51,10 @@ interface WeekBoardProps {
   onConvertTaskToEvent?: (id: string, day: string, time: string | null) => void;
   /** A16: an all-day bar dragged to another day (or down to a time slot). */
   onMoveAllDayDate?: (id: string, date: string) => void;
+  /** A41: 연결 막대를 끌어 날짜만 옮깁니다 — 정해 둔 시각·기간은 그대로입니다. */
+  onMoveDateOnly?: (id: string, date: string) => void;
+  /** A41: 연결 막대 양끝을 끌어 기간 늘리기/줄이기. */
+  onResizeSpan?: (id: string, side: "start" | "end", day: string) => void;
   /** B5: edge drag resizes an event. */
   onResizeEvent?: (id: string, startTime: string, endTime: string) => void;
   onToggleTask: (task: ProjectTask) => void;
@@ -109,6 +117,7 @@ export function WeekBoard({
   onOpenDaySummary,
   onOpenEvent,
   onOpenTask,
+  onOpenProject,
   onOpenRoutine,
   onCreate,
   onMoveEvent,
@@ -117,6 +126,8 @@ export function WeekBoard({
   onConvertEventToTask,
   onConvertTaskToEvent,
   onMoveAllDayDate,
+  onMoveDateOnly,
+  onResizeSpan,
   onResizeEvent,
   onToggleTask,
   onRoutineCount,
@@ -137,7 +148,9 @@ export function WeekBoard({
   const [projectsCollapsed, setProjectsCollapsed] = useState(false);
   /** A40: 프로젝트 행·루틴 행을 끌어 올리고 내리는 순서. */
   const [rowOrder, setRowOrder] = useState<RowOrder>(() => readRowOrder());
-  const saveRowOrder = (kind: keyof RowOrder, ids: string[]) =>
+  const saveRowOrder = (kind: keyof RowOrder, ids: string[]) => {
+    /* A41: 순서를 바꾼 것도 데이터 변경 — 짧게 알립니다. */
+    pushToast(kind === "projects" ? "프로젝트 행 순서를 바꿨습니다" : "루틴 행 순서를 바꿨습니다");
     setRowOrder((current) => {
       const next = { ...current, [kind]: ids };
       try {
@@ -147,6 +160,7 @@ export function WeekBoard({
       }
       return next;
     });
+  };
   /** The routine area folds away as a whole, the same way the project area does. */
   const [routinesCollapsed, setRoutinesCollapsed] = useState(false);
   /** B5: all-day 4건 → 3건 + 펼치기, and the 시간표 lifts when the rows fold. */
@@ -362,26 +376,15 @@ export function WeekBoard({
       .filter((group) => group.items.length > 0);
   }, [routines, mode, hiddenRoutineIds]);
 
-  const allDayBars = useMemo(() => {
-    const bars: { event: CalendarEvent; startIdx: number; span: number; lane: number }[] = [];
-    const laneEnds: number[] = [];
-    const allDay = visibleEvents.filter((event) => event.kind === "일정" && event.allDay);
-    for (const event of allDay) {
-      const covered = days.filter((day) => eventCoversDay(event, day));
-      if (covered.length === 0) continue;
-      const startIdx = days.indexOf(covered[0]!);
-      const span = days.indexOf(covered[covered.length - 1]!) - startIdx + 1;
-      let lane = laneEnds.findIndex((end) => end <= startIdx);
-      if (lane === -1) {
-        lane = laneEnds.length;
-        laneEnds.push(startIdx + span);
-      } else {
-        laneEnds[lane] = startIdx + span;
-      }
-      bars.push({ event, startIdx, span, lane });
-    }
-    return bars;
-  }, [visibleEvents, days]);
+  const allDayBars = useMemo(
+    () =>
+      spanSegments(
+        visibleEvents.filter((event) => event.kind === "일정" && event.allDay),
+        days,
+        { includeSingleDay: true },
+      ),
+    [visibleEvents, days],
+  );
 
   /** 종일 줄은 시간표와 스크롤 창을 나눠 쓰므로, 데스크톱에서는 두 줄까지만 펼쳐 둡니다.
    *  모바일은 일정 영역이 딱 네 칸이라 종일 한 줄만 남기고 나머지는 +N으로 접습니다. */
@@ -673,7 +676,7 @@ export function WeekBoard({
         style={
           narrow
             ? undefined
-            : { height: timeExpanded ? "62dvh" : `${Math.min(allDayHeight + timelineWindow, 124)}px` }
+            : { height: timeExpanded ? "62dvh" : `${Math.min(allDayHeight + timelineWindow, 150)}px` }
         }
         className={cn(
           "relative flex-none",
@@ -682,8 +685,9 @@ export function WeekBoard({
         )}
       >
         {/* all-day — 스크롤 창 안, 시간표 바로 위. 접지 않고 같이 올라갑니다. */}
+        {/* A41: 종일 줄은 스크롤해도 위에 붙어 있어, 시간표가 지금 시각으로 넘어가도 연결 막대가 늘 보입니다. */}
         {allDayBars.length === 0 ? null : (
-          <div className="grid border-b border-paper-300/70" style={grid} data-all-day-block="true">
+          <div className="sticky top-0 z-30 grid border-b border-paper-300/70 bg-white" style={grid} data-all-day-block="true">
             <div className="sticky left-0 z-20 flex items-start justify-end border-r border-paper-300 bg-white pr-2 pt-1 text-[calc(13px*var(--fs))] text-ink-400">종일</div>
             <div className="relative" style={{ gridColumn: `2 / span ${days.length}`, height: allDayHeight }}>
               <div className="absolute inset-0 grid" style={{ gridTemplateColumns: `repeat(${days.length}, minmax(0, 1fr))` }}>
@@ -701,13 +705,15 @@ export function WeekBoard({
                   />
                 ))}
               </div>
-              {allDayBars.map(({ event, startIdx, span, lane }) => {
+              {allDayBars.map(({ event, startIdx, span, lane, cutStart, cutEnd }) => {
                 const tone = toneFor(event);
                 return (
                   <button
                     key={event.id}
                     type="button"
                     data-all-day-bar={event.id}
+                    data-all-day-start={startIdx}
+                    data-all-day-end={startIdx + span - 1}
                     onPointerDown={(pointerEvent) => {
                       dnd.start(
                         pointerEvent,
@@ -731,7 +737,9 @@ export function WeekBoard({
                             return;
                           }
                           if (target.zone === "allday-day") {
-                            onMoveAllDayDate?.(event.id, nextDay);
+                            /* A41: 날짜만 옮깁니다 — 정해 둔 시각·기간은 그대로(종일 일정은 종일 그대로). */
+                            if (onMoveDateOnly) onMoveDateOnly(event.id, nextDay);
+                            else onMoveAllDayDate?.(event.id, nextDay);
                             return;
                           }
                           if (target.zone === "timeline-day") {
@@ -777,7 +785,9 @@ export function WeekBoard({
                     }}
                     title={allDayExpanded ? undefined : "끌어서 종일 일정 순서 바꾸기"}
                     className={cn(
-                      "absolute h-[19px] overflow-hidden rounded-md border px-1.5 text-left text-[calc(13px*var(--fs))] font-medium leading-[17px] md:px-2 md:text-[calc(13.5px*var(--fs))]",
+                      "absolute h-[19px] overflow-hidden border px-1.5 text-left text-[calc(13px*var(--fs))] font-medium leading-[17px] md:px-2 md:text-[calc(13.5px*var(--fs))]",
+                      cutStart ? "rounded-l-none border-l-0" : "rounded-l-md",
+                      cutEnd ? "rounded-r-none border-r-0" : "rounded-r-md",
                       tone.bg,
                       tone.border,
                       tone.text,
@@ -792,7 +802,50 @@ export function WeekBoard({
                       display: lane >= visibleLanes ? "none" : "block",
                     }}
                   >
-                    <span className="line-clamp-1">{event.title}</span>
+                    {onResizeSpan ? (
+                      <span
+                        role="separator"
+                        aria-label={`${event.title} 시작일 늘리기`}
+                        data-all-day-handle="start"
+                        onPointerDown={(pointerEvent) => {
+                          pointerEvent.stopPropagation();
+                          if (pointerEvent.pointerType === "mouse" && pointerEvent.button !== 0) return;
+                          dnd.start(
+                            pointerEvent,
+                            { kind: "event", id: event.id, label: event.title },
+                            (target) => {
+                              if (!target?.data.day) return;
+                              onResizeSpan(event.id, "start", target.data.day);
+                            },
+                            { getHint: (target) => (target.data.day ? `${target.data.day.slice(5).replace("-", "/")}부터 시작` : null) },
+                          );
+                        }}
+                        className="absolute inset-y-0 left-0 w-[8px] cursor-ew-resize bg-black/[0.06] opacity-60 transition hover:opacity-100"
+                      />
+                    ) : null}
+                    <span className={cn("line-clamp-1", onResizeSpan && "px-1.5")}>{event.title}</span>
+                    {cutEnd ? <span className="absolute right-[9px] top-0 leading-[17px] opacity-70">›</span> : null}
+                    {onResizeSpan ? (
+                      <span
+                        role="separator"
+                        aria-label={`${event.title} 끝날 늘리기`}
+                        data-all-day-handle="end"
+                        onPointerDown={(pointerEvent) => {
+                          pointerEvent.stopPropagation();
+                          if (pointerEvent.pointerType === "mouse" && pointerEvent.button !== 0) return;
+                          dnd.start(
+                            pointerEvent,
+                            { kind: "event", id: event.id, label: event.title },
+                            (target) => {
+                              if (!target?.data.day) return;
+                              onResizeSpan(event.id, "end", target.data.day);
+                            },
+                            { getHint: (target) => (target.data.day ? `${target.data.day.slice(5).replace("-", "/")}까지` : null) },
+                          );
+                        }}
+                        className="absolute inset-y-0 right-0 w-[8px] cursor-ew-resize bg-black/[0.06] opacity-60 transition hover:opacity-100"
+                      />
+                    ) : null}
                   </button>
                 );
               })}
@@ -918,7 +971,9 @@ export function WeekBoard({
                   ) : null}
                   <button
                     type="button"
-                    onClick={() => (project ? onOpenTask(project.id) : onCreateTaskForProject(""))}
+                    onClick={() =>
+                      onOpenProject ? onOpenProject(key) : project ? onOpenTask(project.id) : onCreateTaskForProject("")
+                    }
                     className="line-clamp-2 min-w-0 max-w-full break-keep text-center text-[calc(14px*var(--fs))] font-semibold leading-[1.15] text-ink-900 hover:text-ink-900"
                     title={project?.title ?? "index"}
                     aria-label={project?.title ?? "index"}

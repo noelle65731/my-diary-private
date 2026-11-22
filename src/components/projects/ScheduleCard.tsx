@@ -8,6 +8,7 @@ import { formatShort, timeRangeLabel, weekdayKo } from "@/lib/date";
 import type { CalendarEvent } from "@/lib/types";
 import { BASE_CATEGORIES } from "@/lib/types";
 import { useCategoryColors } from "@/state/category-colors";
+import { useSettings } from "@/state/settings";
 import { taskTone } from "@/components/common/tone";
 
 /** A39: 일정 카드가 보여 주는 개수 — 프로젝트 카드와 같은 규격(5개)입니다. */
@@ -204,19 +205,25 @@ export function ScheduleCard({
                 onClick={() => onOpenEvent(event.id)}
                 className="min-w-0 flex-1 touch-manipulation select-none text-left"
               >
+                {/* A41: 날짜·시간은 아래 줄로 내리지 않고 제목 오른쪽 한 줄에 — 프로젝트 카드와 같은 규격. */}
                 <span className="flex items-center gap-1">
                   <CategoryBadge category={event.category} />
                   <span
                     className={cn(
-                      "truncate text-[calc(15.5px*var(--fs))] leading-[1.35] text-ink-900",
+                      "min-w-0 flex-1 truncate text-[calc(15.5px*var(--fs))] leading-[1.35] text-ink-900",
                       (done || event.canceled) && "text-ink-400 line-through",
                     )}
                   >
                     {event.title}
                   </span>
                   {event.canceled ? <CancelPill /> : null}
+                  <span
+                    data-schedule-date={event.id}
+                    className="flex-none whitespace-nowrap text-[calc(13px*var(--fs))] tabular-nums text-ink-400"
+                  >
+                    {scheduleDateLabel(event)}
+                  </span>
                 </span>
-                <span className="mt-0.5 block truncate text-[calc(13px*var(--fs))] text-ink-400">{scheduleDateLabel(event)}</span>
               </button>
             </li>
           );
@@ -304,6 +311,7 @@ export function ScheduleDrawer({
   onToggleDone: (event: CalendarEvent) => void;
   onCreate: (title: string, category: string) => void;
 }) {
+  const { settings, set: setSetting } = useSettings();
   const [filter, setFilter] = useState<DrawerFilter>("all");
   const [category, setCategory] = useState<string>("전체");
   const [draft, setDraft] = useState("");
@@ -366,6 +374,35 @@ export function ScheduleDrawer({
       }
     >
       <div className="space-y-4" data-schedule-drawer="true">
+        {/* A41: 일정 카드를 켜고 끄는 스위치 — 설정 → 프로젝트와 같은 값입니다. */}
+        <div
+          data-schedule-drawer-toggle="true"
+          className="flex items-center justify-between gap-3 rounded-xl border border-paper-300 bg-paper-50/70 px-3 py-2"
+        >
+          <span className="min-w-0">
+            <span className="block text-[calc(14.5px*var(--fs))] font-medium text-ink-800">일정 카드 표시</span>
+            <span className="block text-[calc(13px*var(--fs))] text-ink-400">프로젝트 탭 맨 앞의 `일정` 카드를 켜고 끕니다</span>
+          </span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={settings.showScheduleCard}
+            aria-label="일정 카드 표시"
+            onClick={() => setSetting("showScheduleCard", !settings.showScheduleCard)}
+            className={cn(
+              "relative h-[18px] w-8 flex-none rounded-full transition",
+              settings.showScheduleCard ? "bg-ink-900" : "bg-paper-300",
+            )}
+          >
+            <span
+              className={cn(
+                "absolute top-[2px] h-[14px] w-[14px] rounded-full bg-white transition-all",
+                settings.showScheduleCard ? "left-[16px]" : "left-[2px]",
+              )}
+            />
+          </button>
+        </div>
+
         <div>
           <div className="mb-1 flex items-center justify-between text-[calc(14px*var(--fs))] text-ink-500">
             <span>

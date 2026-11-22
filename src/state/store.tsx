@@ -104,6 +104,73 @@ export interface PageBodyPayload {
 
 const DataContext = createContext<DataContextValue | null>(null);
 
+/* ───────────────── A41: 모든 변경에 한 줄 토스트 ─────────────────
+ * 화면마다 토스트를 붙이면 빠지는 곳이 생깁니다. 저장이 한 곳(create·update·destroy)을
+ * 지나므로, 여기서 바뀐 값만 보고 짧게 알립니다. 값이 그대로인 항목은 말하지 않습니다
+ * (편집 창은 늘 전체 값을 보내므로, 비교 없이는 늘 '날짜를 변경했습니다'가 됩니다).
+ */
+function sameValue(a: unknown, b: unknown): boolean {
+  if (Array.isArray(a) && Array.isArray(b)) return a.length === b.length && a.every((value, index) => value === b[index]);
+  if (a === null || b === null) return a === b;
+  if (a === undefined || b === undefined) return a === b;
+  return a === b;
+}
+
+function changedKey(previous: AnyItem, patch: Patch, key: string): boolean {
+  if (!Object.prototype.hasOwnProperty.call(patch, key)) return false;
+  return !sameValue((previous as unknown as Record<string, unknown>)[key], patch[key]);
+}
+
+function describeUpdate(previous: AnyItem, patch: Patch): string {
+  const changed = (key: string) => changedKey(previous, patch, key);
+  if (changed("trash")) return patch["trash"] ? "휴지통으로 옮겼습니다" : "휴지통에서 되살렸습니다";
+  if (changed("canceled")) return patch["canceled"] ? "취소로 바꿨습니다" : "취소를 풀었습니다";
+  if (changed("done")) return patch["done"] ? "완료로 바꿨습니다" : "완료를 해제했습니다";
+  if (changed("status")) {
+    const status = String(patch["status"] ?? "");
+    if (status === "완료") return "완료로 바꿨습니다";
+    if (status === "취소") return "취소로 바꿨습니다";
+    if (status === "대기 중") return "대기 중으로 바꿨습니다";
+    return "미완료로 되돌렸습니다";
+  }
+  if (changed("history")) return patch["history"] ? "히스토리로 보냈습니다" : "히스토리에서 되살렸습니다";
+  if (changed("hidden")) return patch["hidden"] ? "NOW 숨김을 켰습니다" : "NOW 숨김을 껐습니다";
+  if (changed("favorite")) return patch["favorite"] ? "이번 주 꼭에 담았습니다" : "이번 주 꼭에서 뺐습니다";
+  if (changed("color")) return "색을 바꿨습니다";
+  if (changed("category")) return "분류를 바꿨습니다";
+  if (changed("projectIds")) return "프로젝트를 옮겼습니다";
+  if (changed("urgent") || changed("important")) return "긴급·중요를 바꿨습니다";
+  if (changed("startTime") || changed("endTime")) return "시간을 변경했습니다";
+  if (changed("endDate")) return "기간을 변경했습니다";
+  if (changed("date") || changed("due")) return "날짜를 변경했습니다";
+  if (changed("execCount")) return Number(patch["execCount"] ?? 0) > 0 ? "루틴을 체크했습니다" : "루틴 체크를 풀었습니다";
+  if (changed("doneAt") || changed("checkedAt") || changed("cancelAt")) return "상태를 바꿨습니다";
+  if (changed("title")) return "이름을 바꿨습니다";
+  if (changed("memo") || changed("body")) return "메모를 저장했습니다";
+  if (changed("sort")) return "순서를 바꿨습니다";
+  if (changed("icon")) return "아이콘을 바꿨습니다";
+  if (changed("repeatDays") || changed("targetCount") || changed("amount") || changed("unit")) return "루틴을 저장했습니다";
+  if (changed("weekKey") || changed("baseDate")) return "주를 옮겼습니다";
+  if (changed("waitFor") || changed("waitNote")) return "대기 내용을 저장했습니다";
+  if (changed("cancelReason")) return "취소 사유를 저장했습니다";
+  if (changed("tags") || changed("rating") || changed("link") || changed("archiveFlag")) return "기록을 저장했습니다";
+  return "저장했습니다";
+}
+
+function describeCreate(resource: Resource, patch: Patch): string {
+  const kind = String(patch["kind"] ?? "");
+  if (resource === "projects") return kind === "프로젝트" ? "프로젝트를 추가했습니다" : "할 일을 추가했습니다";
+  if (resource === "calendar") {
+    if (kind === "주간 목표") return "이번 주 목표를 추가했습니다";
+    if (kind === "주간 메모") return "주간 메모를 저장했습니다";
+    if (kind === "월간 메모") return "월간 메모를 저장했습니다";
+    return "일정을 추가했습니다";
+  }
+  if (resource === "routines") return kind === "날짜별 체크" ? "루틴을 체크했습니다" : "루틴을 추가했습니다";
+  if (resource === "binder") return kind === "노트" ? "노트를 저장했습니다" : "일기를 저장했습니다";
+  return "아카이브에 담았습니다";
+}
+
 async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
     ...init,
@@ -482,6 +549,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         ...current,
         [resource]: [optimistic, ...(current[resource] as AnyItem[])],
       }) as AllData);
+      notify(describeCreate(resource, patch));
 
       if (demo) {
         setLastSavedAt(Date.now());
@@ -544,6 +612,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         ...current,
         [resource]: replaceIn(current[resource] as AnyItem[], optimistic),
       }) as AllData);
+      notify(describeUpdate(previous, patch));
 
       if (demo) {
         setLastSavedAt(Date.now());
@@ -678,6 +747,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         ...current,
         [resource]: (current[resource] as AnyItem[]).filter((item) => item.id !== id),
       }) as AllData);
+      notify("영구 삭제했습니다");
       setLastSavedAt(Date.now());
     },
     [blockReason, demo, notify, reportError],
@@ -760,6 +830,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
       const key = `${resource}:${id}`;
       if (demo) {
         bodyCache.current[key] = text;
+        notify("내용을 저장했습니다");
         setLastSavedAt(Date.now());
         return true;
       }
@@ -770,6 +841,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           body: JSON.stringify({ text }),
         });
         bodyCache.current[key] = text;
+        notify("내용을 저장했습니다");
         setLastSavedAt(Date.now());
         return true;
       } catch (error) {
@@ -779,7 +851,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         setSavingCount((n) => Math.max(0, n - 1));
       }
     },
-    [demo, reportError],
+    [demo, notify, reportError],
   );
 
   const value = useMemo<DataContextValue>(

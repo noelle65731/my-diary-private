@@ -252,7 +252,10 @@ function TaskEditorInner({
   };
 
   const badges = [
-    form.urgent || form.important ? [form.urgent ? "긴급" : "", form.important ? "중요" : ""].filter(Boolean).join("·") : null,
+    /* A41: 프로젝트 자체에는 긴급·중요가 없습니다 — 배지도 개별 할 일에만 붙입니다. */
+    !isProject && (form.urgent || form.important)
+      ? [form.urgent ? "긴급" : "", form.important ? "중요" : ""].filter(Boolean).join("·")
+      : null,
     form.hidden ? "숨김" : null,
     form.history ? "History" : null,
     isProject ? "프로젝트" : null,

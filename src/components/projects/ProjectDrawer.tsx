@@ -423,9 +423,8 @@ export function ProjectDrawer({
             </div>
             <div className="flex flex-wrap items-center gap-1">
               <span className="mr-1 text-[calc(13px*var(--fs))] text-ink-400">표시</span>
+              {/* A41: 긴급·중요는 개별 할 일에만 — 프로젝트 서랍에서는 NOW 숨김·히스토리만 둡니다. */}
               {([
-                { key: "urgent", label: "긴급", on: project.urgent },
-                { key: "important", label: "중요", on: project.important },
                 { key: "hidden", label: "NOW 숨김", on: project.hidden },
                 { key: "history", label: "히스토리", on: project.history },
               ] as const).map((flag) => (
