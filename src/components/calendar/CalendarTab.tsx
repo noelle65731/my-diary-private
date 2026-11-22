@@ -325,6 +325,30 @@ export function CalendarTab() {
   };
 
   /**
+   * A35: 프로젝트 칸 시트에서 다른 프로젝트 행으로 끌어 놓았을 때 — 날짜와 프로젝트를 함께
+   * 바꿉니다. `projectId === null`은 index(프로젝트 없음) 행으로 돌아가는 것입니다.
+   * 프로젝트가 바뀌면 그 프로젝트의 분류도 따라가 카드 색·필터가 어긋나지 않습니다.
+   */
+  const moveTaskToProject = (id: string, projectId: string | null, date: string, fromDay: string) => {
+    const task = findItem("projects", id) as ProjectTask | undefined;
+    if (!task) return;
+    const patch: Record<string, unknown> = {};
+    if (date !== fromDay) {
+      if (task.date === fromDay) patch.date = date;
+      if (task.due === fromDay && task.due !== task.date) patch.due = date;
+      if (patch.date === undefined && patch.due === undefined) patch.date = date;
+    }
+    const targetIds = projectId ? [projectId] : [];
+    const currentIds = task.projectIds ?? [];
+    if (currentIds.length !== targetIds.length || currentIds.some((value, index) => value !== targetIds[index])) {
+      patch.projectIds = targetIds;
+      const project = projectId ? projects.find((item) => item.id === projectId) : null;
+      if (project) patch.category = project.category;
+    }
+    if (Object.keys(patch).length > 0) void update("projects", id, patch);
+  };
+
+  /**
    * A33: 하루 목록 시트에서 항목을 다른 날짜 칸에 놓았을 때. 일정은 정해 둔 시각·길이·
    * 여러 날 일수를 그대로 두고 날짜만 옮기고(월간 보기의 칩 끌기와 같은 규칙), 할 일은
    * 그 날짜를 바꿉니다. `fromDay`는 그 할 일이 어느 날 칸에서 보이던 것인지입니다.
@@ -638,6 +662,7 @@ export function CalendarTab() {
               onCreate={createEvent}
               onMoveEvent={moveEvent}
               onMoveTask={moveTaskToDay}
+              onMoveTaskToProject={moveTaskToProject}
               onMoveAllDayDate={moveEventToAllDay}
               onResizeEvent={resizeEvent}
               onReorderAllDay={reorderAllDay}
@@ -673,6 +698,7 @@ export function CalendarTab() {
               onCreate={createEvent}
               onMoveEvent={moveEvent}
               onMoveTask={moveTaskToDay}
+              onMoveTaskToProject={moveTaskToProject}
               onMoveAllDayDate={moveEventToAllDay}
               onResizeEvent={resizeEvent}
               onReorderAllDay={reorderAllDay}

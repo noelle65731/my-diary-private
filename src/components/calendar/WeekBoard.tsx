@@ -15,7 +15,7 @@ import {
   routineCountForDay,
 } from "@/components/calendar/calendar-utils";
 import { Timeline, minutesFromDrop } from "@/components/calendar/Timeline";
-import { useDnd } from "@/components/common/dnd";
+import { useDnd, type DropTarget } from "@/components/common/dnd";
 import { useEventColors } from "@/state/event-colors";
 import { useProjectColors } from "@/state/project-colors";
 import { useAutoHideScrollbar } from "@/lib/use-auto-hide-scroll";
@@ -39,6 +39,8 @@ interface WeekBoardProps {
   onMoveEvent: (id: string, date: string, time: string | null) => void;
   /** A12: a task dragged onto another weekday column changes its date. */
   onMoveTask?: (id: string, date: string, fromDay: string) => void;
+  /** A35: 프로젝트 칸 시트에서 다른 프로젝트 행으로 끌어 놓으면 프로젝트까지 바뀝니다. */
+  onMoveTaskToProject?: (id: string, projectId: string | null, date: string, fromDay: string) => void;
   /** A16: an all-day bar dragged to another day (or down to a time slot). */
   onMoveAllDayDate?: (id: string, date: string) => void;
   /** B5: edge drag resizes an event. */
@@ -83,6 +85,7 @@ export function WeekBoard({
   onCreate,
   onMoveEvent,
   onMoveTask,
+  onMoveTaskToProject,
   onMoveAllDayDate,
   onResizeEvent,
   onToggleTask,
@@ -131,26 +134,57 @@ export function WeekBoard({
     node.style.opacity = "";
     node.style.pointerEvents = "";
   };
-  /** 시트 안의 할 일을 꾹 눌러(마우스는 조금 끌어) 다른 날짜 열로 옮깁니다. */
-  const startSheetDrag = (event: ReactPointerEvent<HTMLElement>, task: ProjectTask, day: string) => {
-    if (!onMoveTask) return;
+  /** 프로젝트 행 이름 — 시트에서 끌어온 할 일이 어느 프로젝트로 가는지 안내에 씁니다. */
+  const rowTitleOf = (key: string) => (key === INBOX_KEY ? "index" : projects.find((project) => project.id === key)?.title ?? "");
+
+  /**
+   * A35: 놓은 자리에서 무엇이 바뀌는지(날짜·프로젝트)를 계산해 저장으로 넘깁니다.
+   * 다른 프로젝트 행의 같은 날 칸이나 그 행의 이름에 놓으면 프로젝트만, 같은 행의 다른 날
+   * 칸에 놓으면 날짜만, 둘 다 다르면 둘 다 바뀝니다. 프로젝트가 바뀌면 그 프로젝트의 분류를
+   * 따라가 카드 색·필터가 어긋나지 않습니다.
+   */
+  const applyTaskDrop = (task: ProjectTask, fromDay: string, fromKey: string, target: DropTarget) => {
+    const nextDay = target.data.day || fromDay;
+    const nextKey = target.data.project;
+    const projectChanged = nextKey !== undefined && nextKey !== fromKey;
+    const dayChanged = nextDay !== fromDay;
+    if (!projectChanged && !dayChanged) return;
+    if (projectChanged && onMoveTaskToProject) {
+      onMoveTaskToProject(task.id, nextKey === INBOX_KEY ? null : nextKey!, dayChanged ? nextDay : fromDay, fromDay);
+      return;
+    }
+    if (dayChanged) onMoveTask?.(task.id, nextDay, fromDay);
+  };
+
+  /** 놓을 자리 안내 — `집 정리 · 11/22로 옮기기`처럼 바뀌는 것을 모두 보여 줍니다. */
+  const taskDropHint = (fromDay: string, fromKey: string, target: DropTarget) => {
+    const nextDay = target.data.day || fromDay;
+    const nextKey = target.data.project;
+    const projectChanged = nextKey !== undefined && nextKey !== fromKey;
+    const projectLabel = projectChanged ? rowTitleOf(nextKey!) : null;
+    const dayLabel = nextDay !== fromDay ? nextDay.slice(5).replace("-", "/") : null;
+    if (projectLabel && dayLabel) return `${projectLabel} · ${dayLabel}로 옮기기`;
+    if (projectLabel) return `${projectLabel}로 옮기기`;
+    if (dayLabel) return `${dayLabel}로 옮기기`;
+    return null;
+  };
+
+  /**
+   * A35: 시트 안의 할 일을 꾹 눌러(마우스는 조금 끌어) 다른 칸으로 옮깁니다.
+   * 프로젝트 목록 시트를 닫지 않고도 다른 프로젝트 행·다른 날로 옮길 수 있습니다.
+   */
+  const startSheetDrag = (event: ReactPointerEvent<HTMLElement>, task: ProjectTask, day: string, fromKey: string) => {
+    if (!onMoveTask && !onMoveTaskToProject) return;
     dnd.start(
       event,
       { kind: "task", id: task.id, label: task.title },
       (target) => {
-        if (!target) return;
-        const next = target.data.day;
-        if (!next || next === day) return;
-        onMoveTask(task.id, next, day);
+        if (target) applyTaskDrop(task, day, fromKey, target);
       },
       {
         onStart: hideCellSheet,
         onEnd: restoreCellSheet,
-        getHint: (target) => {
-          const next = target.data.day;
-          if (!next || next === day) return null;
-          return `${next.slice(5).replace("-", "/")}로 옮기기`;
-        },
+        getHint: (target) => taskDropHint(day, fromKey, target),
       },
     );
   };
@@ -752,6 +786,8 @@ export function WeekBoard({
               {/* A19: 프로젝트 이름(색 점 포함, index 행 포함)은 왼쪽 열 안에서 가로·세로 가운데로
                   모읍니다. 예전에는 이름이 왼쪽 벽에 붙어 있었습니다. */}
               <div
+                data-drop-zone="week-project-row"
+                data-drop-project={key}
                 className={cn(
                   "group/row relative sticky left-0 z-20 flex min-h-[2rem] items-center justify-center border-r border-paper-300 px-1 py-0.5 text-center",
                   project ? pastelOf(project.id).bg : "bg-white",
@@ -790,6 +826,7 @@ export function WeekBoard({
                     key={day}
                     data-drop-zone="week-task-day"
                     data-drop-day={day}
+                    data-drop-project={key}
                     data-week-task-day={day}
                     data-week-project-cell={`${project?.title ?? "index"}:${day}`}
                     onClick={(event) => {
@@ -820,29 +857,25 @@ export function WeekBoard({
                             data-week-task={task.id}
                             onClick={(event) => event.stopPropagation()}
                             onPointerDown={(event) => {
-                              if (!onMoveTask) return;
+                              if (!onMoveTask && !onMoveTaskToProject) return;
                               dnd.start(
                                 event,
                                 { kind: "task", id: task.id, label: task.title },
                                 (target) => {
+                                  /* A35: 게시판에서 바로 다른 프로젝트 행·다른 날로 끌어도 됩니다. */
                                   if (!target) return;
-                                  if (target.zone === "week-task-day") {
-                                    const next = target.data.day;
-                                    if (next && next !== day) onMoveTask(task.id, next, day);
+                                  if (target.zone === "week-task-day" || target.zone === "week-project-row") {
+                                    applyTaskDrop(task, day, key, target);
                                     return;
                                   }
                                   if (target.zone === "timeline-day") {
                                     const next = target.data.day;
                                     // 시간표 칸에 놓아도 할 일은 그 날로만 옮깁니다 — 정해 둔 시각은 그대로.
-                                    if (next) onMoveTask(task.id, next, day);
+                                    if (next && next !== day) onMoveTask?.(task.id, next, day);
                                   }
                                 },
                                 {
-                                  getHint: (target) => {
-                                    const next = target.data.day;
-                                    if (!next || next === day) return null;
-                                    return `${next.slice(5).replace("-", "/")}로 옮기기`;
-                                  },
+                                  getHint: (target) => taskDropHint(day, key, target),
                                 },
                               );
                             }}
@@ -1137,7 +1170,7 @@ export function WeekBoard({
                         <button
                           type="button"
                           data-week-cell-drag={task.id}
-                          onPointerDown={(pointerEvent) => startSheetDrag(pointerEvent, task, cellSheet.day)}
+                          onPointerDown={(pointerEvent) => startSheetDrag(pointerEvent, task, cellSheet.day, cellSheet.key)}
                           onClick={() => {
                             setCellSheet(null);
                             onOpenTask(task.id);

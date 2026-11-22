@@ -94,8 +94,13 @@ interface Gesture {
   finish: DragFinish;
   options: DragSourceOptions;
   active: boolean;
+  /** A35: 드래그가 시작된 자리 — 손을 떼기 전에 움직였는지 보아 가장자리 자동 스크롤을 가립니다. */
+  anchorX: number;
+  anchorY: number;
   holdTimer: number | null;
   hoverEl: HTMLElement | null;
+  /** A35: 마지막으로 가리킨 놓을 자리가 들어 있는 스크롤 상자 — 가장자리 자동 스크롤에 씁니다. */
+  scrollBox: HTMLElement | null;
 }
 
 function pickElement(x: number, y: number): Element | null {
@@ -139,6 +144,27 @@ export function isAfterTarget(target: DropTarget, y: number): boolean {
   return y > target.rect.top + target.rect.height / 2;
 }
 
+/**
+ * A35: 손끝·커서 아래에서 가장 가까운 스크롤 상자. 주간 게시판처럼 창 안에서 움직이는
+ * 상자를 끄는 동안 가장자리에서 저절로 넘겨, 화면 밖에 있는 다른 프로젝트 행까지 갈 수 있게 합니다.
+ */
+function scrollableBox(node: Element | null): HTMLElement | null {
+  while (node && node !== document.body && node !== document.documentElement) {
+    if (node instanceof HTMLElement) {
+      const style = window.getComputedStyle(node);
+      const scrollsY = /(auto|scroll)/.test(style.overflowY) && node.scrollHeight > node.clientHeight + 2;
+      const scrollsX = /(auto|scroll)/.test(style.overflowX) && node.scrollWidth > node.clientWidth + 2;
+      if (scrollsY || scrollsX) return node;
+    }
+    node = node.parentElement;
+  }
+  return null;
+}
+
+function scrollerUnder(x: number, y: number): HTMLElement | null {
+  return scrollableBox(document.elementFromPoint(x, y));
+}
+
 export function DndProvider({ children }: { children: ReactNode }) {
   const gestureRef = useRef<Gesture | null>(null);
   const ghostRef = useRef<HTMLDivElement | null>(null);
@@ -167,7 +193,14 @@ export function DndProvider({ children }: { children: ReactNode }) {
     const gesture = gestureRef.current;
     const node = ghostRef.current;
     if (!gesture || !node) return;
-    node.style.transform = `translate3d(${gesture.x + 14}px, ${gesture.y + 16}px, 0)`;
+    /* A35: 화면 오른쪽·아래에서 끌 때 미리보기 카드와 안내가 화면 밖으로 잘리지 않게 안으로 돌립니다. */
+    const width = node.offsetWidth;
+    const height = node.offsetHeight;
+    let x = gesture.x + 14;
+    let y = gesture.y + 16;
+    if (x + width > window.innerWidth - 8) x = Math.max(8, gesture.x - width - 14);
+    if (y + height > window.innerHeight - 8) y = Math.max(8, gesture.y - height - 14);
+    node.style.transform = `translate3d(${x}px, ${y}px, 0)`;
   }, []);
 
   useEffect(() => {
@@ -193,8 +226,11 @@ export function DndProvider({ children }: { children: ReactNode }) {
       finish,
       options,
       active: false,
+      anchorX: event.clientX,
+      anchorY: event.clientY,
       holdTimer: null,
       hoverEl: null,
+      scrollBox: null,
     };
     gestureRef.current = gesture;
 
@@ -212,6 +248,7 @@ export function DndProvider({ children }: { children: ReactNode }) {
         current.hoverEl = zoneEl;
         if (zoneEl) zoneEl.dataset.dropHover = "true";
       }
+      if (zoneEl) current.scrollBox = scrollableBox(zoneEl) ?? current.scrollBox;
       if (zoneEl) {
         const target = readDropTarget(zoneEl);
         const hint = current.options.getHint?.(target, { x: current.x, y: current.y });
@@ -235,6 +272,29 @@ export function DndProvider({ children }: { children: ReactNode }) {
       scrollTimer = window.setInterval(() => {
         const current = gestureRef.current;
         if (!current?.active) return;
+        /* 처음 잡은 자리에서 아직 움직이지 않았으면 넘기지 않습니다 — 시트가 닫힐 때 손끝이
+           화면 아래쪽에 있어 게시판이 저절로 흘러가 버리는 일을 막습니다. */
+        if (Math.hypot(current.x - current.anchorX, current.y - current.anchorY) < 10) return;
+        /* A35: 화면 가장자리에 닿으면 마지막으로 가리킨 놓을 자리의 스크롤 상자를 넘깁니다. */
+        const edge = 72;
+        const speed = (distance: number) => Math.max(3, Math.min(18, Math.ceil(distance / 3)));
+        let dx = 0;
+        let dy = 0;
+        if (current.y < edge) dy = -speed(edge - current.y);
+        else if (current.y > window.innerHeight - edge) dy = speed(current.y - (window.innerHeight - edge));
+        if (current.x < edge) dx = -speed(edge - current.x);
+        else if (current.x > window.innerWidth - edge) dx = speed(current.x - (window.innerWidth - edge));
+        const box = current.scrollBox ?? scrollerUnder(current.x, current.y);
+        if (box && (dx !== 0 || dy !== 0)) {
+          const left = box.scrollLeft;
+          const top = box.scrollTop;
+          box.scrollBy(dx, dy);
+          if (box.scrollLeft !== left || box.scrollTop !== top) {
+            if (current.scrollBox) current.scrollBox = box;
+            updateHover();
+            return;
+          }
+        }
         const height = window.innerHeight;
         let delta = 0;
         if (current.y < EDGE_SCROLL) delta = -Math.ceil((EDGE_SCROLL - current.y) / 5);
@@ -250,6 +310,8 @@ export function DndProvider({ children }: { children: ReactNode }) {
       const current = gestureRef.current;
       if (!current || current.active) return;
       current.active = true;
+      current.anchorX = current.x;
+      current.anchorY = current.y;
       if (current.holdTimer !== null) {
         window.clearTimeout(current.holdTimer);
         current.holdTimer = null;

@@ -294,7 +294,7 @@
   left: 0;
   z-index: 80;
   display: flex;
-  max-width: 16rem;
+  max-width: min(16rem, calc(100vw - 2rem));
   flex-direction: column;
   align-items: flex-start;
   gap: 3px;
@@ -304,7 +304,7 @@
 
 .dnd-ghost-card {
   overflow: hidden;
-  max-width: 16rem;
+  max-width: 100%;
   border-radius: 10px;
   background-color: #111827;
   padding: 6px 10px;
@@ -325,7 +325,9 @@
   font-size: calc(12.5px * var(--fs));
   font-weight: 600;
   line-height: 1.35;
-  white-space: nowrap;
+  /* A35: '집 정리 · 11/22로 옮기기' 같은 긴 안내가 화면 밖으로 잘리지 않게 두 줄까지 접습니다. */
+  max-width: 100%;
+  white-space: normal;
   box-shadow: 0 2px 8px rgba(29, 78, 216, 0.18);
 }
 
