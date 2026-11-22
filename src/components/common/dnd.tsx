@@ -57,6 +57,12 @@ export interface DragSourceOptions {
   getHint?: (target: DropTarget, point: DragPoint) => string | null;
   onStart?: () => void;
   /**
+   * A33: every ending of the gesture, including a cancel (Escape, pointercancel, a
+   * scroll that beat the long press). `onStart` may hide the surface the drag came
+   * from, and only this guarantees it comes back.
+   */
+  onEnd?: () => void;
+  /**
    * A18: zones this drag should look through. A timed event dropped on the 종일 줄
    * lands on the day cell under the bars rather than on the bar that covers it.
    */
@@ -283,6 +289,7 @@ export function DndProvider({ children }: { children: ReactNode }) {
       delete document.body.dataset.dndActive;
       delete document.body.dataset.dndKind;
       setGhost(null);
+      current?.options.onEnd?.();
     };
 
     function onMove(nativeEvent: PointerEvent) {

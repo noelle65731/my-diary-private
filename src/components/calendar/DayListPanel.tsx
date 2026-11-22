@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import type { CalendarEvent, ProjectTask } from "@/lib/types";
 import { formatShort, timeRangeLabel, weekdayKo } from "@/lib/date";
 import { holidayName } from "@/lib/holidays";
@@ -9,6 +10,7 @@ import { useEventColors } from "@/state/event-colors";
 import { useCategoryColors } from "@/state/category-colors";
 import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, XIcon } from "@/components/icons";
 import { eventCoversDay } from "@/components/calendar/calendar-utils";
+import { useDnd } from "@/components/common/dnd";
 
 /**
  * A3 · A32: 한 날짜의 정리 목록.
@@ -16,6 +18,10 @@ import { eventCoversDay } from "@/components/calendar/calendar-utils";
  * 월간 달력과 주간 달력이 같은 화면을 씁니다 — 종일 일정 · 시간 일정 · 할 일을 한눈에
  * 보여 주고, 항목을 누르면 그 기록의 상세로 들어갑니다. 아래에서 새 일정·새 할 일을
  * 그 날짜로 바로 더할 수 있고, `이 날짜로 이동`은 그 날의 일간 보기를 엽니다.
+ *
+ * A33: 목록 안의 일정·할 일을 꾹 눌러(마우스는 조금 끌어) 뒤의 달력 칸으로 끌어다 놓으면
+ * 그 날짜로 옮겨집니다. 끄는 동안에는 이 시트와 어두운 배경을 잠시 감춰 뒤의 날짜 칸이
+ * 그대로 보이게 하고, 손을 떼면 원래대로 돌아옵니다.
  */
 export type DayListItem = { type: "event"; event: CalendarEvent } | { type: "task"; task: ProjectTask };
 
@@ -63,6 +69,7 @@ export function DayListPanel({
   onMoveAllDay,
   onCreateEvent,
   onCreateTask,
+  onMoveItem,
   startTime,
 }: {
   day: string;
@@ -73,6 +80,8 @@ export function DayListPanel({
   onOpenTask: (id: string) => void;
   onToggleTask?: (task: ProjectTask) => void;
   onMoveAllDay: (id: string, direction: -1 | 1) => void;
+  /** A33: 목록의 항목을 다른 날짜 칸에 놓았을 때 — 그 날짜(`YYYY-MM-DD`)로 옮깁니다. */
+  onMoveItem?: (type: "event" | "task", id: string, date: string) => void;
   /** A16: the day list can start a new record without leaving the view. */
   onCreateEvent?: (time: string | null) => void;
   /** A32: 새 할 일도 그 날짜로 바로 더합니다. */
@@ -82,12 +91,64 @@ export function DayListPanel({
 }) {
   const { toneFor } = useEventColors();
   const categoryColor = useCategoryColors();
+  const dnd = useDnd();
+  const sheet = useRef<HTMLDivElement | null>(null);
+  /** A33: 끄는 동안 이 시트를 감춰 뒤의 달력 칸이 보이게 합니다. */
+  const [dragging, setDragging] = useState(false);
   const holiday = holidayName(day);
+
+  /**
+   * A33: 드래그가 시작되면 시트와 어두운 배경을 즉시 감춥니다. 상태 갱신을 기다리지 않고
+   * 인라인 스타일로 먼저 가려야, 첫 번째 pointermove에서 아래 달력 칸을 그대로 집을 수 있습니다.
+   */
+  const hideSheet = () => {
+    setDragging(true);
+    const node = sheet.current;
+    if (!node) return;
+    node.style.opacity = "0";
+    node.style.pointerEvents = "none";
+  };
+  const restoreSheet = () => {
+    setDragging(false);
+    const node = sheet.current;
+    if (!node) return;
+    node.style.opacity = "";
+    node.style.pointerEvents = "";
+  };
+
+  /** 마우스는 7px, 터치는 짧게 눌렀다 끌면 시작 — 기존 드래그(`dnd.tsx`)와 같은 규칙입니다. */
+  const startDrag = (event: ReactPointerEvent<HTMLElement>, type: "event" | "task", item: CalendarEvent | ProjectTask) => {
+    if (!onMoveItem) return;
+    dnd.start(
+      event,
+      { kind: type, id: item.id, label: item.title || "옮길 항목" },
+      (target) => {
+        if (!target) return;
+        const nextDay = target.data.day;
+        if (!nextDay || nextDay === day) return;
+        onMoveItem(type, item.id, nextDay);
+      },
+      {
+        onStart: hideSheet,
+        onEnd: restoreSheet,
+        getHint: (target) => {
+          const next = target.data.day;
+          if (!next || next === day) return null;
+          return `${formatShort(next)}로 옮기기`;
+        },
+      },
+    );
+  };
   const allDay = items.filter((item) => item.type === "event" && item.event.allDay) as { type: "event"; event: CalendarEvent }[];
   const timed = items.filter((item) => item.type === "event" && !item.event.allDay) as { type: "event"; event: CalendarEvent }[];
   const dayTasks = items.filter((item) => item.type === "task") as { type: "task"; task: ProjectTask }[];
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-start sm:justify-end" data-day-list={day}>
+    <div
+      ref={sheet}
+      className="fixed inset-0 z-50 flex items-end justify-center sm:items-start sm:justify-end"
+      data-day-list={day}
+      data-sheet-dragging={dragging ? "true" : undefined}
+    >
       <button type="button" aria-label="닫기" onClick={onClose} className="absolute inset-0 bg-ink-900/10" />
       <div
         role="dialog"
@@ -129,12 +190,15 @@ export function DayListPanel({
                       <button
                         type="button"
                         data-day-list-event={event.id}
+                        onPointerDown={(pointerEvent) => startDrag(pointerEvent, "event", event)}
                         onClick={() => onOpenEvent(event.id)}
+                        title={onMoveItem ? "끌어서 다른 날짜로 옮기기" : undefined}
                         className={cn(
                           "min-w-0 flex-1 truncate text-left text-[calc(15px*var(--fs))]",
                           tone.text,
                           event.canceled && "line-through opacity-50",
-                          event.done && "opacity-60",
+                          /* A34: 완료한 일정도 할 일처럼 제목에 줄을 긋습니다. */
+                          event.done && "line-through opacity-60",
                         )}
                       >
                         {event.title}
@@ -183,11 +247,13 @@ export function DayListPanel({
                       <button
                         type="button"
                         data-day-list-event={event.id}
+                        onPointerDown={(pointerEvent) => startDrag(pointerEvent, "event", event)}
                         onClick={() => onOpenEvent(event.id)}
+                        title={onMoveItem ? "끌어서 다른 날짜로 옮기기" : undefined}
                         className={cn(
                           "min-w-0 flex-1 truncate text-left text-[calc(15px*var(--fs))] text-ink-700",
                           event.canceled && "line-through opacity-50",
-                          event.done && "opacity-60",
+                          event.done && "line-through opacity-60",
                         )}
                       >
                         {event.title}
@@ -223,7 +289,9 @@ export function DayListPanel({
                       <button
                         type="button"
                         data-day-list-task={task.id}
+                        onPointerDown={(pointerEvent) => startDrag(pointerEvent, "task", task)}
                         onClick={() => onOpenTask(task.id)}
+                        title={onMoveItem ? "끌어서 다른 날짜로 옮기기" : undefined}
                         className={cn(
                           "min-w-0 flex-1 text-left text-[calc(15px*var(--fs))] leading-snug text-ink-700",
                           task.status === "완료" && "text-ink-300 line-through",

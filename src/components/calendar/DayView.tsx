@@ -137,7 +137,15 @@ export function DayView({
                     );
                   }}
                   title="끌어서 시간표에 놓으면 그 시간 일정이 됩니다"
-                  className={cn("rounded-md border px-2 py-0.5 text-[calc(14px*var(--fs))]", tone.bg, tone.border, tone.text, event.canceled && "line-through opacity-50")}
+                  className={cn(
+                    "rounded-md border px-2 py-0.5 text-[calc(14px*var(--fs))]",
+                    tone.bg,
+                    tone.border,
+                    tone.text,
+                    event.canceled && "line-through opacity-50",
+                    /* A34: 완료한 종일 일정도 할 일처럼 줄을 긋습니다. */
+                    event.done && "line-through opacity-60",
+                  )}
                 >
                   {event.title}
                 </button>

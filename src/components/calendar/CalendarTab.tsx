@@ -324,6 +324,27 @@ export function CalendarTab() {
     void update("projects", id, patch);
   };
 
+  /**
+   * A33: 하루 목록 시트에서 항목을 다른 날짜 칸에 놓았을 때. 일정은 정해 둔 시각·길이·
+   * 여러 날 일수를 그대로 두고 날짜만 옮기고(월간 보기의 칩 끌기와 같은 규칙), 할 일은
+   * 그 날짜를 바꿉니다. `fromDay`는 그 할 일이 어느 날 칸에서 보이던 것인지입니다.
+   */
+  const moveItemToDate = (type: "event" | "task", id: string, date: string, fromDay?: string) => {
+    if (type === "task") {
+      if (fromDay) {
+        moveTaskToDay(id, date, fromDay);
+        return;
+      }
+      void update("projects", id, { date });
+      return;
+    }
+    const item = findItem("calendar", id) as CalendarEvent | undefined;
+    if (!item) return;
+    // B5: moving an event keeps its time and length.
+    const span = item.endDate && item.date ? diffDays(item.endDate, item.date) : 0;
+    void update("calendar", id, { date, endDate: span > 0 ? addDaysISO(date, span) : date });
+  };
+
   /** B5: dragging an event's edge changes its end (or start) time. */
   const resizeEvent = (id: string, startTime: string, endTime: string) => {
     void update("calendar", id, { startTime, endTime });
@@ -593,17 +614,7 @@ export function CalendarTab() {
               onCreate={(date) => createEvent(date, null)}
               onCreateTask={(date) => openTaskDraft({ kind: "할 일", date })}
               onRoutineCount={(routine, date, count) => void setRoutineCount(routine, date, count)}
-              onMoveItem={(type, id, date) => {
-                if (type === "task") {
-                  void update("projects", id, { date });
-                  return;
-                }
-                const item = findItem("calendar", id) as CalendarEvent | undefined;
-                if (!item) return;
-                // B5: moving an event on the month grid keeps its time and length.
-                const span = item.endDate && item.date ? diffDays(item.endDate, item.date) : 0;
-                void update("calendar", id, { date, endDate: span > 0 ? addDaysISO(date, span) : date });
-              }}
+              onMoveItem={(type, id, date, fromDay) => moveItemToDate(type, id, date, fromDay)}
             />
           ) : null}
 
@@ -779,6 +790,7 @@ export function CalendarTab() {
           onMoveAllDay={(id, direction) => moveAllDayInDay(daySummary.day, id, direction)}
           onCreateEvent={(time) => createEvent(daySummary.day, time)}
           onCreateTask={() => openTaskDraft({ kind: "할 일", date: daySummary.day })}
+          onMoveItem={(type, id, date) => moveItemToDate(type, id, date, daySummary.day)}
         />
       ) : null}
 

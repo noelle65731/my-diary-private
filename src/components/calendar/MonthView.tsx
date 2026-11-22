@@ -38,7 +38,7 @@ interface MonthViewProps {
   onCreateTask: (date: string) => void;
   onRoutineCount: (routine: Routine, date: string, count: number) => void;
   /** B5: dragging a chip onto another date moves the 일정/할 일 there. */
-  onMoveItem?: (type: "event" | "task", id: string, date: string) => void;
+  onMoveItem?: (type: "event" | "task", id: string, date: string, fromDay?: string) => void;
 }
 
 type CellItem = DayListItem;
@@ -228,6 +228,9 @@ export function MonthView({
                 <div
                   key={day}
                   data-month-cell={day}
+                  /* A33: 하루 목록 시트에서 끌어온 항목을 이 날짜로 놓을 수 있습니다. */
+                  data-drop-zone="month-day"
+                  data-drop-day={day}
                   onClick={(event) => {
                     // A21: 주 줄이 주간 보기로 가는 동안에는 빈 공간 클릭으로 하루 목록을 열지 않습니다
                     // (하루 목록은 `할 일 N` · `+N 더`에서 열립니다). 주간 이동이 없을 때만 예전처럼 엽니다.
@@ -304,7 +307,8 @@ export function MonthView({
                               "flex w-full items-start gap-1 rounded px-0.5 py-[1px] text-left text-[calc(13px*var(--fs))] leading-[1.3] md:px-1 md:text-[calc(14px*var(--fs))] md:leading-[1.35]",
                               multiDay ? cn(tone.bg, tone.text) : tone.text,
                               item.event.canceled && "line-through opacity-50",
-                              item.event.done && "opacity-60",
+                              /* A34: 완료한 일정도 할 일처럼 제목에 줄을 긋습니다. */
+                              item.event.done && "line-through opacity-60",
                             )}
                           >
                             {item.event.startTime ? <span className="hidden flex-none tabular-nums opacity-80 md:inline">{item.event.startTime}</span> : null}
@@ -466,6 +470,7 @@ export function MonthView({
           onOpenTask={onOpenTask}
           onToggleTask={onToggleTask}
           onMoveAllDay={(id, direction) => moveAllDay(openDayDate, id, direction)}
+          onMoveItem={(type, id, date) => onMoveItem?.(type, id, date, openDayDate)}
         />
       ) : null}
     </div>

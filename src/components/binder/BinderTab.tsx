@@ -111,16 +111,6 @@ export function BinderTab() {
       ),
     [data.projects, settings.nowOnly],
   );
-  /** 폭에 따라 한 줄에 보여 줄 칩 수 — 넓은 화면은 스프레드가 두 단이라 칸이 좁습니다. */
-  const [wideAgenda, setWideAgenda] = useState(false);
-  useEffect(() => {
-    const query = window.matchMedia("(min-width: 1024px)");
-    const sync = () => setWideAgenda(query.matches);
-    sync();
-    query.addEventListener("change", sync);
-    return () => query.removeEventListener("change", sync);
-  }, []);
-
   /** A24: 위클리 화면의 일정·할 일 참고 창 — 열어 둔 상태는 설정에 남습니다. */
   const showWeekSchedule = settings.binderWeekSchedule;
   const setShowWeekSchedule = (next: boolean) => setSetting("binderWeekSchedule", next);
@@ -151,7 +141,6 @@ export function BinderTab() {
       day={day}
       entry={dayEntry(day)}
       agenda={agendaForDay(day, agendaEvents, agendaTasks)}
-      wideAgenda={wideAgenda}
       lines={settings.binderPreviewLines}
       writing={writingDay === day}
       onStartWriting={() => startWriting(day)}
@@ -374,7 +363,6 @@ function DiaryRow({
   day,
   entry,
   agenda,
-  wideAgenda,
   lines,
   writing,
   onStartWriting,
@@ -387,7 +375,6 @@ function DiaryRow({
   day: string;
   entry: BinderEntry | null;
   agenda: AgendaItem[];
-  wideAgenda: boolean;
   lines: number;
   writing: boolean;
   onStartWriting: () => void;
@@ -529,8 +516,9 @@ function DiaryRow({
       </button>
 
       <div className="min-w-0 py-1.5 pl-1 pr-2">
-        {/* A31: 그날 일정·할 일은 늘 이 자리에 — 날짜를 눌러 쓰기 시작해도 그대로 보입니다. */}
-        <DayAgenda day={day} items={agenda} wide={wideAgenda} active={writing} />
+        {/* A34: 그날 일정·할 일은 그 칸을 눌러 쓰기 시작했을 때만 입력창 위에 보입니다.
+           다른 칸을 누르면 이전 칸은 다시 접고, 바깥을 눌러 포커스를 잃어도 숨깁니다. */}
+        {writing ? <DayAgenda day={day} items={agenda} /> : null}
 
         {writing ? (
           <div className="min-w-0">
@@ -629,44 +617,19 @@ function DiaryRow({
 }
 
 /**
- * A31: 위클리의 한 날짜 칸에 붙는 그날 일정·할 일 줄.
- * 입력 칸을 밀어내지 않도록 기본은 한 줄(넓은 화면 4개, 폰 2개)만 보여 주고,
- * 나머지는 +N 으로 펼칩니다. 그 날짜를 눌러 쓰기 시작하면 처음부터 모두 보입니다.
+ * A34: 위클리의 한 날짜 칸에 붙는 그날 일정·할 일 줄.
+ * 예전에는 모든 칸이 이 줄을 늘 달고 있어서, 주간 스프레드에서 날짜와 쓴 글보다 일정 칩이
+ * 먼저 눈에 들어왔습니다. 이제는 그 칸을 눌러 쓰기 시작했을 때만 입력창 위에 붙습니다.
+ * 다른 칸을 누르면 그 칸으로 옮겨 가고, 바깥을 눌러 포커스를 잃으면 다시 접힙니다.
  */
-function DayAgenda({ day, items, wide, active }: { day: string; items: AgendaItem[]; wide: boolean; active: boolean }) {
-  const [open, setOpen] = useState(false);
+function DayAgenda({ day, items }: { day: string; items: AgendaItem[] }) {
   if (items.length === 0) return null;
 
-  const limit = wide ? 3 : 2;
-  const expanded = active || open;
-  const shown = expanded ? items : items.slice(0, limit);
-  const hidden = items.length - shown.length;
-
   return (
-    <div data-day-agenda={day} className="mb-0.5 flex flex-wrap items-center gap-1">
-      {shown.map((item) => (
+    <div data-day-agenda={day} className="mb-1 flex flex-wrap items-center gap-1">
+      {items.map((item) => (
         <AgendaChip key={`${item.kind}-${item.id}`} item={item} />
       ))}
-      {hidden > 0 ? (
-        <button
-          type="button"
-          onClick={() => setOpen(true)}
-          className="flex-none rounded-full border border-line-soft bg-white px-1.5 py-px text-[calc(12px*var(--fs))] leading-[1.5] tabular-nums text-ink-500 hover:text-ink-800"
-          aria-label={`${formatShort(day)} 일정·할 일 ${items.length}개 모두 보기`}
-        >
-          +{hidden}
-        </button>
-      ) : null}
-      {open && !active && items.length > limit ? (
-        <button
-          type="button"
-          onClick={() => setOpen(false)}
-          className="flex-none rounded-full px-1 py-px text-[calc(12px*var(--fs))] leading-[1.5] text-ink-400 hover:text-ink-700"
-          aria-label={`${formatShort(day)} 일정·할 일 접기`}
-        >
-          접기
-        </button>
-      ) : null}
     </div>
   );
 }

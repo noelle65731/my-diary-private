@@ -279,6 +279,71 @@
   }
 }
 
+/* A33: 하루 목록 시트를 끌고 나왔을 때처럼 넓은 면 위를 지나갈 때도 어느 칸에 놓일지
+   바로 보이도록, 놓일 수 있는 칸은 조금 더 또렷하게 칠합니다. (레이어 밖이라 유틸리티
+   배경색보다 우선합니다.) */
+[data-drop-zone][data-drop-hover="true"] {
+  background-color: #dbeafe;
+  box-shadow: inset 0 0 0 2px #3b82f6;
+}
+
+/* A33: 끌고 있는 항목을 손끝·커서에 붙여 따라다니는 미리보기 카드. */
+.dnd-ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 80;
+  display: flex;
+  max-width: 16rem;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.dnd-ghost-card {
+  overflow: hidden;
+  max-width: 16rem;
+  border-radius: 10px;
+  background-color: #111827;
+  padding: 6px 10px;
+  color: #ffffff;
+  font-size: calc(13.5px * var(--fs));
+  font-weight: 500;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  box-shadow: 0 8px 22px rgba(17, 24, 39, 0.28);
+}
+
+.dnd-ghost-hint {
+  border-radius: 999px;
+  background-color: #dbeafe;
+  padding: 2px 8px;
+  color: #1d4ed8;
+  font-size: calc(12.5px * var(--fs));
+  font-weight: 600;
+  line-height: 1.35;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(29, 78, 216, 0.18);
+}
+
+.dnd-ghost-hint:empty {
+  display: none;
+}
+
+body.dnd-locked {
+  cursor: grabbing;
+  user-select: none;
+}
+
+/* A33: 시트에서 끌어 나오는 동안 뒤의 달력이 그대로 눌리지 않도록. */
+[data-sheet-dragging="true"] {
+  opacity: 0;
+  pointer-events: none;
+}
+
 @layer utilities {
   .scroll-shadow-y {
     background:

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import type { CalendarEvent, ModeFilter, ProjectTask, Routine } from "@/lib/types";
 import { isSameISO, timeRangeLabel, todayISO, weekdayKo } from "@/lib/date";
 import { holidayName } from "@/lib/holidays";
@@ -114,6 +114,46 @@ export function WeekBoard({
    * `key`는 프로젝트 id, 프로젝트가 없으면 index 행과 같은 "inbox"입니다.
    */
   const [cellSheet, setCellSheet] = useState<{ key: string; title: string; day: string } | null>(null);
+  /** A33: 프로젝트 칸 시트에서도 항목을 다른 날짜 칸으로 끌어 옮길 수 있습니다. */
+  const cellSheetRef = useRef<HTMLDivElement | null>(null);
+  const [cellSheetDragging, setCellSheetDragging] = useState(false);
+  const hideCellSheet = () => {
+    setCellSheetDragging(true);
+    const node = cellSheetRef.current;
+    if (!node) return;
+    node.style.opacity = "0";
+    node.style.pointerEvents = "none";
+  };
+  const restoreCellSheet = () => {
+    setCellSheetDragging(false);
+    const node = cellSheetRef.current;
+    if (!node) return;
+    node.style.opacity = "";
+    node.style.pointerEvents = "";
+  };
+  /** 시트 안의 할 일을 꾹 눌러(마우스는 조금 끌어) 다른 날짜 열로 옮깁니다. */
+  const startSheetDrag = (event: ReactPointerEvent<HTMLElement>, task: ProjectTask, day: string) => {
+    if (!onMoveTask) return;
+    dnd.start(
+      event,
+      { kind: "task", id: task.id, label: task.title },
+      (target) => {
+        if (!target) return;
+        const next = target.data.day;
+        if (!next || next === day) return;
+        onMoveTask(task.id, next, day);
+      },
+      {
+        onStart: hideCellSheet,
+        onEnd: restoreCellSheet,
+        getHint: (target) => {
+          const next = target.data.day;
+          if (!next || next === day) return null;
+          return `${next.slice(5).replace("-", "/")}로 옮기기`;
+        },
+      },
+    );
+  };
   const [narrow, setNarrow] = useState(false);
   /** Lets the timetable take the full height when the user wants every event at once. */
   const [timeExpanded, setTimeExpanded] = useState(false);
@@ -416,6 +456,10 @@ export function WeekBoard({
               type="button"
               data-today={isToday ? "true" : undefined}
               data-week-day-head={day}
+              /* A33: 하루 목록 시트에서 끌어온 항목을 이 날짜 열에 놓을 수 있습니다 —
+                 머리글이 그 날의 가장 넓고 안정된 놓을 자리입니다. */
+              data-drop-zone="week-day"
+              data-drop-day={day}
               title={`${Number(day.slice(5, 7))}월 ${Number(day.slice(8, 10))}일 ${weekdayKo(day)}요일 · 그 날 정리`}
               aria-label={`${Number(day.slice(5, 7))}월 ${Number(day.slice(8, 10))}일 그 날 정리`}
               onClick={() => {
@@ -601,6 +645,8 @@ export function WeekBoard({
                       tone.border,
                       tone.text,
                       event.canceled && "line-through opacity-50",
+                      /* A34: 완료한 종일 일정도 할 일처럼 줄을 긋습니다. */
+                      event.done && "line-through opacity-60",
                     )}
                     style={{
                       left: `calc(${(startIdx * 100) / days.length}% + 2px)`,
@@ -1034,7 +1080,12 @@ export function WeekBoard({
         바로 수정 화면으로 들어가지 않고 이 정리된 목록이 먼저 열립니다.
       */}
       {cellSheet ? (
-        <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-start sm:justify-end" data-week-cell-sheet={cellSheet.day}>
+        <div
+          ref={cellSheetRef}
+          className="fixed inset-0 z-50 flex items-end justify-center sm:items-start sm:justify-end"
+          data-week-cell-sheet={cellSheet.day}
+          data-sheet-dragging={cellSheetDragging ? "true" : undefined}
+        >
           <button type="button" aria-label="닫기" onClick={() => setCellSheet(null)} className="absolute inset-0 bg-ink-900/10" />
           <div
             role="dialog"
@@ -1085,10 +1136,13 @@ export function WeekBoard({
                         </button>
                         <button
                           type="button"
+                          data-week-cell-drag={task.id}
+                          onPointerDown={(pointerEvent) => startSheetDrag(pointerEvent, task, cellSheet.day)}
                           onClick={() => {
                             setCellSheet(null);
                             onOpenTask(task.id);
                           }}
+                          title={onMoveTask ? "끌어서 다른 날짜로 옮기기" : undefined}
                           className="min-w-0 flex-1 text-left"
                         >
                           <span

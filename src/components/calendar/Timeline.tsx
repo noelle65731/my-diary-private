@@ -450,6 +450,8 @@ export function Timeline({
                       tone.bg,
                       tone.border,
                       event.canceled && "opacity-50",
+                      /* A34: 완료한 일정은 할 일처럼 제목에 줄을 긋고 살짝 흐리게. */
+                      event.done && "opacity-60",
                     )}
                     style={{ top, height, width, left }}
                     title={onResizeEvent ? "가운데를 누르면 그 날 정리, 위/아래 가장자리를 끌면 시간이 늘어납니다" : undefined}
@@ -464,14 +466,14 @@ export function Timeline({
                       >
                         <span className={cn("flex-none", compactCard && "font-semibold")}>{timeLabel}</span>
                         {compactCard ? (
-                          <span className={cn("line-clamp-2 min-w-0 break-words text-[calc(12px*var(--fs))] font-medium leading-[1.1]", event.canceled && "line-through")}>
+                          <span className={cn("line-clamp-2 min-w-0 break-words text-[calc(12px*var(--fs))] font-medium leading-[1.1]", (event.canceled || event.done) && "line-through")}>
                             {event.title}
                           </span>
                         ) : null}
                       </span>
                     ) : null}
                     {compactCard && !timeLabel ? (
-                      <span className={cn("block truncate text-[calc(12px*var(--fs))] font-medium leading-[1.1]", tone.text, event.canceled && "line-through")}>
+                      <span className={cn("block truncate text-[calc(12px*var(--fs))] font-medium leading-[1.1]", tone.text, (event.canceled || event.done) && "line-through")}>
                         {event.title}
                       </span>
                     ) : null}
@@ -480,7 +482,7 @@ export function Timeline({
                         className={cn(
                           "mt-0.5 line-clamp-2 block whitespace-normal break-words text-[calc(13px*var(--fs))] font-medium leading-[1.2] md:text-[calc(13.5px*var(--fs))]",
                           tone.text,
-                          event.canceled && "line-through",
+                          (event.canceled || event.done) && "line-through",
                         )}
                       >
                         {event.title}
