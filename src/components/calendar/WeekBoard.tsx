@@ -1143,7 +1143,7 @@ export function WeekBoard({
                             onOpenTask(task.id);
                           }}
                           title={onMoveTask ? "끌어서 다른 날짜로 옮기기" : undefined}
-                          className="min-w-0 flex-1 text-left"
+                          className="min-w-0 flex-1 select-none text-left"
                         >
                           <span
                             className={cn(

@@ -194,7 +194,7 @@ export function DayListPanel({
                         onClick={() => onOpenEvent(event.id)}
                         title={onMoveItem ? "끌어서 다른 날짜로 옮기기" : undefined}
                         className={cn(
-                          "min-w-0 flex-1 truncate text-left text-[calc(15px*var(--fs))]",
+                          "min-w-0 flex-1 select-none truncate text-left text-[calc(15px*var(--fs))]",
                           tone.text,
                           event.canceled && "line-through opacity-50",
                           /* A34: 완료한 일정도 할 일처럼 제목에 줄을 긋습니다. */
@@ -251,7 +251,7 @@ export function DayListPanel({
                         onClick={() => onOpenEvent(event.id)}
                         title={onMoveItem ? "끌어서 다른 날짜로 옮기기" : undefined}
                         className={cn(
-                          "min-w-0 flex-1 truncate text-left text-[calc(15px*var(--fs))] text-ink-700",
+                          "min-w-0 flex-1 select-none truncate text-left text-[calc(15px*var(--fs))] text-ink-700",
                           event.canceled && "line-through opacity-50",
                           event.done && "line-through opacity-60",
                         )}
@@ -293,7 +293,7 @@ export function DayListPanel({
                         onClick={() => onOpenTask(task.id)}
                         title={onMoveItem ? "끌어서 다른 날짜로 옮기기" : undefined}
                         className={cn(
-                          "min-w-0 flex-1 text-left text-[calc(15px*var(--fs))] leading-snug text-ink-700",
+                          "min-w-0 flex-1 select-none text-left text-[calc(15px*var(--fs))] leading-snug text-ink-700",
                           task.status === "완료" && "text-ink-300 line-through",
                         )}
                       >
