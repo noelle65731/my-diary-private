@@ -254,6 +254,23 @@ function EventDetailInner({
           <StarIcon size={13} filled={draft.favorite} className={draft.favorite ? "text-amber-400" : undefined} />
           이번 주 꼭
         </button>
+        {/* A39: 개별 일정도 NOW 숨김을 바로 켜고 끌니다(켜진 NOW 모드에서만 가려집니다). */}
+        <button
+          type="button"
+          data-event-now="true"
+          aria-pressed={draft.hidden}
+          aria-label={draft.hidden ? "NOW 숨김 해제" : "NOW 숨김"}
+          title="NOW 숨김 — 켜면 NOW 모드에서 이 일정을 가립니다"
+          onClick={() => set("hidden", !draft.hidden)}
+          className={cn(
+            "inline-flex h-[26px] items-center gap-1 rounded-full border px-2 text-[calc(13.5px*var(--fs))] font-semibold transition",
+            draft.hidden
+              ? "border-ink-900 bg-ink-900 text-white"
+              : "border-paper-300 bg-white text-ink-400 hover:border-ink-400 hover:text-ink-700",
+          )}
+        >
+          NOW
+        </button>
       </div>
 
       {draft.canceled ? (

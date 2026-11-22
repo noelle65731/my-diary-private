@@ -38,6 +38,8 @@ export interface TimelineProps {
   /** B5: an empty-slot drag fills start and end; a plain tap still creates a 1-hour slot. */
   onCreate?: (date: string, time?: string | null, endTime?: string | null) => void;
   onMoveEvent?: (id: string, date: string, time: string | null) => void;
+  /** A39: 시간 일정을 프로젝트 칸·index 칸에 놓으면 그곳의 할 일로 바꿉니다. */
+  onDropEventToTask?: (id: string, projectKey: string, day: string | null) => void;
   /** A18: 시간표의 일정을 종일 칸에 놓으면 그 날의 종일 일정이 됩니다. */
   onMoveAllDayDate?: (id: string, date: string) => void;
   /** B5: dragging the top/bottom edge of an event resizes it (13–15 → 13–17). */
@@ -97,6 +99,7 @@ export function Timeline({
   onClickEmptyDay,
   onCreate,
   onMoveEvent,
+  onDropEventToTask,
   onMoveAllDayDate,
   onResizeEvent,
   compact = false,
@@ -407,6 +410,11 @@ export function Timeline({
                         { kind: "event", id: event.id, label: event.title },
                         (target, point) => {
                           if (!target) return;
+                          /* A39: 프로젝트 칸에 놓으면 그 프로젝트의 할 일로 바꿉니다. */
+                          if (target.zone === "week-task-day" || target.zone === "week-project-row") {
+                            onDropEventToTask?.(event.id, target.data.project ?? "inbox", target.data.day ?? null);
+                            return;
+                          }
                           const nextDay = target.data.day;
                           if (!nextDay) return;
                           // A18: 같은 날 종일 줄에 다시 놓으면 그 날의 종일 일정으로 돌아갑니다.
@@ -421,6 +429,10 @@ export function Timeline({
                         {
                           skipZones: ["allday-bar"],
                           getHint: (target, point) => {
+                            if (target.zone === "week-task-day" || target.zone === "week-project-row") {
+                              const day = target.data.day ? `${target.data.day.slice(5).replace("-", "/")} ` : "";
+                              return `${day}할 일로 옮기기`;
+                            }
                             const nextDay = target.data.day;
                             if (!nextDay) return null;
                             const stamp = nextDay.slice(5).replace("-", "/");

@@ -41,6 +41,10 @@ interface WeekBoardProps {
   onMoveTask?: (id: string, date: string, fromDay: string) => void;
   /** A35: 프로젝트 칸 시트에서 다른 프로젝트 행으로 끌어 놓으면 프로젝트까지 바뀝니다. */
   onMoveTaskToProject?: (id: string, projectId: string | null, date: string, fromDay: string) => void;
+  /** A39: 일정을 프로젝트/index 칸에 놓으면 그 프로젝트의 할 일로 바꿉니다(새 Projects 행). */
+  onConvertEventToTask?: (id: string, projectKey: string, date: string | null) => void;
+  /** A39: 할 일을 종일 칸에 놓으면 종일 일정, 시간표 칸에 놓으면 그 시각의 일정으로 바꿉니다. */
+  onConvertTaskToEvent?: (id: string, day: string, time: string | null) => void;
   /** A16: an all-day bar dragged to another day (or down to a time slot). */
   onMoveAllDayDate?: (id: string, date: string) => void;
   /** B5: edge drag resizes an event. */
@@ -86,6 +90,8 @@ export function WeekBoard({
   onMoveEvent,
   onMoveTask,
   onMoveTaskToProject,
+  onConvertEventToTask,
+  onConvertTaskToEvent,
   onMoveAllDayDate,
   onResizeEvent,
   onToggleTask,
@@ -622,6 +628,11 @@ export function WeekBoard({
                         { kind: "event", id: event.id, label: event.title },
                         (target, point) => {
                           if (!target) return;
+                          /* A39: 프로젝트 칸·index 칸에 놓으면 그 프로젝트의 할 일로 바꿉니다. */
+                          if (target.zone === "week-task-day" || target.zone === "week-project-row") {
+                            onConvertEventToTask?.(event.id, target.data.project ?? INBOX_KEY, target.data.day ?? null);
+                            return;
+                          }
                           const nextDay = target.data.day;
                           if (!nextDay) return;
                           if (target.zone === "allday-bar") {
@@ -646,6 +657,12 @@ export function WeekBoard({
                         },
                         {
                           getHint: (target, point) => {
+                            /* A39: 할 일 칸에 놓을 때는 '○○ 할 일로 옮기기'라고 분명히 적습니다. */
+                            if (target.zone === "week-task-day" || target.zone === "week-project-row") {
+                              const key = target.data.project ?? INBOX_KEY;
+                              const day = target.data.day ? ` · ${target.data.day.slice(5).replace("-", "/")}` : "";
+                              return `${rowTitleOf(key)}${day} 할 일로 옮기기`;
+                            }
                             const nextDay = target.data.day;
                             if (!nextDay) return null;
                             const stamp = nextDay.slice(5).replace("-", "/");
@@ -748,6 +765,7 @@ export function WeekBoard({
           }
           onCreate={onCreate}
           onMoveEvent={onMoveEvent}
+          onDropEventToTask={onConvertEventToTask}
           onMoveAllDayDate={onMoveAllDayDate}
           onResizeEvent={onResizeEvent}
         />
@@ -861,21 +879,39 @@ export function WeekBoard({
                               dnd.start(
                                 event,
                                 { kind: "task", id: task.id, label: task.title },
-                                (target) => {
+                                (target, point) => {
                                   /* A35: 게시판에서 바로 다른 프로젝트 행·다른 날로 끌어도 됩니다. */
                                   if (!target) return;
                                   if (target.zone === "week-task-day" || target.zone === "week-project-row") {
                                     applyTaskDrop(task, day, key, target);
                                     return;
                                   }
+                                  /* A39: 종일 칸에 놓으면 종일 일정, 시간표 칸에 놓으면 그 시각의 시간 일정으로 바꿉니다. */
+                                  if (target.zone === "allday-day" || target.zone === "allday-bar") {
+                                    onConvertTaskToEvent?.(task.id, target.data.day ?? day, null);
+                                    return;
+                                  }
                                   if (target.zone === "timeline-day") {
-                                    const next = target.data.day;
-                                    // 시간표 칸에 놓아도 할 일은 그 날로만 옮깁니다 — 정해 둔 시각은 그대로.
-                                    if (next && next !== day) onMoveTask?.(task.id, next, day);
+                                    const minutes = minutesFromDrop(target, point);
+                                    onConvertTaskToEvent?.(
+                                      task.id,
+                                      target.data.day ?? day,
+                                      minutes === null ? null : toClock(snapMinutes(minutes)),
+                                    );
                                   }
                                 },
                                 {
-                                  getHint: (target) => taskDropHint(day, key, target),
+                                  getHint: (target) => {
+                                    if (target.zone === "allday-day" || target.zone === "allday-bar") {
+                                      const stamp = (target.data.day ?? day).slice(5).replace("-", "/");
+                                      return `${stamp} 종일 일정으로 옮기기`;
+                                    }
+                                    if (target.zone === "timeline-day") {
+                                      const stamp = (target.data.day ?? day).slice(5).replace("-", "/");
+                                      return `${stamp} 시간 일정으로 옮기기`;
+                                    }
+                                    return taskDropHint(day, key, target);
+                                  },
                                 },
                               );
                             }}

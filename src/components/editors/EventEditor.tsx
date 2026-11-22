@@ -258,6 +258,26 @@ function EventEditorInner({
           className="border-0 border-b border-paper-300 bg-transparent px-0 text-[calc(18px*var(--fs))] font-medium focus:ring-0"
         />
 
+        {/* A39: 일정 창에서도 NOW 숨김을 바로 정합니다. */}
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          <button
+            type="button"
+            data-editor-now="true"
+            aria-pressed={form.hidden}
+            aria-label={form.hidden ? "NOW 숨김 해제" : "NOW 숨김"}
+            onClick={() => patch("hidden", !form.hidden)}
+            className={cn(
+              "inline-flex h-[24px] items-center rounded-full border px-2 text-[calc(13px*var(--fs))] font-semibold transition",
+              form.hidden
+                ? "border-ink-900 bg-ink-900 text-white"
+                : "border-paper-300 bg-white text-ink-400 hover:border-ink-400 hover:text-ink-700",
+            )}
+          >
+            NOW
+          </button>
+          <span className="text-[calc(12.5px*var(--fs))] text-ink-400">NOW 숨김 — 켜면 NOW 모드에서 이 일정을 가립니다</span>
+        </div>
+
         <div className="mt-2">
           <FieldRow label="유형">
             <Segmented<CalendarKind>

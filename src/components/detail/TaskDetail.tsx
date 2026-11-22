@@ -374,6 +374,23 @@ function TaskDetailInner({
             setField(null);
           }}
         />
+        {/* A39: 개별 할 일·프로젝트도 NOW 숨김을 바로 켜고 끌니다. */}
+        <button
+          type="button"
+          data-task-now="true"
+          aria-pressed={draft.hidden}
+          aria-label={draft.hidden ? "NOW 숨김 해제" : "NOW 숨김"}
+          title="NOW 숨김 — 켜면 NOW 모드에서 이 항목을 가립니다"
+          onClick={() => set("hidden", !draft.hidden)}
+          className={cn(
+            "inline-flex h-[26px] items-center gap-1 rounded-full border px-2 text-[calc(13.5px*var(--fs))] font-semibold transition",
+            draft.hidden
+              ? "border-ink-900 bg-ink-900 text-white"
+              : "border-paper-300 bg-white text-ink-400 hover:border-ink-400 hover:text-ink-700",
+          )}
+        >
+          NOW
+        </button>
       </div>
 
       {!isProject ? (

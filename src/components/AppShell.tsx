@@ -325,6 +325,7 @@ export function AppShell() {
               <button
                 key={item.key}
                 type="button"
+                data-tab={item.key}
                 onClick={() => handleTabPress(item.key)}
                 className={cn("nav-pill tap-highlight-none", active && "nav-pill-active")}
               >

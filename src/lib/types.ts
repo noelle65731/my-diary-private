@@ -215,6 +215,14 @@ export function currentCalendarCategory(category: string | null | undefined): "�
 export function isLegacyCalendarCategory(category: string | null | undefined): boolean {
   return category === "외부일정" || category === "성과" || category === "휴먼네트워크";
 }
+
+/**
+ * A39: 분류 필터가 일정을 볼 때 쓰는 분류값 — 옛 값은 지금의 같은 뜻으로 읽고,
+ * 사용자가 만든 분류는 이름 그대로 비교합니다.
+ */
+export function calendarEventMode(category: string | null | undefined): string {
+  return isLegacyCalendarCategory(category) ? currentCalendarCategory(category) : category ?? "개인";
+}
 export const TASK_KINDS: TaskKind[] = ["프로젝트", "할 일"];
 export const TASK_CATEGORIES: TaskCategory[] = ["업무", "개인", "공부"];
 /** A16: the built-in 분류 shown first in every picker and filter. */

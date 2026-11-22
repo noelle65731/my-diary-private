@@ -9,14 +9,18 @@ import { useCategoryOptions } from "@/state/categories";
 import { useTabReset, useUi } from "@/state/ui";
 import { cn, categoryNameOf, matchesMode } from "@/lib/utils";
 import { formatShort, startOfWeekISO, timeRangeLabel, todayISO, weekdayKo } from "@/lib/date";
-import { type ModeFilter, type ProjectTask, type Routine, type TaskCategory } from "@/lib/types";
+import { type CalendarEvent, type ModeFilter, type ProjectTask, type Routine, type TaskCategory } from "@/lib/types";
 import { PRIORITY_TONES, priorityOf, routineTone, taskTone } from "@/components/common/tone";
 import { useCategoryColors } from "@/state/category-colors";
 import { ProjectIcon } from "@/components/common/ProjectIcon";
 import { CheckIcon, ChevronRightIcon, EyeIcon, InboxIcon, PlusIcon, RepeatIcon, TrashIcon } from "@/components/icons";
 import { ModeChips } from "@/components/common/ModeChips";
 import { INDEX_DRAWER_ID, ProjectDrawer } from "@/components/projects/ProjectDrawer";
+import { ScheduleCard, ScheduleDrawer } from "@/components/projects/ScheduleCard";
 import { TaskDetail } from "@/components/detail/TaskDetail";
+import { EventDetail } from "@/components/detail/EventDetail";
+import { useDnd } from "@/components/common/dnd";
+import { useConvert } from "@/state/convert";
 import { RoutineEditor } from "@/components/editors/RoutineEditor";
 import { routineCountForDay } from "@/components/calendar/calendar-utils";
 import { writeRoutineNow } from "@/lib/routine-now";
@@ -80,6 +84,9 @@ export function ProjectsTab() {
   const [mode, setMode] = useState<ModeFilter>("all");
   const [projectId, setProjectId] = useState<string | null>(null);
   const [taskId, setTaskId] = useState<string | null>(null);
+  /** A39: 프로젝트 탭의 `일정` 카드 서랍과, 그 안에서 열리는 일정 상세. */
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [eventId, setEventId] = useState<string | null>(null);
   // A30: 새 할 일·프로젝트 창은 앱 공통 플로팅 창(ui 상태)에서 열어, 뒤 화면을 보거나 탭을 옮겨도 유지됩니다.
   const [routineId, setRoutineId] = useState<string | null>(null);
   /** A24: 우선순위 탭에만 걸리는 기간 — 다른 보기를 다녀와도 이 화면에서만 유지됩니다. */
@@ -129,6 +136,8 @@ export function ProjectsTab() {
     setTaskId(null);
     setRoutineId(null);
     setQuickTitle("");
+    setScheduleOpen(false);
+    setEventId(null);
   });
 
   /**
@@ -234,6 +243,20 @@ export function ProjectsTab() {
       doneAt: task.status === "완료" ? null : todayISO(),
     });
 
+  /** A39: 일정 카드·서랍에서 한 번 눌러 완료/해제. */
+  const toggleEventDone = (event: CalendarEvent) =>
+    void update("calendar", event.id, { done: !event.done });
+
+  /** A39: `+ 일정` 빠른 입력 — 오늘 종일 일정으로 담고, 분류는 기본 '개인'. */
+  const createEventQuick = async (title: string) => {
+    await create("calendar", { title, kind: "일정", category: "개인", date: todayISO(), allDay: true });
+  };
+
+  /** A39: 서랍에서 담는 일정 — 서랍의 분류 필터를 그대로 따릅니다. */
+  const createEventInDrawer = async (title: string, category: string) => {
+    await create("calendar", { title, kind: "일정", category, date: todayISO(), allDay: true });
+  };
+
   /** A7/B7: dragging a card or a routine row rewrites `sort`, so the order survives a reload. */
   const reorder = (list: ProjectTask[], dragId: string, targetId: string) => {
     if (!dragId || !targetId || dragId === targetId) return;
@@ -271,45 +294,165 @@ export function ProjectsTab() {
   };
 
   /** 드롭 대상 카드 강조 — 카드 안 자식 사이를 오갈 때 깜빡이지 않게 깊이를 셉니다. */
+  const dnd = useDnd();
+  /** A39: 일정 ↔ 할 일 변환(다른 DB 로 새로 만든 뒤 원래 항목 정리). */
+  const { eventToTask, taskToEvent } = useConvert();
+
+  /** 카드에 놓일 때 안내에 쓰는 이름 — index 카드는 그대로 `index`. */
+  const projectTitleOf = (key: string | undefined | null) => {
+    if (!key || key === "index") return "index";
+    return projects.find((project) => project.id === key)?.title ?? "index";
+  };
+
+  /** 일정 카드 안의 일정을 프로젝트 카드에 놓으면 그 프로젝트의 할 일로 바꿉니다. */
+  const dropEventOnCard = (droppedId: string, key: string | undefined | null) => {
+    void eventToTask(droppedId, { projectId: key && key !== "index" ? key : null });
+  };
+
+  /** 할 일을 일정 카드에 놓으면 캘린더 일정으로 바꿉니다(정해 둔 날짜·시각 유지). */
+  const dropTaskOnSchedule = (droppedId: string) => {
+    const task = data.projects.find((item) => item.id === droppedId);
+    void taskToEvent(droppedId, { date: task?.date ?? todayISO() });
+  };
+
+  /**
+   * A39: 카드 사이 드래그를 손가락(모바일)에서도 할 수 있게 dnd.tsx 의 포인터/터치 시스템을
+   * 씁니다. 마우스는 기존 HTML5 드래그가 그대로 맡고, 여기서는 손가락·펜만 시작합니다
+   * (둘 다 시작하면 한 번의 끌기가 두 번 처리될 수 있습니다).
+   */
+  const startTaskPointerDrag = (pointerEvent: React.PointerEvent<HTMLElement>, task: ProjectTask) => {
+    if (pointerEvent.pointerType === "mouse") return;
+    dnd.start(
+      pointerEvent,
+      { kind: "task", id: task.id, label: task.title },
+      (target) => {
+        if (!target) return;
+        if (target.zone === "schedule-card") {
+          dropTaskOnSchedule(task.id);
+          return;
+        }
+        if (target.zone === "project-card") {
+          const key = target.data.project;
+          if (!key || key === "index") {
+            moveTaskToCard(task.id, null);
+            return;
+          }
+          const project = projects.find((item) => item.id === key);
+          if (project) moveTaskToCard(task.id, project);
+        }
+      },
+      {
+        getHint: (target) => {
+          if (target.zone === "schedule-card") return "일정으로 옮기기";
+          if (target.zone === "project-card") return `${projectTitleOf(target.data.project)}로 옮기기`;
+          return null;
+        },
+      },
+    );
+  };
+
+  const startEventPointerDrag = (pointerEvent: React.PointerEvent<HTMLElement>, event: CalendarEvent) => {
+    if (pointerEvent.pointerType === "mouse") return;
+    dnd.start(
+      pointerEvent,
+      { kind: "event", id: event.id, label: event.title },
+      (target) => {
+        if (!target) return;
+        if (target.zone === "project-card") dropEventOnCard(event.id, target.data.project);
+      },
+      {
+        getHint: (target) =>
+          target.zone === "project-card" ? `${projectTitleOf(target.data.project)} 할 일로 옮기기` : null,
+      },
+    );
+  };
+
   const dragDepth = useRef(0);
   const [dropCard, setDropCard] = useState<string | null>(null);
   const clearDrop = () => {
     dragDepth.current = 0;
     setDropCard(null);
   };
-  const dropProps = (key: string, taskDrop: (taskId: string) => void, projectDrop?: (event: React.DragEvent<HTMLElement>) => void) => ({
+  const dropProps = (
+    key: string,
+    taskDrop: (taskId: string) => void,
+    projectDrop?: (event: React.DragEvent<HTMLElement>) => void,
+    /** A39: 일정 카드에서 끌어온 일정을 이 카드에 놓으면 그 프로젝트의 할 일이 됩니다. */
+    eventDrop?: (droppedId: string) => void,
+  ) => ({
     onDragEnter: (event: React.DragEvent<HTMLElement>) => {
-      if (!event.dataTransfer.types.includes("text/diary-task")) return;
+      const types = event.dataTransfer.types;
+      if (!types.includes("text/diary-task") && !(eventDrop && types.includes("text/diary-event"))) return;
       dragDepth.current += 1;
       setDropCard(key);
     },
     onDragOver: (event: React.DragEvent<HTMLElement>) => {
       const types = event.dataTransfer.types;
       // preventDefault 없이는 브라우저가 drop 을 보내지 않습니다(프로젝트 순서 변경 드롭도 여기로).
-      if (!types.includes("text/diary-task") && !types.includes("text/diary-project")) return;
+      if (!types.includes("text/diary-task") && !types.includes("text/diary-project") && !(eventDrop && types.includes("text/diary-event"))) return;
       event.preventDefault();
-      if (!types.includes("text/diary-task")) return;
+      if (!types.includes("text/diary-task") && !(eventDrop && types.includes("text/diary-event"))) return;
       event.dataTransfer.dropEffect = "move";
       if (dropCard !== key) setDropCard(key);
     },
     onDragLeave: (event: React.DragEvent<HTMLElement>) => {
-      if (!event.dataTransfer.types.includes("text/diary-task")) return;
+      const types = event.dataTransfer.types;
+      if (!types.includes("text/diary-task") && !(eventDrop && types.includes("text/diary-event"))) return;
       dragDepth.current = Math.max(0, dragDepth.current - 1);
       if (dragDepth.current === 0) setDropCard((current) => (current === key ? null : current));
     },
     onDrop: (event: React.DragEvent<HTMLElement>) => {
-      const taskId = event.dataTransfer.getData("text/diary-task");
+      const droppedTask = event.dataTransfer.getData("text/diary-task");
+      const droppedEvent = eventDrop ? event.dataTransfer.getData("text/diary-event") : "";
       clearDrop();
-      if (taskId) {
+      if (droppedTask) {
         event.preventDefault();
         event.stopPropagation();
-        taskDrop(taskId);
+        taskDrop(droppedTask);
+        return;
+      }
+      if (droppedEvent) {
+        event.preventDefault();
+        event.stopPropagation();
+        eventDrop?.(droppedEvent);
         return;
       }
       projectDrop?.(event);
     },
     onDragEnd: clearDrop,
   });
+
+  /**
+   * A39: `일정` 카드는 할 일을 받아 일정으로 바꿉니다(마우스 = HTML5, 손가락 = dnd.tsx).
+   * 카드 안의 일정을 다시 자기 위에 놓는 것은 아무 것도 바꾸지 않습니다.
+   */
+  const scheduleDropProps = {
+    onDragEnter: (event: React.DragEvent<HTMLElement>) => {
+      if (!event.dataTransfer.types.includes("text/diary-task")) return;
+      dragDepth.current += 1;
+      setDropCard("schedule");
+    },
+    onDragOver: (event: React.DragEvent<HTMLElement>) => {
+      if (!event.dataTransfer.types.includes("text/diary-task")) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = "move";
+      if (dropCard !== "schedule") setDropCard("schedule");
+    },
+    onDragLeave: (event: React.DragEvent<HTMLElement>) => {
+      if (!event.dataTransfer.types.includes("text/diary-task")) return;
+      dragDepth.current = Math.max(0, dragDepth.current - 1);
+      if (dragDepth.current === 0) setDropCard((current) => (current === "schedule" ? null : current));
+    },
+    onDrop: (event: React.DragEvent<HTMLElement>) => {
+      const droppedTask = event.dataTransfer.getData("text/diary-task");
+      clearDrop();
+      if (!droppedTask) return;
+      event.preventDefault();
+      event.stopPropagation();
+      dropTaskOnSchedule(droppedTask);
+    },
+    onDragEnd: clearDrop,
+  };
 
   /** A27: 루틴 순서 변경도 카드 경계를 넘어 전체 목록 기준으로 `sort` 를 다시 적습니다. */
   const reorderRoutines = (dragId: string, targetId: string) => {
@@ -467,7 +610,9 @@ export function ProjectsTab() {
             <article
               data-drop-card="index"
               data-index-card
-              {...dropProps("index", (taskId) => moveTaskToCard(taskId, null))}
+              data-drop-zone="project-card"
+              data-drop-project="index"
+              {...dropProps("index", (taskId) => moveTaskToCard(taskId, null), undefined, (droppedId) => dropEventOnCard(droppedId, "index"))}
               onClick={openIndexDrawerFromCard}
               className={cn(
                 "flex min-h-[10rem] cursor-pointer flex-col rounded-2xl border px-3.5 py-3 transition",
@@ -503,7 +648,13 @@ export function ProjectsTab() {
               </p>
               <ul className="mt-1 space-y-1.5">
                 {indexPreview.slice(0, CARD_OPEN_PREVIEW).map((task) => (
-                  <TaskLine key={task.id} task={task} onToggle={() => toggleTask(task)} onOpen={() => void openTask(task.id)} />
+                  <TaskLine
+                    key={task.id}
+                    task={task}
+                    onToggle={() => toggleTask(task)}
+                    onOpen={() => void openTask(task.id)}
+                    onPointerDragStart={startTaskPointerDrag}
+                  />
                 ))}
                 {indexPreview.length === 0 ? (
                   <li className="text-[calc(14px*var(--fs))] text-ink-300">
@@ -540,6 +691,25 @@ export function ProjectsTab() {
               </form>
             </article>
 
+            {/* A39: index 바로 옆 `일정` 카드 — 분류와 상관없이 모든 일정을 모아 보여 줍니다. */}
+            <ScheduleCard
+              events={data.calendar}
+              nowOnly={settings.nowOnly}
+              showCompleted={settings.showCompletedTasks}
+              highlight={dropCard === "schedule"}
+              open={scheduleOpen}
+              dropProps={scheduleDropProps}
+              onOpenDrawer={() => setScheduleOpen(true)}
+              onOpenEvent={(id) => setEventId(id)}
+              onToggleDone={toggleEventDone}
+              onCreate={(title) => void createEventQuick(title)}
+              onPointerDragStart={startEventPointerDrag}
+              onDragStartEvent={(dragEvent, item) => {
+                dragEvent.dataTransfer.setData("text/diary-event", item.id);
+                dragEvent.dataTransfer.effectAllowed = "move";
+              }}
+            />
+
             {projects.map((project) => (
                 <ProjectCard
                   key={project.id}
@@ -551,6 +721,7 @@ export function ProjectsTab() {
                   onCreateTask={(target) =>
                     openTaskDraft({ kind: "할 일", category: target.category, projectId: target.id })
                   }
+                  onPointerDragStart={startTaskPointerDrag}
                   drag={{
                     draggable: true,
                     highlight: dropCard === project.id,
@@ -563,6 +734,7 @@ export function ProjectsTab() {
                         event.preventDefault();
                         reorder(projects, projectDrag, project.id);
                       },
+                      (droppedId) => dropEventOnCard(droppedId, project.id),
                     ),
                     onDragStart: (event) => {
                       if (event.dataTransfer.types.includes("text/diary-task")) return;
@@ -711,6 +883,27 @@ export function ProjectsTab() {
         }}
       />
 
+      {/* A39: `일정` 카드를 누르면 열리는 서랍 — 전체/진행/완료 + 분류 필터. */}
+      <ScheduleDrawer
+        open={scheduleOpen}
+        events={data.calendar}
+        nowOnly={settings.nowOnly}
+        onClose={() => setScheduleOpen(false)}
+        onOpenEvent={(id) => setEventId(id)}
+        onToggleDone={toggleEventDone}
+        onCreate={(title, category) => void createEventInDrawer(title, category)}
+      />
+
+      <EventDetail
+        open={eventId !== null}
+        eventId={eventId}
+        onBack={() => setEventId(null)}
+        onCloseAll={() => {
+          setEventId(null);
+          setScheduleOpen(false);
+        }}
+      />
+
       <TaskDetail
         open={taskId !== null}
         taskId={taskId}
@@ -747,6 +940,7 @@ function ProjectCard({
   onRestore,
   restoreLabel = "되살리기",
   drag,
+  onPointerDragStart,
 }: {
   project: ProjectTask;
   tasks: ProjectTask[];
@@ -755,6 +949,8 @@ function ProjectCard({
   onOpenTask: (id: string) => void;
   onToggleTask: (task: ProjectTask) => void;
   onCreateTask?: (project: ProjectTask) => void;
+  /** A39: 손가락으로 할 일을 끌기 시작할 때(카드·index·일정 사이 이동). */
+  onPointerDragStart?: (event: React.PointerEvent<HTMLElement>, task: ProjectTask) => void;
   onRestore?: (project: ProjectTask) => void;
   /** 되살리기 / 보이기 — 히스토리에서 어떤 동작인지 */
   restoreLabel?: string;
@@ -800,6 +996,8 @@ function ProjectCard({
     <article
       data-project-card={project.id}
       data-drop-card={mode === "track" ? project.id : undefined}
+      data-drop-zone={mode === "track" ? "project-card" : undefined}
+      data-drop-project={mode === "track" ? project.id : undefined}
       {...dragProps}
       className={cn(
         "flex min-h-[10rem] flex-col rounded-2xl border px-3.5 py-3 transition",
@@ -861,7 +1059,13 @@ function ProjectCard({
       </p>
       <ul className="mt-1 space-y-1.5">
         {previewList.slice(0, previewCount).map((task) => (
-          <TaskLine key={task.id} task={task} onToggle={() => onToggleTask(task)} onOpen={() => onOpenTask(task.id)} />
+          <TaskLine
+            key={task.id}
+            task={task}
+            onToggle={() => onToggleTask(task)}
+            onOpen={() => onOpenTask(task.id)}
+            onPointerDragStart={onPointerDragStart}
+          />
         ))}
         {previewList.length === 0 ? (
           <li className="text-[calc(14px*var(--fs))] text-ink-400">
@@ -945,10 +1149,12 @@ function TaskLine({
   task,
   onToggle,
   onOpen,
+  onPointerDragStart,
 }: {
   task: ProjectTask;
   onToggle: () => void;
   onOpen: () => void;
+  onPointerDragStart?: (event: React.PointerEvent<HTMLElement>, task: ProjectTask) => void;
 }) {
   const { update } = useData();
   const categoryColor = useCategoryColors();
@@ -978,7 +1184,13 @@ function TaskLine({
       >
         {done ? <CheckIcon size={9} /> : null}
       </button>
-      <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-left">
+      <button
+        type="button"
+        data-task-drag={task.id}
+        onClick={onOpen}
+        onPointerDown={(pointerEvent) => onPointerDragStart?.(pointerEvent, task)}
+        className="min-w-0 flex-1 touch-manipulation select-none text-left"
+      >
         <span className="flex items-center gap-1">
           <span className={cn("truncate text-[calc(15.5px*var(--fs))] leading-[1.35] text-ink-900", done && "text-ink-400 line-through")}>{task.title}</span>
           {priority !== "기타" ? (

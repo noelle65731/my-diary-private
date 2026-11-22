@@ -37,6 +37,7 @@ import { EventEditor, type EventDraft } from "@/components/editors/EventEditor";
 import { EventDetail } from "@/components/detail/EventDetail";
 import { TaskDetail } from "@/components/detail/TaskDetail";
 import { RoutineEditor } from "@/components/editors/RoutineEditor";
+import { useConvert } from "@/state/convert";
 
 /** A12: the view switch reads 연간 → 월간 → 주간 → 3일 → 일간; 루틴 sits apart. */
 const VIEWS: { value: CalendarViewKey; label: string }[] = [
@@ -56,10 +57,12 @@ export function CalendarTab() {
   /** A20: 주간 보기 오른쪽 패널도 스크롤바가 움직일 때만 보입니다. */
   const weekPanelBar = useAutoHideScrollbar();
   const { data, update, remove, setRoutineCount, findItem, create } = useData();
-  const { settings, addCategory, removeCategory } = useSettings();
+  const { settings, addCategory, removeCategory, set: setSetting } = useSettings();
   // A16: the 분류 filter shares one list with the routine/task pickers.
   const categoryOptions = useCategoryOptions();
   const { focus, clearFocus, openBinderForDate, setSearchOpen, openTrash, views, setView: setTabView, openTaskDraft } = useUi();
+  /** A39: 주간·3일 게시판에서 일정 ↔ 할 일로 끌어 옮길 때의 변환(생성 후 원래 항목 정리). */
+  const { eventToTask, taskToEvent } = useConvert();
 
   const today = todayISO();
   // A15: the view lives in the shared UI state, so the browser's back button returns to it.
@@ -170,9 +173,18 @@ export function CalendarTab() {
     [data.projects, mode, settings.nowOnly, hiddenProjects],
   );
   // A6: a project sent to History never appears in the week's project rows.
+  // A39: 고른 분류가 프로젝트 행에도 걸립니다(업무·개인·공부·사용자 분류).
   const projects = useMemo(
-    () => data.projects.filter((task) => task.kind === "프로젝트" && !task.trash && !task.history),
-    [data.projects],
+    () =>
+      data.projects.filter(
+        (task) =>
+          task.kind === "프로젝트" &&
+          !task.trash &&
+          !task.history &&
+          (!settings.nowOnly || !task.hidden) &&
+          matchesMode(mode, task, task.category),
+      ),
+    [data.projects, mode, settings.nowOnly],
   );
   // A6: routine rows follow the same mode filter as projects.
   const routines = useMemo(
@@ -187,8 +199,11 @@ export function CalendarTab() {
    * `날짜별 체크` 기록은 남겨 두어야 실행 횟수가 그대로 세어집니다.
    */
   const calendarRoutines = useMemo(
-    () => (settings.nowOnly ? data.routines.filter((routine) => !routine.hidden) : data.routines),
-    [data.routines, settings.nowOnly],
+    () =>
+      data.routines.filter(
+        (routine) => (!settings.nowOnly || !routine.hidden) && matchesMode(mode, routine, routine.category),
+      ),
+    [data.routines, mode, settings.nowOnly],
   );
 
   const allWeekDays = weekDays(weekStart, settings.weekStartsOn);
@@ -511,6 +526,34 @@ export function CalendarTab() {
             <button type="button" onClick={() => setSearchOpen(true)} className="icon-btn hidden bg-paper-200 hover:bg-paper-300/70 md:inline-flex" aria-label="검색">
               <SearchIcon size={15} />
             </button>
+            {/* A39: 프로젝트 탭과 같은 NOW 토글 — 두 탭이 같은 설정을 함께 씁니다. */}
+            <button
+              type="button"
+              data-calendar-now="true"
+              onClick={() => setSetting("nowOnly", !settings.nowOnly)}
+              aria-pressed={settings.nowOnly}
+              aria-label="NOW 숨김만 보기"
+              title="켜면 NOW 숨김으로 표시한 일정·할 일·프로젝트·루틴을 가립니다"
+              className={cn(
+                "inline-flex h-7 items-center gap-1.5 rounded-full px-2.5 text-[calc(14px*var(--fs))] font-medium transition",
+                settings.nowOnly ? "bg-ink-900 text-white" : "bg-paper-200 text-ink-500 hover:bg-paper-300/70 hover:text-ink-800",
+              )}
+            >
+              NOW
+              <span
+                className={cn(
+                  "relative h-[16px] w-[28px] rounded-full transition",
+                  settings.nowOnly ? "bg-white/30" : "bg-paper-300",
+                )}
+              >
+                <span
+                  className={cn(
+                    "absolute top-[2px] h-[12px] w-[12px] rounded-full bg-white transition-all",
+                    settings.nowOnly ? "left-[14px]" : "left-[2px]",
+                  )}
+                />
+              </span>
+            </button>
             <button
               type="button"
               onClick={() => openTrash("calendar")}
@@ -618,6 +661,7 @@ export function CalendarTab() {
               tasks={data.projects}
               routines={calendarRoutines}
               mode={mode}
+              nowOnly={settings.nowOnly}
               weekStartsOn={settings.weekStartsOn}
               showWeekends={settings.showWeekends}
               dayItems={settings.monthDayItems}
@@ -663,6 +707,12 @@ export function CalendarTab() {
               onMoveEvent={moveEvent}
               onMoveTask={moveTaskToDay}
               onMoveTaskToProject={moveTaskToProject}
+              onConvertEventToTask={(id, projectKey, date) =>
+                void eventToTask(id, { projectId: projectKey ? projectKey : null, date })
+              }
+              onConvertTaskToEvent={(id, day, time) =>
+                void taskToEvent(id, time ? { date: day, allDay: false, startTime: time } : { date: day, allDay: true })
+              }
               onMoveAllDayDate={moveEventToAllDay}
               onResizeEvent={resizeEvent}
               onReorderAllDay={reorderAllDay}
@@ -699,6 +749,12 @@ export function CalendarTab() {
               onMoveEvent={moveEvent}
               onMoveTask={moveTaskToDay}
               onMoveTaskToProject={moveTaskToProject}
+              onConvertEventToTask={(id, projectKey, date) =>
+                void eventToTask(id, { projectId: projectKey ? projectKey : null, date })
+              }
+              onConvertTaskToEvent={(id, day, time) =>
+                void taskToEvent(id, time ? { date: day, allDay: false, startTime: time } : { date: day, allDay: true })
+              }
               onMoveAllDayDate={moveEventToAllDay}
               onResizeEvent={resizeEvent}
               onReorderAllDay={reorderAllDay}

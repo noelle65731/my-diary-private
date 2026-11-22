@@ -53,11 +53,12 @@ export function ModeChips({ mode, onChange, categories, showCustom, onAddCategor
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
+    <div className="flex flex-wrap items-center gap-1.5" data-mode-chips="true">
       {BASE.map((item) => (
         <button
           key={item.value}
           type="button"
+          data-mode-chip={item.value}
           onClick={() => onChange(item.value)}
           aria-label={item.label}
           className={cn(
@@ -125,6 +126,7 @@ export function ModeChips({ mode, onChange, categories, showCustom, onAddCategor
           <button
             key={category}
             type="button"
+            data-mode-chip={value}
             onClick={() => onChange(value)}
             onPointerDown={() => startPress(category)}
             onPointerUp={cancelPress}

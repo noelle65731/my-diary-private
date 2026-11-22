@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { CalendarEvent, ModeFilter, ProjectTask, Routine } from "@/lib/types";
+import { calendarEventMode, type CalendarEvent, type ModeFilter, type ProjectTask, type Routine } from "@/lib/types";
 import { daysInMonth, formatShort, isSameISO, monthMatrix, timeRangeLabel, todayISO, weekdayKo } from "@/lib/date";
 import { holidayName } from "@/lib/holidays";
-import { cn } from "@/lib/utils";
+import { cn, matchesMode } from "@/lib/utils";
 import { routineTone, taskTone } from "@/components/common/tone";
 import { useEventColors } from "@/state/event-colors";
 import { useCategoryColors } from "@/state/category-colors";
@@ -19,6 +19,8 @@ interface MonthViewProps {
   tasks: ProjectTask[];
   routines: Routine[];
   mode: ModeFilter;
+  /** A39: NOW 모드가 켜져 있을 때는 NOW 숨김 항목까지 가립니다. */
+  nowOnly?: boolean;
   weekStartsOn: 0 | 1;
   showWeekends: boolean;
   /** A3: titles shown per day before the rest folds into `할 일 N` / `+N 더`. */
@@ -66,6 +68,7 @@ export function MonthView({
   tasks,
   routines,
   mode,
+  nowOnly = false,
   weekStartsOn,
   showWeekends,
   dayItems,
@@ -125,15 +128,22 @@ export function MonthView({
     setOpenDay(null);
   }, [closeDayListSignal]);
 
+  /**
+   * A39: 고른 분류(업무·개인·공부·사용자 분류)가 일정·할 일·루틴 모두에 똑같이 걸립니다.
+   * 예전에는 `hidden` 만 보아 어떤 분류를 눌러도 같은 내용이 나왔습니다.
+   */
   const activeEvents = events.filter(
-    (event) => event.kind === "일정" && !event.trash && (mode === "all" || !event.hidden),
+    (event) => event.kind === "일정" && matchesMode(mode, event, calendarEventMode(event.category)) && !(nowOnly && event.hidden),
   );
   const activeTasks = tasks.filter(
-    (task) => !task.trash && (mode === "all" || !task.hidden) && task.status !== "취소",
+    (task) => matchesMode(mode, task, task.category) && task.status !== "취소" && !(nowOnly && task.hidden),
   );
   const routineTemplates = useMemo(
-    () => routines.filter((routine) => routine.kind === "루틴" && !routine.trash && !routine.history && (mode === "all" || !routine.hidden)),
-    [routines, mode],
+    () =>
+      routines.filter(
+        (routine) => routine.kind === "루틴" && !routine.history && matchesMode(mode, routine, routine.category) && !(nowOnly && routine.hidden),
+      ),
+    [routines, mode, nowOnly],
   );
 
   const allDayForDay = (day: string) => activeEvents.filter((event) => event.allDay && eventCoversDay(event, day)).sort(byAllDayOrder);
