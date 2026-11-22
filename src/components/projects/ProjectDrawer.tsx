@@ -9,10 +9,10 @@ import { taskTone } from "@/components/common/tone";
 import { useCategoryColors } from "@/state/category-colors";
 import { PASTELS } from "@/components/common/pastels";
 import { useProjectColors } from "@/state/project-colors";
-import { CheckIcon, PlusIcon } from "@/components/icons";
-import { cn } from "@/lib/utils";
+import { CheckIcon, InboxIcon, PlusIcon } from "@/components/icons";
+import { cn, matchesMode } from "@/lib/utils";
 import { todayISO } from "@/lib/date";
-import type { ProjectTask } from "@/lib/types";
+import type { ModeFilter, ProjectTask, TaskCategory } from "@/lib/types";
 import { TaskRow } from "@/components/projects/TaskRow";
 import { ProjectIcon, ProjectIconPicker } from "@/components/common/ProjectIcon";
 import { RichText } from "@/components/common/rich";
@@ -20,14 +20,25 @@ import { reorderSameDate, sortProjectTaskList, taskSortDate } from "@/lib/order"
 
 type Filter = "all" | "ing" | "done";
 
+/**
+ * A38: index 카드도 프로젝트 카드처럼 이 서랍으로 열립니다. 프로젝트 id 와 겹치지 않는 값을
+ * 하나 정해 두고, 서랍은 이 값일 때 '분류되지 않은 할 일' 목록을 보여 줍니다.
+ */
+export const INDEX_DRAWER_ID = "__index__";
+/** 서랍에서 새로 담는 index 할 일의 기본 분류 — 카드의 빠른 추가와 같은 '개인'입니다. */
+const INDEX_CATEGORY: TaskCategory = "개인";
+
 export function ProjectDrawer({
   projectId,
+  mode = "all",
   onClose,
   onOpenTask,
   onEditProject,
   showBackdrop = true,
 }: {
   projectId: string | null;
+  /** A38: index 서랍은 카드와 같은 목록을 보여 줘야 해서 지금 화면의 분류 필터를 그대로 받습니다. */
+  mode?: ModeFilter;
   onClose: () => void;
   onOpenTask: (id: string) => void;
   onEditProject: (id: string) => void;
@@ -46,13 +57,32 @@ export function ProjectDrawer({
   const [busy, setBusy] = useState(false);
   const [dragId, setDragId] = useState<string | null>(null);
 
-  const project = projectId ? data.projects.find((item) => item.id === projectId && item.kind === "프로젝트") ?? null : null;
+  const isIndex = projectId === INDEX_DRAWER_ID;
+  const project = !isIndex && projectId ? data.projects.find((item) => item.id === projectId && item.kind === "프로젝트") ?? null : null;
+  /**
+   * A38: index 서랍의 목록은 index 카드와 같은 조건 — 분류가 없는(projectIds 가 빈) 할 일 중
+   * 히스토리로 보내지 않은 것. 카드와 개수가 어긋나지 않게 지금 화면의 분류 필터와
+   * NOW 숨김 설정도 카드와 똑같이 적용합니다.
+   */
+  const indexTasks = data.projects.filter(
+    (task) =>
+      task.kind === "할 일" &&
+      !task.history &&
+      task.projectIds.length === 0 &&
+      matchesMode(mode, task, task.category) &&
+      (!settings.nowOnly || !task.hidden),
+  );
   // A28: 서랍에서도 카드와 같은 날짜 방향을 씁니다 — 완료 기록은 늘 아래에 최근 것부터.
   const tasks = sortProjectTaskList(
-    project ? data.projects.filter((task) => task.kind === "할 일" && task.projectIds.includes(project.id) && !task.trash) : [],
+    isIndex
+      ? indexTasks
+      : project
+        ? data.projects.filter((task) => task.kind === "할 일" && task.projectIds.includes(project.id) && !task.trash)
+        : [],
     settings.projectTaskOrder,
   );
   const done = tasks.filter((task) => task.status === "완료").length;
+  const openCount = tasks.filter((task) => task.status !== "완료" && task.status !== "취소").length;
   const progress = tasks.length > 0 ? Math.round((done / tasks.length) * 100) : 0;
   const filtered = tasks.filter((task) => {
     if (filter === "ing") return task.status !== "완료" && task.status !== "취소";
@@ -81,23 +111,114 @@ export function ProjectDrawer({
     });
 
   const addTask = async () => {
-    if (!project || !draft.trim() || busy) return;
+    if ((!project && !isIndex) || !draft.trim() || busy) return;
     setBusy(true);
     await create("projects", {
       title: draft.trim(),
       kind: "할 일",
-      category: project.category,
+      category: project ? project.category : INDEX_CATEGORY,
       status: "미완료",
       date: todayISO(),
-      projectIds: [project.id],
+      // A38: index 서랍에서 담은 할 일은 분류 없이 바로 index 에 들어갑니다(카드와 같게).
+      projectIds: project ? [project.id] : [],
     });
     setDraft("");
     setBusy(false);
   };
 
+  /** 완료 / 전체 와 진행률 — 프로젝트·index 가 같은 규격으로 씁니다. */
+  const progressBlock = (
+    <div>
+      <div className="mb-1 flex items-center justify-between text-[calc(14px*var(--fs))] text-ink-500">
+        <span>
+          완료 {done} / 전체 {tasks.length}
+        </span>
+        <span>{progress}%</span>
+      </div>
+      <div className="h-1.5 overflow-hidden rounded-full bg-paper-200">
+        <div className="h-full rounded-full bg-sage-400 transition-all" style={{ width: `${progress}%` }} />
+      </div>
+    </div>
+  );
+
+  /** 필터 탭 — 지난(완료한) 할 일도 여기서 한 번에 봅니다. */
+  const filterBlock = (
+    <div className="flex items-center justify-between gap-2">
+      <Segmented<Filter>
+        value={filter}
+        onChange={setFilter}
+        size="sm"
+        options={[
+          { value: "all", label: `전체 ${tasks.length}` },
+          { value: "ing", label: `진행 ${openCount}` },
+          { value: "done", label: `완료 ${done}` },
+        ]}
+      />
+      {project ? (
+        <span className={cn("chip", categoryColor.toneOf(project.category, taskTone(project.category)).bg, categoryColor.toneOf(project.category, taskTone(project.category)).text)}>
+          {project.category}
+        </span>
+      ) : (
+        <span className="text-[calc(13.5px*var(--fs))] text-ink-400">분류 없음</span>
+      )}
+    </div>
+  );
+
+  const listBlock =
+    filtered.length === 0 ? (
+      <EmptyState
+        title="아직 할 일이 없습니다"
+        description={
+          isIndex
+            ? "아래 칸에 적고 Enter를 누르면 index 에 바로 담깁니다."
+            : "아래 칸에 적고 Enter를 누르면 이 프로젝트에 바로 담깁니다."
+        }
+        icon={<PlusIcon size={20} />}
+      />
+    ) : (
+      <ul className="divide-y divide-paper-300/40">
+        {filtered.map((task) => (
+          <TaskRow
+            key={task.id}
+            task={task}
+            draggable
+            onDragStart={() => setDragId(task.id)}
+            onDrop={() => {
+              if (dragId) moveWithinDate(dragId, task.id);
+              setDragId(null);
+            }}
+            onOpen={() => onOpenTask(task.id)}
+            onToggle={() => toggle(task)}
+          />
+        ))}
+      </ul>
+    );
+
+  const addForm = (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        void addTask();
+      }}
+      className="flex items-center gap-2 rounded-xl border border-paper-300 bg-paper-50/60 px-2 py-0.5"
+    >
+      <PlusIcon size={13} className="flex-none text-ink-400" />
+      <input
+        value={draft}
+        onChange={(event) => setDraft(event.target.value)}
+        placeholder="할 일을 적고 Enter"
+        aria-label={isIndex ? "index 에 할 일 추가" : "이 프로젝트에 할 일 추가"}
+        className="min-w-0 flex-1 border-none bg-transparent px-1 py-1 text-[calc(15px*var(--fs))] outline-none placeholder:text-ink-400"
+      />
+      <button type="submit" disabled={!draft.trim() || busy} className="btn-primary btn-xs flex-none whitespace-nowrap">
+        추가
+      </button>
+    </form>
+  );
+
   return (
     <Drawer
-      open={!!project}
+      open={!!project || isIndex}
       onClose={onClose}
       title={
         project ? (
@@ -113,11 +234,18 @@ export function ProjectDrawer({
             </button>
             <span className="truncate">{project.title}</span>
           </span>
+        ) : isIndex ? (
+          <span className="flex items-center gap-2" data-index-drawer-title="true">
+            <span className="flex h-7 w-7 flex-none items-center justify-center rounded-lg bg-paper-200 text-ink-500">
+              <InboxIcon size={14} />
+            </span>
+            <span className="truncate">index</span>
+          </span>
         ) : (
           ""
         )
       }
-      subtitle={project ? `${project.category} · ${project.status}` : ""}
+      subtitle={project ? `${project.category} · ${project.status}` : isIndex ? "아직 분류되지 않은 할 일" : ""}
       width="lg"
       showBackdrop={showBackdrop}
       footer={
@@ -149,6 +277,13 @@ export function ProjectDrawer({
                 닫기
               </button>
             </div>
+          </div>
+        ) : isIndex ? (
+          // A38: index 는 프로젝트가 아니라서 삭제·히스토리·수정 없이 닫기만 둡니다.
+          <div className="flex justify-end">
+            <button type="button" onClick={onClose} className="btn-primary btn-xs">
+              닫기
+            </button>
           </div>
         ) : null
       }
@@ -193,33 +328,9 @@ export function ProjectDrawer({
             </p>
           ) : null}
 
-          <div>
-            <div className="mb-1 flex items-center justify-between text-[calc(14px*var(--fs))] text-ink-500">
-              <span>
-                완료 {done} / 전체 {tasks.length}
-              </span>
-              <span>{progress}%</span>
-            </div>
-            <div className="h-1.5 overflow-hidden rounded-full bg-paper-200">
-              <div className="h-full rounded-full bg-sage-400 transition-all" style={{ width: `${progress}%` }} />
-            </div>
-          </div>
+          {progressBlock}
 
-          <div className="flex items-center justify-between gap-2">
-            <Segmented<Filter>
-              value={filter}
-              onChange={setFilter}
-              size="sm"
-              options={[
-                { value: "all", label: `전체 ${tasks.length}` },
-                { value: "ing", label: `진행 ${tasks.filter((task) => task.status !== "완료" && task.status !== "취소").length}` },
-                { value: "done", label: `완료 ${done}` },
-              ]}
-            />
-            <span className={cn("chip", categoryColor.toneOf(project.category, taskTone(project.category)).bg, categoryColor.toneOf(project.category, taskTone(project.category)).text)}>
-              {project.category}
-            </span>
-          </div>
+          {filterBlock}
 
           {/* A16: 분류를 이 화면에서 바로 바꾸고, 없으면 새로 만듭니다. */}
           <div className="flex flex-wrap items-center gap-1">
@@ -347,55 +458,36 @@ export function ProjectDrawer({
             </div>
           </div>
 
-          {filtered.length === 0 ? (
-            <EmptyState
-              title="아직 할 일이 없습니다"
-              description="아래 칸에 적고 Enter를 누르면 이 프로젝트에 바로 담깁니다."
-              icon={<PlusIcon size={20} />}
-            />
-          ) : (
-            <ul className="divide-y divide-paper-300/40">
-              {filtered.map((task) => (
-                <TaskRow
-                  key={task.id}
-                  task={task}
-                  draggable
-                  onDragStart={() => setDragId(task.id)}
-                  onDrop={() => {
-                    if (dragId) moveWithinDate(dragId, task.id);
-                    setDragId(null);
-                  }}
-                  onOpen={() => onOpenTask(task.id)}
-                  onToggle={() => toggle(task)}
-                />
-              ))}
-            </ul>
-          )}
+          {listBlock}
 
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              void addTask();
-            }}
-            className="flex items-center gap-2 rounded-xl border border-paper-300 bg-paper-50/60 px-2 py-0.5"
-          >
-            <PlusIcon size={13} className="flex-none text-ink-400" />
-            <input
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              placeholder="할 일을 적고 Enter"
-              className="min-w-0 flex-1 border-none bg-transparent px-1 py-1 text-[calc(15px*var(--fs))] outline-none placeholder:text-ink-400"
-            />
-            <button type="submit" disabled={!draft.trim() || busy} className="btn-primary btn-xs flex-none whitespace-nowrap">
-              추가
-            </button>
-          </form>
+          {addForm}
 
           <div className="flex flex-wrap gap-1.5 text-[calc(13.5px*var(--fs))] text-ink-400">
             {project.due ? <span>마감 {project.due}</span> : null}
             {project.hidden ? <span className="chip bg-paper-200 text-ink-500">숨김</span> : null}
             {project.history ? <span className="chip bg-paper-200 text-ink-500">History</span> : null}
           </div>
+
+          {tasks.length > 0 && tasks.every((task) => task.status === "완료") ? (
+            <p className="flex items-center gap-1 text-[calc(14px*var(--fs))] text-sage-500">
+              <CheckIcon size={12} /> 모든 할 일을 마쳤습니다.
+            </p>
+          ) : null}
+        </div>
+      ) : isIndex ? (
+        /* A38: index 서랍 — 분류되지 않은 할 일의 지난 기록까지 한 화면에서 봅니다. */
+        <div className="space-y-4" data-index-drawer="true">
+          {progressBlock}
+
+          {filterBlock}
+
+          {listBlock}
+
+          {addForm}
+
+          <p className="text-[calc(13.5px*var(--fs))] leading-relaxed text-ink-400">
+            여기서 담은 할 일은 프로젝트 없이 index 에 남습니다. 카드로 끌어 프로젝트에 옮길 수 있습니다.
+          </p>
 
           {tasks.length > 0 && tasks.every((task) => task.status === "완료") ? (
             <p className="flex items-center gap-1 text-[calc(14px*var(--fs))] text-sage-500">

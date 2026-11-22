@@ -108,6 +108,14 @@ interface Gesture {
   mode: "pointer" | "touch";
   /** A37: 터치 이벤트가 실제로 오고 있는지 — 펜처럼 포인터 이벤트만 오는 입력은 포인터로 계속 끕니다. */
   sawTouch: boolean;
+  /**
+   * A38: 이 제스처를 시작할 때 손가락이 이미 화면에 닿아 있었는지. iOS 사파리는 `touchstart` 를
+   * `pointerdown` 보다 먼저 보내므로, `start()` 안에서 터치 리스너를 달면 그 touchstart 는
+   * 놓칩니다. 그래서 프로바이더가 늘 듣고 있다가 마지막 터치를 알려 주고, start() 가 처음부터
+   * 손가락 제스처로 시작합니다(이 값이 없으면 아이폰에서 꾹 잡고만 있어도 pointercancel 에
+   * 끌기가 되돌려집니다).
+   */
+  pressedByTouch: boolean;
   /** A37: 따라가는 손가락 하나의 identifier — 다른 손가락이 끼어들면 취소합니다. */
   touchId: number | null;
   startX: number;
@@ -207,8 +215,32 @@ export function DndProvider({ children }: { children: ReactNode }) {
   const ghostRef = useRef<HTMLDivElement | null>(null);
   const hintRef = useRef<HTMLSpanElement | null>(null);
   const suppressUntil = useRef(0);
+  /**
+   * A38: 마지막으로 화면에 닿은 손가락. iOS 사파리는 touchstart → pointerdown 순서로 이벤트를
+   * 보내므로, start() 가 실행될 때는 그 touchstart 가 이미 지나가 있습니다. 프로바이더가 상시
+   * (캡처) 듣고 있다가 이 기록으로 "지금 손가락이 닿아 있다"를 알려 줍니다.
+   */
+  const lastTouch = useRef<{ id: number | null; at: number }>({ id: null, at: 0 });
   const [ghost, setGhost] = useState<DragDescriptor | null>(null);
   const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    const onTouchStart = (event: TouchEvent) => {
+      const touch = event.changedTouches.item(0) ?? event.touches.item(0);
+      lastTouch.current = { id: touch ? touch.identifier : null, at: performance.now() };
+    };
+    const onTouchEnd = () => {
+      lastTouch.current = { id: null, at: performance.now() };
+    };
+    document.addEventListener("touchstart", onTouchStart, { capture: true, passive: true });
+    document.addEventListener("touchend", onTouchEnd, { capture: true, passive: true });
+    document.addEventListener("touchcancel", onTouchEnd, { capture: true, passive: true });
+    return () => {
+      document.removeEventListener("touchstart", onTouchStart, true);
+      document.removeEventListener("touchend", onTouchEnd, true);
+      document.removeEventListener("touchcancel", onTouchEnd, true);
+    };
+  }, []);
 
   useEffect(() => {
     setMounted(true);
@@ -252,12 +284,16 @@ export function DndProvider({ children }: { children: ReactNode }) {
 
     const el = event.currentTarget;
     const isTouch = event.pointerType !== "mouse";
+    /* A38: 방금 전에 시작된 손가락이 아직 닿아 있으면(아이폰의 touchstart → pointerdown 순서)
+       처음부터 손가락 제스처로 시작합니다. 800ms 안에 시작된 터치만 이 제스처의 것으로 봅니다. */
+    const pressed = isTouch && lastTouch.current.id !== null && performance.now() - lastTouch.current.at < 800;
     const gesture: Gesture = {
       pointerId: typeof event.pointerId === "number" ? event.pointerId : 1,
       pointerType: event.pointerType || "mouse",
       mode: isTouch ? "touch" : "pointer",
       sawTouch: false,
-      touchId: null,
+      pressedByTouch: pressed,
+      touchId: pressed ? lastTouch.current.id : null,
       startX: event.clientX,
       startY: event.clientY,
       x: event.clientX,
@@ -423,7 +459,10 @@ export function DndProvider({ children }: { children: ReactNode }) {
     function onPointerMove(nativeEvent: PointerEvent) {
       const current = gestureRef.current;
       if (!current) return;
-      if (current.mode === "touch" && current.sawTouch) return;
+      /* A38: 손가락으로 시작한 제스처는 처음부터 터치 이벤트가 맡습니다. 아이폰은 touchstart 가
+         pointerdown 보다 먼저 오므로 sawTouch 가 아직 false 일 수 있어, start() 가 알아 둔
+         pressedByTouch 까지 함께 봅니다(안 그러면 7px 만 움직여도 포인터 경로로 끌기가 시작됩니다). */
+      if (current.mode === "touch" && (current.sawTouch || current.pressedByTouch)) return;
       if (nativeEvent.pointerId && nativeEvent.pointerId !== current.pointerId) return;
       current.x = nativeEvent.clientX;
       current.y = nativeEvent.clientY;
@@ -441,14 +480,21 @@ export function DndProvider({ children }: { children: ReactNode }) {
     function onPointerUp() {
       const current = gestureRef.current;
       if (!current) return;
-      if (current.mode === "touch" && current.sawTouch) return;
+      if (current.mode === "touch" && (current.sawTouch || current.pressedByTouch)) return;
       finishGesture();
     }
 
     function onPointerCancel() {
       const current = gestureRef.current;
       if (!current) return;
-      /* A37: 손가락에는 터치 이벤트로 이어 가므로 아이폰이 보내는 pointercancel 은 무시합니다. */
+      /*
+       * A37/A38: 손가락에는 터치 이벤트로 끝까지 이어 갑니다 — 시트를 `pointer-events: none` 으로
+       * 감추거나 스크롤 가능한 상자 위를 끌면 WebKit 이 늘 pointercancel 을 보내는데, 그것으로
+       * 끌기를 접으면 시트가 곧바로 되돌아와 "꾹 잡고 있어도 시트가 안 비켜난다"가 됩니다.
+       * 터치 스트림은 touchend/touchcancel 로 반드시 끝나므로 안전하게 무시합니다.
+       * 펜처럼 포인터 이벤트만 오는 입력은 예전처럼 취소합니다.
+       */
+      if (current.pointerType === "touch") return;
       if (current.mode === "touch" && current.sawTouch) return;
       cleanup();
     }
@@ -474,9 +520,16 @@ export function DndProvider({ children }: { children: ReactNode }) {
         cleanup();
         return;
       }
-      const touch = touchOf(nativeEvent.touches, current.touchId) ?? touchOf(nativeEvent.changedTouches, current.touchId);
+      let touch: Touch | null =
+        touchOf(nativeEvent.touches, current.touchId) ?? touchOf(nativeEvent.changedTouches, current.touchId);
+      if (!touch && nativeEvent.touches.length === 1) {
+        /* A38: 알아 둔 식별자와 지금 손가락이 어긋나도(아이폰이 첫 touchstart 를 pointerdown 보다
+           먼저 보낸 경우 등) 손가락이 하나뿐이면 그 손가락을 그대로 따라갑니다 — 엉뚱한 손가락을
+           따라갈 여지가 없고, 이대로 두면 끌기가 손을 따라오지 못해 멈춰 버립니다. */
+        touch = nativeEvent.touches.item(0);
+      }
       if (!touch) return;
-      if (current.touchId === null) current.touchId = touch.identifier;
+      if (current.touchId !== touch.identifier) current.touchId = touch.identifier;
       current.x = touch.clientX;
       current.y = touch.clientY;
       if (!current.active) {
@@ -495,6 +548,13 @@ export function DndProvider({ children }: { children: ReactNode }) {
     function onTouchEnd(nativeEvent: TouchEvent) {
       const current = gestureRef.current;
       if (!current || current.mode !== "touch") return;
+      /* A38: 화면에 손가락이 하나도 남지 않았으면 식별자가 어긋났더라도 제스처는 끝입니다 —
+         pointerup 은 손가락 제스처에서 일부러 무시하므로, 여기서 놓아 주지 않으면 다음 끌기가
+         시작되지 못합니다. */
+      if (nativeEvent.touches.length === 0) {
+        finishGesture();
+        return;
+      }
       if (!touchOf(nativeEvent.changedTouches, current.touchId)) return;
       if (touchOf(nativeEvent.touches, current.touchId)) return;
       finishGesture();

@@ -340,10 +340,16 @@ body.dnd-locked {
   user-select: none;
 }
 
-/* A33: 시트에서 끌어 나오는 동안 뒤의 달력이 그대로 눌리지 않도록. */
+/*
+ * A33/A38: 시트에서 끌어 나오는 동안 뒤의 달력이 그대로 눌리지 않도록.
+ * 시트가 열릴 때의 animate-slide-up/opacity 애니메이션이 아직 돌고 있어도 확실히 비켜나게
+ * !important 로 덮습니다(애니메이션은 보통 선언보다 세지만 !important 는 애니메이션도 이깁니다).
+ * visibility: hidden 은 쓰지 않습니다 — iOS 가 터치를 원래 타깃으로 계속 배달하는지는
+ * 안전하지만, opacity·pointer-events 만으로 이미 elementFromPoint 에서 빠지므로 충분합니다.
+ */
 [data-sheet-dragging="true"] {
-  opacity: 0;
-  pointer-events: none;
+  opacity: 0 !important;
+  pointer-events: none !important;
 }
 
 /* A35: 꾹 눌러 끄는 항목에서 iOS 의 '복사·선택·미리보기' 메뉴가 끌기를 가로채지 않게. */

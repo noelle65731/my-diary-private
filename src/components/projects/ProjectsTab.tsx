@@ -15,7 +15,7 @@ import { useCategoryColors } from "@/state/category-colors";
 import { ProjectIcon } from "@/components/common/ProjectIcon";
 import { CheckIcon, ChevronRightIcon, EyeIcon, InboxIcon, PlusIcon, RepeatIcon, TrashIcon } from "@/components/icons";
 import { ModeChips } from "@/components/common/ModeChips";
-import { ProjectDrawer } from "@/components/projects/ProjectDrawer";
+import { INDEX_DRAWER_ID, ProjectDrawer } from "@/components/projects/ProjectDrawer";
 import { TaskDetail } from "@/components/detail/TaskDetail";
 import { RoutineEditor } from "@/components/editors/RoutineEditor";
 import { routineCountForDay } from "@/components/calendar/calendar-utils";
@@ -217,6 +217,16 @@ export function ProjectsTab() {
   /** A19/A36: '최근 기록'은 토글과 상관없이 늘 보이고, 최근 두 개까지. */
   const indexRecent = indexDoneOnly ? [] : indexCompleted.slice(0, RECENT_LOG_MAX);
   const projectCount = data.projects.filter((task) => task.kind === "프로젝트" && !task.trash && task.status !== "완료" && task.status !== "취소").length;
+
+  /**
+   * A38: index 카드도 프로젝트 카드처럼 누르면 서랍이 열립니다. 카드 안의 체크박스·할 일 이름·
+   * '+ 할 일' 입력창·최근 기록 같은 버튼과 입력은 그 일만 하고, 카드 열기로 번지지 않습니다.
+   */
+  const openIndexDrawerFromCard = (event: React.MouseEvent<HTMLElement>) => {
+    const target = event.target as HTMLElement | null;
+    if (target?.closest("button, a, input, textarea, select, label, form")) return;
+    setProjectId(INDEX_DRAWER_ID);
+  };
 
   const toggleTask = (task: ProjectTask) =>
     void update("projects", task.id, {
@@ -458,19 +468,35 @@ export function ProjectsTab() {
               data-drop-card="index"
               data-index-card
               {...dropProps("index", (taskId) => moveTaskToCard(taskId, null))}
+              onClick={openIndexDrawerFromCard}
               className={cn(
-                "flex min-h-[10rem] flex-col rounded-2xl border px-3.5 py-3 transition",
-                dropCard === "index" ? "border-ink-300 bg-paper-200/60 ring-2 ring-ink-200" : "border-paper-300",
+                "flex min-h-[10rem] cursor-pointer flex-col rounded-2xl border px-3.5 py-3 transition",
+                dropCard === "index" ? "border-ink-300 bg-paper-200/60 ring-2 ring-ink-200" : "border-paper-300 hover:border-paper-400",
               )}
             >
               <header className="flex items-start gap-2">
-                <span className="flex h-7 w-7 flex-none items-center justify-center rounded-full bg-paper-200 text-ink-500">
-                  <InboxIcon size={14} />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[calc(17px*var(--fs))] font-semibold tracking-tight text-ink-900">index</p>
-                  <p className="truncate text-[calc(14px*var(--fs))] text-ink-500">아직 분류되지 않은 할 일</p>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => setProjectId(INDEX_DRAWER_ID)}
+                  className="flex min-w-0 flex-1 items-start gap-2 text-left"
+                  aria-label="index 열기"
+                >
+                  <span className="flex h-7 w-7 flex-none items-center justify-center rounded-full bg-paper-200 text-ink-500">
+                    <InboxIcon size={14} />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[calc(17px*var(--fs))] font-semibold tracking-tight text-ink-900">index</span>
+                    <span className="block truncate text-[calc(14px*var(--fs))] text-ink-500">아직 분류되지 않은 할 일</span>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setProjectId(INDEX_DRAWER_ID)}
+                  className="flex-none text-ink-300 transition hover:text-ink-600"
+                  aria-label="index 상세 열기"
+                >
+                  <ChevronRightIcon size={15} />
+                </button>
               </header>
               <p className="mt-1.5 text-[calc(14px*var(--fs))] text-ink-500">
                 {indexDoneOnly ? `완료한 할 일 ${indexCompleted.length}` : `남은 할 일 ${indexOpen.length}`}
@@ -485,7 +511,15 @@ export function ProjectsTab() {
                   </li>
                 ) : null}
                 {indexPreview.length > CARD_OPEN_PREVIEW ? (
-                  <li className="pl-[1.375rem] text-[calc(13.5px*var(--fs))] text-ink-400">+{indexPreview.length - CARD_OPEN_PREVIEW}개 더</li>
+                  <li>
+                    <button
+                      type="button"
+                      onClick={() => setProjectId(INDEX_DRAWER_ID)}
+                      className="pl-[1.375rem] text-[calc(13.5px*var(--fs))] text-ink-500 transition hover:text-ink-700"
+                    >
+                      +{indexPreview.length - CARD_OPEN_PREVIEW}개 더 보기
+                    </button>
+                  </li>
                 ) : null}
               </ul>
 
@@ -667,6 +701,7 @@ export function ProjectsTab() {
 
       <ProjectDrawer
         projectId={projectId}
+        mode={mode}
         showBackdrop={taskId === null}
         onClose={() => setProjectId(null)}
         onOpenTask={(id) => void openTask(id)}
