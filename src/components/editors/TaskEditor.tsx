@@ -4,14 +4,16 @@ import { useEffect, useRef, useState } from "react";
 import { useData } from "@/state/store";
 import { useSettings } from "@/state/settings";
 import { useCategoryOptions } from "@/state/categories";
-import { Segmented, TextInput, Toggle } from "@/components/common/primitives";
+import { Segmented, TextInput } from "@/components/common/primitives";
 import { FloatingPanel } from "@/components/common/FloatingPanel";
 import { EditorFooter, ErrorNote, ProjectPicker } from "@/components/editors/shared";
 import { ProjectIconPicker } from "@/components/common/ProjectIcon";
 import { MemoEditor } from "@/components/editors/MemoField";
+import { FieldRow, InlineChoice, MoreOptions, ToggleRow } from "@/components/common/detail";
 import { plainOfSpans, spansFromMarkdown } from "@/lib/richtext";
 import { formatTimeKo, todayISO } from "@/lib/date";
 import { cn } from "@/lib/utils";
+import { StarIcon } from "@/components/icons";
 import {
   TASK_STATUSES,
   type ItemIcon,
@@ -160,14 +162,6 @@ function TaskEditorInner({
   const categories = useCategoryOptions();
   // A11: 분류와 프로젝트는 여기서 바로 새로 만들 수 있습니다.
   const [newCategory, setNewCategory] = useState<string | null>(null);
-  const [newProject, setNewProject] = useState<string | null>(null);
-  const addNewCategory = () => {
-    const name = (newCategory ?? "").trim();
-    setNewCategory(null);
-    if (!name) return;
-    addCategory(name);
-    patch("category", name as TaskCategory);
-  };
   const createProject = async (title: string): Promise<string | null> => {
     const created = await create("projects", { title, kind: "프로젝트", category: form.category, status: "미완료", date: todayISO() });
     return created?.id ?? null;
@@ -179,11 +173,20 @@ function TaskEditorInner({
   /** A10: a project has no 대기/긴급/중요 of its own — those belong to its tasks. */
   const isProject = form.kind === "프로젝트";
   const statuses = TASK_STATUSES.filter((status) => status !== "대기 중" || !isProject || form.status === "대기 중");
+  const weeklyMust = form.urgent && form.important;
   const statusChip = (status: TaskStatus) => {
     if (status === "대기 중") return "border-amber-300 bg-amber-100 text-amber-800";
     if (status === "취소") return "border-rose-200 bg-rose-50 text-rose-600";
     if (status === "완료") return "border-sage-400 bg-sage-400 text-white";
     return "border-ink-900 bg-ink-900 text-paper-50";
+  };
+
+  const addNewCategory = () => {
+    const name = (newCategory ?? "").trim();
+    setNewCategory(null);
+    if (!name) return;
+    addCategory(name);
+    patch("category", name as TaskCategory);
   };
 
   const save = async (): Promise<boolean> => {
@@ -248,6 +251,13 @@ function TaskEditorInner({
     })();
   };
 
+  const badges = [
+    form.urgent || form.important ? [form.urgent ? "긴급" : "", form.important ? "중요" : ""].filter(Boolean).join("·") : null,
+    form.hidden ? "숨김" : null,
+    form.history ? "History" : null,
+    isProject ? "프로젝트" : null,
+  ].filter((badge): badge is string => !!badge);
+
   return (
     <FloatingPanel
       open
@@ -265,7 +275,7 @@ function TaskEditorInner({
         />
       }
     >
-      <div className="space-y-3.5">
+      <div>
         <TextInput
           autoFocus
           value={form.title}
@@ -274,53 +284,8 @@ function TaskEditorInner({
           className="border-0 border-b border-paper-300 bg-transparent px-0 text-[calc(18px*var(--fs))] font-medium focus:ring-0"
         />
 
-        <div className="flex flex-wrap items-center gap-3">
-          <Segmented<TaskKind>
-            value={form.kind}
-            onChange={(value) => patch("kind", value)}
-            size="sm"
-            options={[
-              { value: "할 일", label: "할 일" },
-              { value: "프로젝트", label: "프로젝트" },
-            ]}
-          />
-          <Segmented<TaskCategory>
-            value={form.category}
-            onChange={(value) => patch("category", value)}
-            size="sm"
-            options={categories.map((category) => ({ value: category as TaskCategory, label: category }))}
-          />
-          {newCategory === null ? (
-            <button
-              type="button"
-              onClick={() => setNewCategory("")}
-              aria-label="분류 새로 추가"
-              className="inline-flex h-7 items-center gap-0.5 rounded-full border border-dashed border-paper-400 px-2 text-[calc(14px*var(--fs))] text-ink-500 transition hover:border-ink-500 hover:text-ink-900"
-            >
-              <span className="text-[calc(15px*var(--fs))] leading-none">+</span> 분류
-            </button>
-          ) : (
-            <input
-              autoFocus
-              value={newCategory}
-              onChange={(event) => setNewCategory(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  addNewCategory();
-                }
-                if (event.key === "Escape") setNewCategory(null);
-              }}
-              onBlur={addNewCategory}
-              placeholder="새 분류 이름"
-              aria-label="새 분류 이름"
-              className="input h-7 w-[7.5rem] py-0 text-[calc(14px*var(--fs))]"
-            />
-          )}
-        </div>
-
         {isProject ? (
-          <div className="rounded-xl border border-paper-300 px-3 py-2">
+          <div className="mt-2">
             <ProjectIconPicker
               value={form.icon}
               onChange={(next) => patch("icon", next)}
@@ -330,115 +295,257 @@ function TaskEditorInner({
           </div>
         ) : null}
 
-        <div>
-          <p className="label">상태</p>
-          <div className="flex flex-wrap gap-1.5">
-            {statuses.map((status) => (
-              <button
-                key={status}
-                type="button"
-                onClick={() => patch("status", status)}
-                className={cn(
-                  "chip border transition",
-                  form.status === status ? statusChip(status) : "border-paper-400 bg-white/60 text-ink-600 hover:border-ink-400",
-                )}
-              >
-                {status}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {form.status === "대기 중" && !isProject ? (
-          <div className="grid grid-cols-2 gap-3">
-            <label className="block">
-              <span className="label">대기 대상</span>
-              <TextInput value={form.waitFor} onChange={(event) => patch("waitFor", event.target.value)} placeholder="누구·무엇을 기다리는지" />
-            </label>
-            <label className="block">
-              <span className="label">대기 내용</span>
-              <TextInput value={form.waitNote} onChange={(event) => patch("waitNote", event.target.value)} placeholder="다음에 할 일" />
-            </label>
-          </div>
-        ) : null}
-
-        {form.status === "취소" ? (
-          <label className="block">
-            <span className="label">취소 사유</span>
-            <TextInput value={form.cancelReason} onChange={(event) => patch("cancelReason", event.target.value)} placeholder="왜 취소되었나요?" />
-          </label>
-        ) : null}
-
-        <div className="grid grid-cols-2 gap-3">
-          <label className="block">
-            <span className="label">날짜</span>
-            <input type="date" value={form.date} onChange={(event) => patch("date", event.target.value)} className="input" />
-          </label>
-          <label className="block">
-            <span className="label">마감일</span>
-            <input type="date" value={form.due} onChange={(event) => patch("due", event.target.value)} className="input" />
-          </label>
-        </div>
-
-        {/* 시간 지정 — 기본은 시간 없이(날짜만). 켜면 시작·종료 시간을 함께 저장합니다. */}
-        <div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              aria-pressed={form.timed}
-              aria-label={form.timed ? "시간 지정 끄기" : "시간 지정 켜기"}
-              onClick={() => {
-                patch("timed", !form.timed);
-                if (!form.timed && !form.date) patch("date", todayISO());
-              }}
-              className={cn(
-                "chip border transition",
-                form.timed ? "border-ink-900 bg-ink-900 text-paper-50" : "border-paper-400 bg-white/60 text-ink-600 hover:border-ink-400",
-              )}
-            >
-              시간 지정
-            </button>
-            {form.timed ? (
-              <span className="text-[0.7rem] text-ink-400">
-                {formatTimeKo(form.startTime)}
-                {form.endTime ? `–${formatTimeKo(form.endTime)}` : ""}
-              </span>
-            ) : (
-              <span className="text-[0.7rem] text-ink-400">기본은 날짜만 저장합니다</span>
-            )}
-          </div>
-          {form.timed ? (
-            <div className="mt-2 grid grid-cols-2 gap-3">
-              <label className="block">
-                <span className="label">시작 시간</span>
-                <input type="time" value={form.startTime} onChange={(event) => patch("startTime", event.target.value)} className="input" />
-              </label>
-              <label className="block">
-                <span className="label">종료 시간</span>
-                <input type="time" value={form.endTime} onChange={(event) => patch("endTime", event.target.value)} className="input" />
-              </label>
+        <div className="mt-2">
+          <FieldRow label="상태">
+            <div className="flex flex-wrap gap-1">
+              {statuses.map((status) => (
+                <button
+                  key={status}
+                  type="button"
+                  aria-pressed={form.status === status}
+                  onClick={() => patch("status", status)}
+                  className={cn(
+                    "rounded-full border px-2.5 py-[3px] text-[calc(13.5px*var(--fs))] leading-5 transition",
+                    form.status === status
+                      ? statusChip(status)
+                      : "border-paper-300 bg-white text-ink-400 hover:border-ink-400 hover:text-ink-700",
+                  )}
+                >
+                  {status}
+                </button>
+              ))}
             </div>
+          </FieldRow>
+
+          {form.status === "대기 중" && !isProject ? (
+            <FieldRow label="대기" align="start">
+              <div className="space-y-1.5 pt-[3px]">
+                <TextInput
+                  value={form.waitFor}
+                  onChange={(event) => patch("waitFor", event.target.value)}
+                  placeholder="누구·무엇을 기다리는지"
+                  aria-label="대기 대상"
+                  className="h-9 py-1"
+                />
+                <TextInput
+                  value={form.waitNote}
+                  onChange={(event) => patch("waitNote", event.target.value)}
+                  placeholder="다음에 할 일"
+                  aria-label="대기 내용"
+                  className="h-9 py-1"
+                />
+              </div>
+            </FieldRow>
+          ) : null}
+
+          {form.status === "취소" ? (
+            <FieldRow label="취소 사유">
+              <TextInput
+                value={form.cancelReason}
+                onChange={(event) => patch("cancelReason", event.target.value)}
+                placeholder="왜 취소되었나요? (선택)"
+                aria-label="취소 사유"
+                className="h-9 py-1"
+              />
+            </FieldRow>
+          ) : null}
+
+          <FieldRow label="날짜">
+            <input
+              type="date"
+              aria-label="날짜"
+              value={form.date}
+              onChange={(event) => patch("date", event.target.value)}
+              className="input h-9 w-[10.5rem] py-1"
+            />
+          </FieldRow>
+
+          {/* 시간 지정 — 기본은 시간 없이(날짜만). 켜면 시작·종료 시간을 함께 저장합니다. */}
+          <FieldRow label="시간" align="start">
+            <div className="space-y-1.5 pt-[3px]">
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  aria-pressed={form.timed}
+                  aria-label={form.timed ? "시간 지정 끄기" : "시간 지정 켜기"}
+                  onClick={() => {
+                    patch("timed", !form.timed);
+                    if (!form.timed && !form.date) patch("date", todayISO());
+                  }}
+                  className={cn(
+                    "rounded-full border px-2.5 py-[3px] text-[calc(13.5px*var(--fs))] leading-5 transition",
+                    form.timed
+                      ? "border-ink-900 bg-ink-900 text-paper-50"
+                      : "border-paper-300 bg-white text-ink-400 hover:border-ink-400 hover:text-ink-700",
+                  )}
+                >
+                  시간 지정
+                </button>
+                <span className="text-[calc(12.5px*var(--fs))] text-ink-400">
+                  {form.timed
+                    ? `${formatTimeKo(form.startTime)}${form.endTime ? `–${formatTimeKo(form.endTime)}` : ""}`
+                    : "날짜만 저장"}
+                </span>
+              </div>
+              {form.timed ? (
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="block">
+                    <span className="label">시작 시간</span>
+                    <input
+                      type="time"
+                      value={form.startTime}
+                      onChange={(event) => patch("startTime", event.target.value)}
+                      className="input h-9 py-1"
+                    />
+                  </label>
+                  <label className="block">
+                    <span className="label">종료 시간</span>
+                    <input
+                      type="time"
+                      value={form.endTime}
+                      onChange={(event) => patch("endTime", event.target.value)}
+                      className="input h-9 py-1"
+                    />
+                  </label>
+                </div>
+              ) : null}
+            </div>
+          </FieldRow>
+
+          <FieldRow label="마감일">
+            <input
+              type="date"
+              aria-label="마감일"
+              value={form.due}
+              onChange={(event) => patch("due", event.target.value)}
+              className="input h-9 w-[10.5rem] py-1"
+            />
+          </FieldRow>
+
+          <FieldRow label="분류">
+            <div className="flex flex-wrap items-center gap-1">
+              {categories.map((category) => (
+                <button
+                  key={category}
+                  type="button"
+                  aria-pressed={form.category === category}
+                  onClick={() => patch("category", category as TaskCategory)}
+                  className={cn(
+                    "rounded-full border px-2.5 py-[3px] text-[calc(13.5px*var(--fs))] leading-5 transition",
+                    form.category === category
+                      ? "border-ink-900 bg-ink-900 text-paper-50"
+                      : "border-paper-300 bg-white text-ink-400 hover:border-ink-400 hover:text-ink-700",
+                  )}
+                >
+                  {category}
+                </button>
+              ))}
+              {newCategory === null ? (
+                <button
+                  type="button"
+                  onClick={() => setNewCategory("")}
+                  aria-label="분류 새로 추가"
+                  className="inline-flex h-[26px] items-center gap-0.5 rounded-full border border-dashed border-paper-300 px-2 text-[calc(13px*var(--fs))] text-ink-400 transition hover:border-ink-400 hover:text-ink-700"
+                >
+                  <span className="text-[calc(14px*var(--fs))] leading-none">+</span> 분류
+                </button>
+              ) : (
+                <input
+                  autoFocus
+                  value={newCategory}
+                  onChange={(event) => setNewCategory(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      addNewCategory();
+                    }
+                    if (event.key === "Escape") setNewCategory(null);
+                  }}
+                  onBlur={addNewCategory}
+                  placeholder="새 분류 이름"
+                  aria-label="새 분류 이름"
+                  className="input h-7 w-[7.5rem] py-0 text-[calc(13.5px*var(--fs))]"
+                />
+              )}
+            </div>
+          </FieldRow>
+
+          {!isProject ? (
+            <FieldRow label="프로젝트" align="start">
+              <div className="pt-[3px]">
+                <ProjectPicker projects={projects} value={form.projectIds} onChange={(ids) => patch("projectIds", ids)} onCreate={createProject} />
+              </div>
+            </FieldRow>
           ) : null}
         </div>
 
-        <div>
-          <p className="label">기타</p>
-          <MemoEditor value={form.memo} onChange={(value) => patch("memo", value)} rows={3} />
+        <div className="mt-3 border-t border-paper-200 pt-2.5">
+          <p className="mb-1 text-[calc(13px*var(--fs))] text-ink-400">메모</p>
+          <MemoEditor value={form.memo} onChange={(value) => patch("memo", value)} rows={2} hint={false} placeholder="메모 (선택)" />
         </div>
 
-        {isProject ? null : (
-          <div className="grid grid-cols-2 gap-2 rounded-xl border border-paper-300/80 bg-paper-50/60 px-3 py-2">
-            <Toggle checked={form.urgent} onChange={(value) => patch("urgent", value)} label="긴급" />
-            <Toggle checked={form.important} onChange={(value) => patch("important", value)} label="중요" />
-          </div>
-        )}
-
-        {form.kind === "할 일" ? (
-          <div>
-            <p className="label">연결 프로젝트</p>
-            <ProjectPicker projects={projects} value={form.projectIds} onChange={(ids) => patch("projectIds", ids)} onCreate={createProject} />
-          </div>
-        ) : null}
+        <MoreOptions badges={badges} className="mt-1">
+          <FieldRow label="유형">
+            <Segmented<TaskKind>
+              value={form.kind}
+              onChange={(value) => patch("kind", value)}
+              size="sm"
+              options={[
+                { value: "할 일", label: "할 일" },
+                { value: "프로젝트", label: "프로젝트" },
+              ]}
+            />
+          </FieldRow>
+          {isProject ? null : (
+            <FieldRow label="표시">
+              <div className="flex flex-wrap items-center gap-1">
+                <button
+                  type="button"
+                  aria-pressed={form.urgent}
+                  aria-label={`긴급 ${form.urgent ? "끄기" : "켜기"}`}
+                  onClick={() => patch("urgent", !form.urgent)}
+                  className={cn(
+                    "rounded-full border px-2.5 py-[3px] text-[calc(13.5px*var(--fs))] leading-5 transition",
+                    form.urgent ? "border-rose-300 bg-rose-50 text-rose-600" : "border-paper-300 bg-white text-ink-400 hover:border-ink-400",
+                  )}
+                >
+                  긴급
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={form.important}
+                  aria-label={`중요 ${form.important ? "끄기" : "켜기"}`}
+                  onClick={() => patch("important", !form.important)}
+                  className={cn(
+                    "rounded-full border px-2.5 py-[3px] text-[calc(13.5px*var(--fs))] leading-5 transition",
+                    form.important ? "border-ink-900 bg-ink-900 text-paper-50" : "border-paper-300 bg-white text-ink-400 hover:border-ink-400",
+                  )}
+                >
+                  중요
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={weeklyMust}
+                  aria-label={`이번 주 꼭 ${weeklyMust ? "끄기" : "켜기"}`}
+                  title="이번 주 꼭 — 긴급과 중요를 함께 켭니다"
+                  onClick={() => {
+                    patch("urgent", !weeklyMust);
+                    patch("important", !weeklyMust);
+                  }}
+                  className={cn(
+                    "inline-flex h-[26px] items-center gap-1 rounded-full border px-2 text-[calc(13px*var(--fs))] transition",
+                    weeklyMust ? "border-amber-300 bg-amber-50 text-amber-700" : "border-paper-300 bg-white text-ink-400 hover:border-ink-400",
+                  )}
+                >
+                  <StarIcon size={12} filled={weeklyMust} className={weeklyMust ? "text-amber-400" : undefined} />
+                  이번 주 꼭
+                </button>
+              </div>
+            </FieldRow>
+          )}
+          <ToggleRow checked={form.hidden} onChange={(value) => patch("hidden", value)} label="NOW 숨김" description="NOW 화면과 기본 보기에서 감춥니다" />
+          <ToggleRow checked={form.history} onChange={(value) => patch("history", value)} label="History" description="끝난 기록으로 옮겨 목록에서 감춥니다" />
+        </MoreOptions>
 
         <ErrorNote message={error} />
       </div>

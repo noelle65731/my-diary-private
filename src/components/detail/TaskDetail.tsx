@@ -1,22 +1,28 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useData } from "@/state/store";
 import {
   DetailSection,
   DetailShell,
   EmptyEditable,
+  FieldRow,
   InlineChoice,
   InlineFlags,
   InlineStatus,
   InlineText,
+  InlineTitle,
+  MoreOptions,
+  SaveState,
+  ToggleRow,
   useCommitOnLeave,
   useDetailDraft,
+  type SavePhase,
 } from "@/components/common/detail";
 import { InlineMemo } from "@/components/editors/MemoField";
 import { ProjectPicker } from "@/components/editors/shared";
 import { editableMemo, plainOfSpans, spansFromMarkdown } from "@/lib/richtext";
-import { addDaysISO, formatFullKo, formatShort, formatTimeKo, todayISO, weekdayKo } from "@/lib/date";
+import { addDaysISO, formatShort, formatTimeKo, todayISO, weekdayKo } from "@/lib/date";
 import {
   TASK_STATUSES,
   type ExtraProperty,
@@ -31,6 +37,7 @@ import { ProjectIconPicker } from "@/components/common/ProjectIcon";
 import { cn, notionPageUrl } from "@/lib/utils";
 import { useSettings } from "@/state/settings";
 import { useCategoryOptions } from "@/state/categories";
+import { StarIcon } from "@/components/icons";
 
 interface TaskForm {
   title: string;
@@ -147,7 +154,7 @@ function statusPill(status: TaskStatus): string {
   if (status === "대기 중") return "border-amber-300 bg-amber-100 text-amber-800 hover:bg-amber-100";
   if (status === "취소") return "border-rose-200 bg-rose-50 text-rose-600 hover:bg-rose-50";
   if (status === "완료") return "border-sage-400 bg-sage-400 text-white hover:bg-sage-400";
-  return "border-ink-900 bg-ink-900 text-paper-50 hover:bg-ink-800";
+  return "border-ink-700 bg-white text-ink-800 hover:bg-paper-100";
 }
 
 /**
@@ -203,6 +210,7 @@ function TaskDetailInner({
   const [schema, setSchema] = useState<SchemaMap>({});
   const { draft, set, markSaved, reset, changedKeys, isDirty } = useDetailDraft(formFromTask(task));
   const [field, setField] = useState<string | null>(null);
+  const [phase, setPhase] = useState<SavePhase>("idle");
 
   const [bodyText, setBodyText] = useState<string | null>(null);
   const [bodySaved, setBodySaved] = useState("");
@@ -265,6 +273,7 @@ function TaskDetailInner({
     invalid: invalidField,
     onInvalid: () => setField(invalidField ?? "title"),
     commit,
+    onPhase: setPhase,
   });
 
   useEffect(() => {
@@ -290,103 +299,130 @@ function TaskDetailInner({
       date: todayISO(),
     });
     if (!created) return null;
-    setSchema((current) => current);
     return created.id;
   };
   /** A10: a project itself carries no 대기/긴급/중요 — only its tasks do. */
   const isProject = draft.kind === "프로젝트";
   const statusOptions = isProject ? TASK_STATUSES.filter((status) => status !== "대기 중") : TASK_STATUSES;
+  /** A29: 할 일의 `이번 주 꼭` 은 긴급·중요를 함께 켠 표시입니다. */
+  const weeklyMust = draft.urgent && draft.important;
+
+  const badges = [
+    draft.urgent || draft.important ? [draft.urgent ? "긴급" : "", draft.important ? "중요" : ""].filter(Boolean).join("·") : null,
+    draft.hidden ? "숨김" : null,
+    draft.history ? "History" : null,
+    draft.extra.length > 0 ? `추가 속성 ${draft.extra.length}` : null,
+    isProject ? "프로젝트" : null,
+  ].filter((badge): badge is string => !!badge);
 
   return (
     <DetailShell
       open
       onBack={() => leave(onBack)}
       onClose={() => leave(onCloseAll)}
-      label={`${task.kind} · ${draft.category}`}
-      subtitle={project ? project.title : task.kind === "할 일" ? "index" : undefined}
+      label={isProject ? "프로젝트" : "할 일"}
+      ariaLabel={`${task.kind} · ${draft.category}`}
+      subtitle={project ? project.title : undefined}
       notionUrl={notionPageUrl(task)}
       sideBySide={sideBySide}
-      footer={
-        <>
-          <div className="flex items-center gap-1">
-            {task.trash ? (
-              <button type="button" onClick={() => void update("projects", task.id, { trash: false })} className="btn-outline btn-xs">
-                휴지통에서 복원
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => {
-                  void remove("projects", task.id);
-                  onCloseAll();
-                }}
-                className="btn-ghost btn-xs text-rose-500 hover:bg-rose-50"
-              >
-                삭제
-              </button>
-            )}
-          </div>
-          <span className="text-[calc(13.5px*var(--fs))] text-ink-400">
-            {invalidField ? (
-              <span className="text-rose-500">필수값을 입력해 주세요</span>
-            ) : isDirty || bodyDirty ? (
-              "바뀐 값은 자동으로 저장됩니다"
-            ) : (
-              "변경 없음"
-            )}
-          </span>
-        </>
+      status={
+        <SaveState
+          dirty={isDirty || bodyDirty}
+          saving={phase === "saving"}
+          saved={phase === "saved"}
+          error={invalidField === "title" && field !== "title" ? "제목을 입력해 주세요" : null}
+        />
       }
+      trashed={task.trash}
+      onRestore={() => void update("projects", task.id, { trash: false })}
+      onTrash={() => {
+        void remove("projects", task.id);
+        onCloseAll();
+      }}
     >
-      <div className="space-y-1">
-        <InlineText
-          label="제목"
-          required
-          invalid={invalidField === "title"}
+      <div className="pt-1">
+        <InlineTitle
           value={draft.title}
           onChange={(value) => set("title", value)}
           active={field === "title"}
           onActivate={() => setField("title")}
           onDone={() => setField(null)}
-          placeholder="제목 없음"
-          inputClassName="text-[calc(16px*var(--fs))] font-medium"
-          valueClassName="border-none px-0 text-[calc(22px*var(--fs))] font-semibold tracking-tight text-ink-900"
+          invalid={invalidField === "title"}
+          placeholder={isProject ? "프로젝트 이름" : "제목 없음"}
         />
+      </div>
 
-        {isProject ? (
-          <div className="pt-1">
-            <ProjectIconPicker
-              value={draft.icon}
-              onChange={(next) => set("icon", next)}
-              seed={task.id}
-              category={draft.category}
-            />
-          </div>
-        ) : null}
+      {isProject ? (
+        <div className="mt-1">
+          <ProjectIconPicker
+            value={draft.icon}
+            onChange={(next) => set("icon", next)}
+            seed={task.id}
+            category={draft.category}
+          />
+        </div>
+      ) : null}
 
-        <div className="flex flex-wrap items-center gap-2 pt-1">
-          <InlineStatus
-            value={draft.status}
-            options={statusOptions}
-            toneOf={statusPill}
-            onChange={(value) => {
-              set("status", value);
-              setField(null);
+      {/* 상태 — 한 번 눌러 바꿉니다. 대기 중이면 기다리는 내용이 바로 아래에 붙습니다. */}
+      <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+        <InlineStatus
+          value={draft.status}
+          options={statusOptions}
+          toneOf={statusPill}
+          onChange={(value) => {
+            set("status", value);
+            setField(null);
+          }}
+        />
+      </div>
+
+      {!isProject ? (
+        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+          <InlineFlags
+            flags={[
+              { key: "urgent", label: "긴급", on: draft.urgent },
+              { key: "important", label: "중요", on: draft.important },
+            ]}
+            onToggle={(key) => {
+              if (key === "urgent") set("urgent", !draft.urgent);
+              if (key === "important") set("important", !draft.important);
             }}
           />
-          <span className="text-[calc(14px*var(--fs))] text-ink-400">
-            {formatShort(draft.date || task.createdAt.slice(0, 10) || todayISO())}
-            {draft.date ? ` ${weekdayKo(draft.date)}` : ""}
-            {draft.timed && draft.date
-              ? ` · ${formatTimeKo(draft.startTime)}${draft.endTime ? `–${formatTimeKo(draft.endTime)}` : ""}`
-              : ""}
-          </span>
+          <button
+            type="button"
+            aria-pressed={weeklyMust}
+            aria-label={`이번 주 꼭 ${weeklyMust ? "끄기" : "켜기"}`}
+            title="이번 주 꼭 — 긴급과 중요를 함께 켭니다. 주간 화면 위쪽에 고정됩니다."
+            onClick={() => {
+              set("urgent", !weeklyMust);
+              set("important", !weeklyMust);
+            }}
+            className={cn(
+              "inline-flex h-[26px] items-center gap-1 rounded-full border px-2 text-[calc(13.5px*var(--fs))] transition",
+              weeklyMust
+                ? "border-amber-300 bg-amber-50 text-amber-700"
+                : "border-paper-300 bg-white text-ink-400 hover:border-ink-400 hover:text-ink-700",
+            )}
+          >
+            <StarIcon size={13} filled={weeklyMust} className={weeklyMust ? "text-amber-400" : undefined} />
+            이번 주 꼭
+          </button>
         </div>
+      ) : null}
 
-        {draft.status === "대기 중" && !isProject ? (
-          <div className="mt-1 grid gap-2 rounded-xl border border-amber-200 bg-amber-50/60 px-2.5 py-1.5 sm:grid-cols-2">
+      {draft.status === "대기 중" && !isProject ? (
+        <DetailSection
+          title={
+            <span className="flex items-center gap-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+              기다리는 중
+            </span>
+          }
+        >
+          <FieldRow label="대기 대상">
             <InlineText
               label="대기 대상"
+              bare
               value={draft.waitFor}
               onChange={(value) => set("waitFor", value)}
               active={field === "waitFor"}
@@ -394,8 +430,11 @@ function TaskDetailInner({
               onDone={() => setField(null)}
               placeholder="누구·무엇을 기다리는지"
             />
+          </FieldRow>
+          <FieldRow label="대기 내용">
             <InlineText
               label="대기 내용"
+              bare
               value={draft.waitNote}
               onChange={(value) => set("waitNote", value)}
               active={field === "waitNote"}
@@ -403,138 +442,111 @@ function TaskDetailInner({
               onDone={() => setField(null)}
               placeholder="다음에 할 일"
             />
-            <div className="sm:col-span-2">
-              <p className="text-[calc(13.5px*var(--fs))] text-ink-400">재확인 일정 (원할 때만)</p>
-              <div className="mt-1 flex flex-wrap items-center gap-1.5">
-                <InlineText
-                  label="확인일"
-                  type="date"
-                  value={draft.checkedAt}
-                  onChange={(value) => set("checkedAt", value)}
-                  active={field === "checkedAt"}
-                  onActivate={() => setField("checkedAt")}
-                  onDone={() => setField(null)}
-                  display={draft.checkedAt ? formatFullKo(draft.checkedAt) : undefined}
-                  placeholder="확인일 없음"
-                />
-                <button type="button" onClick={() => set("checkedAt", addDaysISO(todayISO(), 3))} className="btn-outline btn-xs">
-                  3일 뒤
-                </button>
-                <button type="button" onClick={() => set("checkedAt", addDaysISO(todayISO(), 7))} className="btn-outline btn-xs">
-                  1주 뒤
-                </button>
-                {draft.checkedAt ? (
-                  <button type="button" onClick={() => set("checkedAt", "")} className="btn-ghost btn-xs">
-                    지우기
-                  </button>
-                ) : null}
-              </div>
-            </div>
-          </div>
-        ) : null}
-
-        {draft.status === "취소" ? (
-          <div className="mt-1 rounded-xl border border-paper-300 bg-paper-50/70 px-2.5 py-1.5">
-            <InlineText
-              label="취소 사유"
-              value={draft.cancelReason}
-              onChange={(value) => set("cancelReason", value)}
-              active={field === "cancelReason"}
-              onActivate={() => setField("cancelReason")}
-              onDone={() => setField(null)}
-              placeholder="왜 취소되었나요?"
-            />
-            <div className="mt-1 flex flex-wrap gap-1">
-              {["일정 변경", "필요 없어짐", "다른 일 우선", "외부 사정"].map((reason) => (
-                <button
-                  key={reason}
-                  type="button"
-                  onClick={() => set("cancelReason", reason)}
-                  className={cn(
-                    "chip border",
-                    draft.cancelReason === reason ? "border-ink-900 bg-ink-900 text-paper-50" : "border-paper-400 bg-white/70 text-ink-500",
-                  )}
-                >
-                  {reason}
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : null}
-
-        {/* A16: 연결된 프로젝트를 설정 영역의 맨 위에 둡니다. */}
-        <DetailSection title="연결 프로젝트">
-          <ProjectPicker
-            projects={data.projects.filter((item) => item.kind === "프로젝트" && !item.trash && item.id !== task.id)}
-            value={draft.projectIds}
-            onChange={(ids) => set("projectIds", ids)}
-            onCreate={createProject}
-          />
-        </DetailSection>
-
-        <DetailSection title="일정">
-          {/* A16: 분류·유형을 날짜보다 위에 둡니다. */}
-          <div className="grid gap-2 sm:grid-cols-2">
-            <InlineChoice label="유형" value={draft.kind} options={["할 일", "프로젝트"]} onChange={(value) => set("kind", value)} />
-            <InlineChoice<string>
-              label="분류"
-              value={draft.category}
-              options={categories}
-              onChange={(value) => set("category", value as TaskCategory)}
-              onCreate={(name) => addCategory(name)}
-            />
-          </div>
-          <div className="mt-1 grid gap-2 sm:grid-cols-2">
-            <InlineText
-              label="날짜"
-              type="date"
-              value={draft.date}
-              onChange={(value) => set("date", value)}
-              active={field === "date"}
-              onActivate={() => setField("date")}
-              onDone={() => setField(null)}
-              display={draft.date ? `${formatShort(draft.date)} ${weekdayKo(draft.date)}` : undefined}
-              placeholder="날짜 없음"
-              onClear={() => set("date", "")}
-            />
-            <InlineText
-              label="마감일"
-              type="date"
-              value={draft.due}
-              onChange={(value) => set("due", value)}
-              active={field === "due"}
-              onActivate={() => setField("due")}
-              onDone={() => setField(null)}
-              display={draft.due ? `${formatShort(draft.due)} ${weekdayKo(draft.due)}` : undefined}
-              placeholder="마감일 없음"
-              onClear={() => set("due", "")}
-            />
-          </div>
-          {/* 시간 지정 — off (the default) saves the day alone; on adds 시작 · 종료 시간. */}
-          <div className="mt-1 grid gap-2 sm:grid-cols-3">
-            <div>
-              <p className="text-[0.64rem] text-ink-400">시간</p>
-              <button
-                type="button"
-                aria-pressed={draft.timed}
-                aria-label={draft.timed ? "시간 지정 끄기" : "시간 지정 켜기"}
-                onClick={() => {
-                  set("timed", !draft.timed);
-                  if (!draft.timed && !draft.date) set("date", todayISO());
-                }}
-                className={
-                  draft.timed
-                    ? "mt-0.5 rounded-full border border-ink-900 bg-ink-900 px-3 py-1 text-[0.8rem] text-paper-50"
-                    : "mt-0.5 rounded-full border border-paper-400 bg-white px-3 py-1 text-[0.8rem] text-ink-600"
-                }
-              >
-                시간 지정
+          </FieldRow>
+          <FieldRow label="확인일">
+            <div className="flex flex-wrap items-center gap-1">
+              <InlineText
+                label="확인일"
+                bare
+                type="date"
+                value={draft.checkedAt}
+                onChange={(value) => set("checkedAt", value)}
+                active={field === "checkedAt"}
+                onActivate={() => setField("checkedAt")}
+                onDone={() => setField(null)}
+                display={draft.checkedAt ? `${formatShort(draft.checkedAt)} ${weekdayKo(draft.checkedAt)}` : undefined}
+                placeholder="확인일 없음"
+              />
+              <button type="button" onClick={() => set("checkedAt", addDaysISO(todayISO(), 3))} className="btn-outline btn-xs">
+                3일 뒤
               </button>
+              <button type="button" onClick={() => set("checkedAt", addDaysISO(todayISO(), 7))} className="btn-outline btn-xs">
+                1주 뒤
+              </button>
+              {draft.checkedAt ? (
+                <button type="button" onClick={() => set("checkedAt", "")} className="btn-ghost btn-xs">
+                  지우기
+                </button>
+              ) : null}
             </div>
+          </FieldRow>
+        </DetailSection>
+      ) : null}
+
+      {draft.status === "취소" ? (
+        <DetailSection title="취소 사유">
+          <InlineText
+            label="취소 사유"
+            bare
+            value={draft.cancelReason}
+            onChange={(value) => set("cancelReason", value)}
+            active={field === "cancelReason"}
+            onActivate={() => setField("cancelReason")}
+            onDone={() => setField(null)}
+            placeholder="왜 취소되었나요? (선택)"
+          />
+          <div className="mt-1 flex flex-wrap gap-1">
+            {["일정 변경", "필요 없어짐", "다른 일 우선", "외부 사정"].map((reason) => (
+              <button
+                key={reason}
+                type="button"
+                onClick={() => set("cancelReason", reason)}
+                className={cn(
+                  "rounded-full border px-2 py-[2px] text-[calc(13px*var(--fs))] transition",
+                  draft.cancelReason === reason
+                    ? "border-ink-900 bg-ink-900 text-paper-50"
+                    : "border-paper-300 bg-white text-ink-400 hover:border-ink-400",
+                )}
+              >
+                {reason}
+              </button>
+            ))}
+          </div>
+        </DetailSection>
+      ) : null}
+
+      <DetailSection title="일정" className="mt-3">
+        <FieldRow label="날짜">
+          <InlineText
+            label="날짜"
+            bare
+            type="date"
+            value={draft.date}
+            onChange={(value) => set("date", value)}
+            active={field === "date"}
+            onActivate={() => setField("date")}
+            onDone={() => setField(null)}
+            display={draft.date ? `${formatShort(draft.date)} ${weekdayKo(draft.date)}` : undefined}
+            placeholder="날짜 없음"
+            onClear={() => set("date", "")}
+          />
+        </FieldRow>
+
+        {/* 시간 지정 — off (the default) saves the day alone; on adds 시작 · 종료 시간. */}
+        <FieldRow label="시간">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              aria-pressed={draft.timed}
+              aria-label={draft.timed ? "시간 지정 끄기" : "시간 지정 켜기"}
+              onClick={() => {
+                set("timed", !draft.timed);
+                if (!draft.timed && !draft.date) set("date", todayISO());
+              }}
+              className={cn(
+                "rounded-full border px-2.5 py-[3px] text-[calc(13.5px*var(--fs))] leading-5 transition",
+                draft.timed
+                  ? "border-ink-900 bg-ink-900 text-paper-50"
+                  : "border-paper-300 bg-white text-ink-400 hover:border-ink-400 hover:text-ink-700",
+              )}
+            >
+              시간 지정
+            </button>
             {draft.timed ? (
-              <>
+              <span className="flex flex-nowrap items-center gap-0.5">
                 <InlineText
                   label="시작"
+                  bare
                   type="time"
                   value={draft.startTime}
                   onChange={(value) => set("startTime", value)}
@@ -542,9 +554,12 @@ function TaskDetailInner({
                   onActivate={() => setField("startTime")}
                   onDone={() => setField(null)}
                   display={formatTimeKo(draft.startTime)}
+                  nowrap
                 />
+                <span className="px-0.5 text-[calc(13.5px*var(--fs))] text-ink-300">–</span>
                 <InlineText
                   label="종료"
+                  bare
                   type="time"
                   value={draft.endTime}
                   onChange={(value) => set("endTime", value)}
@@ -552,103 +567,145 @@ function TaskDetailInner({
                   onActivate={() => setField("endTime")}
                   onDone={() => setField(null)}
                   display={draft.endTime ? formatTimeKo(draft.endTime) : undefined}
-                  placeholder="종료 시각 없음"
-                  hint="종료는 시작보다 늦게 적습니다. 비우면 시작 시각만 저장됩니다."
+                  placeholder="종료"
+                  nowrap
                 />
-              </>
-            ) : null}
+              </span>
+            ) : (
+              <span className="text-[calc(12.5px*var(--fs))] text-ink-300">하루 종일</span>
+            )}
           </div>
+        </FieldRow>
 
-        </DetailSection>
-
-        <DetailSection title="기타">
-          <InlineMemo
-            label="기타"
-            value={draft.memo}
-            onChange={(value) => set("memo", value)}
-            active={field === "memo"}
-            onActivate={() => setField("memo")}
+        <FieldRow label="마감일">
+          <InlineText
+            label="마감일"
+            bare
+            type="date"
+            value={draft.due}
+            onChange={(value) => set("due", value)}
+            active={field === "due"}
+            onActivate={() => setField("due")}
             onDone={() => setField(null)}
-            showLabel={false}
-            placeholder="눌러서 메모·링크·두 줄 메모를 적기"
+            display={draft.due ? `${formatShort(draft.due)} ${weekdayKo(draft.due)}` : undefined}
+            placeholder="없음"
+            onClear={() => set("due", "")}
+          />
+        </FieldRow>
+
+        <FieldRow label="분류">
+          <InlineChoice<string>
+            label="분류"
+            bare
+            value={draft.category}
+            options={categories}
+            onChange={(value) => set("category", value as TaskCategory)}
+            onCreate={(name) => addCategory(name)}
+          />
+        </FieldRow>
+      </DetailSection>
+
+      {!isProject ? (
+        <DetailSection title="프로젝트">
+          <ProjectPicker
+            projects={data.projects.filter((item) => item.kind === "프로젝트" && !item.trash && item.id !== task.id)}
+            value={draft.projectIds}
+            onChange={(ids) => set("projectIds", ids)}
+            onCreate={createProject}
           />
         </DetailSection>
+      ) : null}
 
-        <DetailSection
-          title="내용 (Notion 페이지 본문)"
-          action={
-            bodyText === null ? (
-              <span className="text-[calc(13.5px*var(--fs))] text-ink-300">불러오는 중…</span>
-            ) : bodyEditing ? (
-              <button type="button" onClick={() => setBodyEditing(false)} aria-label="내용 입력 마침" className="text-[calc(13.5px*var(--fs))] text-ink-500 hover:text-ink-800">
-                입력 마침
-              </button>
-            ) : null
-          }
-        >
-          {bodyText === null ? (
-            <p className="rounded-lg bg-paper-100/60 px-2 py-2 text-[calc(15px*var(--fs))] text-ink-400">페이지 본문을 불러오는 중입니다.</p>
+      <DetailSection
+        title="내용"
+        action={
+          bodyText === null ? (
+            <span className="text-[calc(12.5px*var(--fs))] text-ink-300">불러오는 중…</span>
           ) : bodyEditing ? (
-            <div>
-              <textarea
-                autoFocus
-                value={bodyText}
-                onChange={(event) => setBodyText(event.target.value)}
-                rows={5}
-                aria-label="내용 입력"
-                placeholder="페이지 본문에 적을 내용"
-                className="input min-h-[110px] resize-y leading-relaxed"
-              />
-              <p className="mt-1 text-[calc(13.5px*var(--fs))] text-ink-400">
-                문단만 바뀌고 토글·목록 같은 다른 블록은 그대로 남습니다.
-                {preserved.length > 0 ? ` (보존: ${preserved.slice(0, 3).join(", ")})` : ""}
-              </p>
-            </div>
-          ) : bodyText.trim() ? (
             <button
               type="button"
-              onClick={() => setBodyEditing(true)}
-              aria-label="내용 수정"
-              className="w-full whitespace-pre-wrap rounded-lg border-b border-dashed border-paper-300 px-1 py-1.5 text-left text-[calc(15px*var(--fs))] leading-relaxed text-ink-700 transition hover:border-ink-400 hover:bg-paper-100/60"
+              onClick={() => setBodyEditing(false)}
+              aria-label="내용 입력 마침"
+              className="text-[calc(12.5px*var(--fs))] text-ink-500 hover:text-ink-800"
             >
-              {bodyText}
+              입력 마침
             </button>
-          ) : (
-            <EmptyEditable
-              label="눌러서 내용을 적기"
-              hint={demo ? "미리보기에서는 이 브라우저 안에만 남습니다." : "Notion 페이지 본문에 저장됩니다."}
-              onClick={() => setBodyEditing(true)}
+          ) : null
+        }
+      >
+        {bodyText === null ? (
+          <p className="py-1 text-[calc(14px*var(--fs))] text-ink-300">페이지 본문을 불러오는 중입니다.</p>
+        ) : bodyEditing ? (
+          <div>
+            <textarea
+              autoFocus
+              value={bodyText}
+              onChange={(event) => setBodyText(event.target.value)}
+              rows={5}
+              aria-label="내용 입력"
+              placeholder="페이지 본문에 적을 내용"
+              className="input min-h-[110px] resize-y leading-relaxed"
             />
-          )}
-        </DetailSection>
-
-        {draft.extra.length > 0 ? (
-          <DetailSection title="추가 속성 (Notion)">
-            <DynamicProperties extra={draft.extra} schema={schema} onChange={(next) => set("extra", next)} />
-          </DetailSection>
-        ) : null}
-
-        <DetailSection title="표시">
-          <InlineFlags
-            flags={
-              isProject
-                ? []
-                : [
-                    { key: "urgent", label: "긴급", on: draft.urgent },
-                    { key: "important", label: "중요", on: draft.important },
-                  ]
-            }
-            onToggle={(key) => {
-              if (key === "urgent") set("urgent", !draft.urgent);
-              if (key === "important") set("important", !draft.important);
-            }}
+            <p className="mt-1 text-[calc(12.5px*var(--fs))] text-ink-400">
+              문단만 바뀌고 토글·목록 같은 다른 블록은 그대로 남습니다.
+              {preserved.length > 0 ? ` (보존: ${preserved.slice(0, 3).join(", ")})` : ""}
+            </p>
+          </div>
+        ) : bodyText.trim() ? (
+          <button
+            type="button"
+            onClick={() => setBodyEditing(true)}
+            aria-label="내용 수정"
+            className="w-full whitespace-pre-wrap rounded-lg px-1 py-1 text-left text-[calc(14.5px*var(--fs))] leading-relaxed text-ink-700 transition hover:bg-paper-100"
+          >
+            {bodyText}
+          </button>
+        ) : (
+          <EmptyEditable
+            label="눌러서 내용을 적기"
+            hint={demo ? "미리보기에서는 이 브라우저 안에만 남습니다." : "Notion 페이지 본문에 저장됩니다."}
+            onClick={() => setBodyEditing(true)}
           />
-        </DetailSection>
+        )}
+      </DetailSection>
 
-        <p className="pt-1 text-[calc(13px*var(--fs))] text-ink-300">
-          이전·바깥 클릭은 한 단계, X는 전체 닫기입니다. 바뀐 값이 없으면 저장하지 않습니다.
-        </p>
-      </div>
+      <DetailSection title="메모">
+        <InlineMemo
+          label="메모"
+          value={draft.memo}
+          onChange={(value) => set("memo", value)}
+          active={field === "memo"}
+          onActivate={() => setField("memo")}
+          onDone={() => setField(null)}
+          showLabel={false}
+          placeholder="눌러서 메모 · 링크 적기"
+        />
+      </DetailSection>
+
+      {/* 자주 쓰지 않는 설정 — 기본은 접힘, 켜 둔 값은 배지로 보입니다. */}
+      <MoreOptions badges={badges}>
+        <FieldRow label="유형">
+          <InlineChoice label="유형" bare value={draft.kind} options={["할 일", "프로젝트"]} onChange={(value) => set("kind", value)} />
+        </FieldRow>
+        <ToggleRow
+          checked={draft.hidden}
+          onChange={(value) => set("hidden", value)}
+          label="NOW 숨김"
+          description="NOW 화면과 기본 보기에서 감춥니다"
+        />
+        <ToggleRow
+          checked={draft.history}
+          onChange={(value) => set("history", value)}
+          label="History"
+          description="끝난 기록으로 옮겨 목록에서 감춥니다"
+        />
+        {draft.extra.length > 0 ? (
+          <div className="pt-1.5">
+            <p className="mb-1 text-[calc(13px*var(--fs))] text-ink-400">추가 속성 (Notion)</p>
+            <DynamicProperties extra={draft.extra} schema={schema} onChange={(next) => set("extra", next)} />
+          </div>
+        ) : null}
+      </MoreOptions>
     </DetailShell>
   );
 }

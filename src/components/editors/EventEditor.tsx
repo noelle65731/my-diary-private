@@ -2,14 +2,15 @@
 
 import { useRef, useState } from "react";
 import { useData } from "@/state/store";
-import { Modal, Segmented, TextInput, Toggle } from "@/components/common/primitives";
+import { Modal, Segmented, TextInput } from "@/components/common/primitives";
 import { EditorFooter, ErrorNote, ProjectPicker } from "@/components/editors/shared";
 import { MemoEditor } from "@/components/editors/MemoField";
+import { FieldRow, InlineChoice, MoreOptions, ToggleRow } from "@/components/common/detail";
 import { plainOfSpans, spansFromMarkdown } from "@/lib/richtext";
-import { CalendarIcon, StarIcon } from "@/components/icons";
 import { EVENT_COLORS, type EventColorKey } from "@/components/common/event-colors";
 import { useEventColors } from "@/state/event-colors";
-import { addDaysISO, memoTitle, startOfWeekISO, todayISO, weekKeyOf } from "@/lib/date";
+import { useCategoryOptions } from "@/state/categories";
+import { addDaysISO, formatShort, memoTitle, startOfWeekISO, todayISO, weekKeyOf, weekdayKo } from "@/lib/date";
 import { cn } from "@/lib/utils";
 import { type CalendarCategory, type CalendarEvent, type CalendarKind, currentCalendarCategory } from "@/lib/types";
 
@@ -117,6 +118,7 @@ function EventEditorInner({
   const { data, create, update, remove } = useData();
   const existing = eventId ? data.calendar.find((item) => item.id === eventId) ?? null : null;
   const { colorOf, setColor } = useEventColors();
+  const categories = useCategoryOptions();
   /** A16: what the window opened with, so closing saves only when something changed. */
   const initialForm = useRef<FormState | null>(null);
   if (initialForm.current === null) {
@@ -221,12 +223,20 @@ function EventEditorInner({
     })();
   };
 
+  const badges = [
+    form.favorite ? "이번 주 꼭" : null,
+    form.done ? "완료" : null,
+    form.hidden ? "숨김" : null,
+    form.canceled ? "취소" : null,
+    multiDayDraft ? "여러 날" : null,
+  ].filter((badge): badge is string => !!badge);
+
   return (
     <Modal
       open
       onClose={closeWithSave}
       title={existing ? "일정 수정" : form.kind === "일정" ? "새 일정" : `${form.kind} 추가`}
-      subtitle={form.date}
+      subtitle={form.date ? `${formatShort(form.date)} ${weekdayKo(form.date)}요일` : undefined}
       size="md"
       footer={
         <EditorFooter
@@ -239,7 +249,7 @@ function EventEditorInner({
         />
       }
     >
-      <div className="space-y-3.5">
+      <div>
         <TextInput
           autoFocus
           value={form.title}
@@ -248,182 +258,200 @@ function EventEditorInner({
           className="border-0 border-b border-paper-300 bg-transparent px-0 text-[calc(18px*var(--fs))] font-medium focus:ring-0"
         />
 
-        <div>
-          <p className="label">유형</p>
-          <Segmented<CalendarKind>
-            value={form.kind}
-            onChange={(value) => patch("kind", value)}
-            size="sm"
-            options={[
-              { value: "일정", label: "일정" },
-              { value: "주간 목표", label: "주간 목표" },
-              { value: "주간 메모", label: "주간 메모" },
-              { value: "월간 메모", label: "월간 메모" },
-            ]}
-          />
-        </div>
+        <div className="mt-2">
+          <FieldRow label="유형">
+            <Segmented<CalendarKind>
+              value={form.kind}
+              onChange={(value) => patch("kind", value)}
+              size="sm"
+              options={[
+                { value: "일정", label: "일정" },
+                { value: "주간 목표", label: "주간 목표" },
+                { value: "주간 메모", label: "주간 메모" },
+                { value: "월간 메모", label: "월간 메모" },
+              ]}
+            />
+          </FieldRow>
 
-        {form.kind === "일정" ? (
-          <div>
-            <p className="label">색</p>
-            <div className="flex flex-wrap items-center gap-1.5">
-              {EVENT_COLORS.map((choice) => (
-                <button
-                  key={choice.key}
-                  type="button"
-                  data-event-color={choice.key}
-                  aria-pressed={form.color === choice.key}
-                  aria-label={choice.label}
-                  title={choice.label}
-                  onClick={() => patch("color", choice.key)}
-                  className={cn(
-                    "h-7 w-7 rounded-full border border-black/5 transition",
-                    choice.swatch,
-                    form.color === choice.key ? "ring-2 ring-ink-900 ring-offset-2" : "hover:brightness-[0.97]",
-                  )}
-                />
-              ))}
-              <span className="ml-1 text-[calc(13.5px*var(--fs))] text-ink-400">
-                {EVENT_COLORS.find((choice) => choice.key === form.color)?.label ?? "기본"}
-              </span>
-            </div>
-            <p className="mt-1 text-[calc(13px*var(--fs))] text-ink-400">노션 색 그대로 · 이 브라우저에 저장되고 분류 색보다 먼저 보입니다.</p>
-          </div>
-        ) : null}
-
-        <div className="grid grid-cols-2 gap-3">
-          <label className="block">
-            <span className="label">날짜</span>
+          <FieldRow label="날짜">
             <input
               type="date"
+              aria-label="날짜"
               value={form.date}
               onChange={(event) => patch("date", event.target.value)}
-              className="input"
+              className="input h-9 w-[10.5rem] py-1"
             />
-          </label>
+          </FieldRow>
+
           {form.kind === "일정" ? (
-            <label className="block">
-              <span className="label">종료 날짜</span>
-              <input
-                type="date"
-                aria-label="종료 날짜"
-                value={form.endDate}
-                min={form.date}
-                onChange={(event) => patch("endDate", event.target.value)}
-                className="input"
-              />
-              <span className="mt-1 block text-[calc(13.5px*var(--fs))] text-ink-400">여러 날이면 종료 날짜를 넣어 주세요.</span>
-              {multiDayDraft ? (
-                <div className="mt-2">
-                  <span className="text-[calc(13.5px*var(--fs))] text-ink-400">저장 방식</span>
-                  <div className="mt-1 flex gap-1.5">
-                    {([
-                      { value: "days", label: "날짜마다" },
-                      { value: "range", label: "기간" },
-                    ] as const).map((option) => (
-                      <button
-                        key={option.value}
-                        type="button"
-                        onClick={() => setMultiMode(option.value)}
-                        aria-pressed={multiMode === option.value}
-                        className={cn(
-                          "chip border transition",
-                          multiMode === option.value
-                            ? "border-ink-900 bg-ink-900 text-paper-50"
-                            : "border-paper-400 bg-white/60 text-ink-600 hover:border-ink-400",
-                        )}
-                      >
-                        {option.label}
-                      </button>
-                    ))}
+            <>
+              <FieldRow label="시간" align="start">
+                <div className="space-y-1.5 pt-[3px]">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <button
+                      type="button"
+                      aria-pressed={form.allDay}
+                      onClick={() => patch("allDay", true)}
+                      className={cn(
+                        "rounded-full border px-2.5 py-[3px] text-[calc(13.5px*var(--fs))] leading-5 transition",
+                        form.allDay ? "border-ink-900 bg-ink-900 text-paper-50" : "border-paper-300 bg-white text-ink-400 hover:border-ink-400",
+                      )}
+                    >
+                      종일
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={!form.allDay}
+                      onClick={() => patch("allDay", false)}
+                      className={cn(
+                        "rounded-full border px-2.5 py-[3px] text-[calc(13.5px*var(--fs))] leading-5 transition",
+                        !form.allDay ? "border-ink-900 bg-ink-900 text-paper-50" : "border-paper-300 bg-white text-ink-400 hover:border-ink-400",
+                      )}
+                    >
+                      시간 지정
+                    </button>
                   </div>
-                  <span className="mt-1 block text-[calc(13.5px*var(--fs))] text-ink-400">
-                    {multiMode === "days" ? "하루씩 따로 저장됩니다." : "하나의 일정으로 이어집니다."}
-                  </span>
+                  {form.allDay ? null : (
+                    <div className="grid grid-cols-2 gap-2">
+                      <label className="block">
+                        <span className="label">시작 시각</span>
+                        <input
+                          type="time"
+                          value={form.startTime}
+                          onChange={(event) => patch("startTime", event.target.value)}
+                          className="input h-9 py-1"
+                        />
+                      </label>
+                      <label className="block">
+                        <span className="label">종료 시각</span>
+                        <input
+                          type="time"
+                          value={form.endTime}
+                          onChange={(event) => patch("endTime", event.target.value)}
+                          className="input h-9 py-1"
+                        />
+                      </label>
+                    </div>
+                  )}
                 </div>
-              ) : null}
-            </label>
-          ) : (
-            <div className="flex items-end pb-2 text-[calc(14px*var(--fs))] text-ink-400">주간 키에 자동으로 묶입니다</div>
-          )}
+              </FieldRow>
+
+              <FieldRow label="종료 날짜" align="start">
+                <div className="space-y-1 pt-[3px]">
+                  <input
+                    type="date"
+                    aria-label="종료 날짜"
+                    value={form.endDate}
+                    min={form.date}
+                    onChange={(event) => patch("endDate", event.target.value)}
+                    className="input h-9 w-[10.5rem] py-1"
+                  />
+                  {multiDayDraft ? (
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {(
+                        [
+                          { value: "days", label: "날짜마다 따로" },
+                          { value: "range", label: "하나로 이어서" },
+                        ] as const
+                      ).map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => setMultiMode(option.value)}
+                          aria-pressed={multiMode === option.value}
+                          className={cn(
+                            "rounded-full border px-2 py-[2px] text-[calc(13px*var(--fs))] transition",
+                            multiMode === option.value
+                              ? "border-ink-900 bg-ink-900 text-paper-50"
+                              : "border-paper-300 bg-white text-ink-400 hover:border-ink-400",
+                          )}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-[calc(12.5px*var(--fs))] text-ink-400">비우면 하루 일정입니다.</p>
+                  )}
+                </div>
+              </FieldRow>
+            </>
+          ) : null}
+
+          <FieldRow label="분류">
+            <InlineChoice
+              label="분류"
+              bare
+              value={form.category}
+              options={categories as CalendarCategory[]}
+              onChange={(value) => patch("category", value)}
+            />
+          </FieldRow>
+
+          {form.kind === "일정" ? (
+            <FieldRow label="색">
+              <div className="flex flex-wrap items-center gap-1.5">
+                {EVENT_COLORS.map((choice) => (
+                  <button
+                    key={choice.key}
+                    type="button"
+                    data-event-color={choice.key}
+                    aria-pressed={form.color === choice.key}
+                    aria-label={choice.label}
+                    title={choice.label}
+                    onClick={() => patch("color", choice.key)}
+                    className={cn(
+                      "h-[18px] w-[18px] rounded-full border border-black/5 transition",
+                      choice.swatch,
+                      form.color === choice.key ? "ring-2 ring-ink-900 ring-offset-1" : "hover:scale-110",
+                    )}
+                  />
+                ))}
+              </div>
+            </FieldRow>
+          ) : null}
+
+          <FieldRow label="프로젝트" align="start">
+            <div className="pt-[3px]">
+              <ProjectPicker projects={projects} value={form.projectIds} onChange={(ids) => patch("projectIds", ids)} />
+            </div>
+          </FieldRow>
         </div>
 
-        {form.kind === "일정" ? (
-          <div className="flex items-center gap-2">
-            <Toggle checked={form.allDay} onChange={(value) => patch("allDay", value)} label="종일" />
-          </div>
-        ) : null}
-
-        {form.kind === "일정" && !form.allDay ? (
-          <div className="grid grid-cols-2 gap-3">
-            <label className="block">
-              <span className="label">시작 시각</span>
-              <input
-                type="time"
-                value={form.startTime}
-                onChange={(event) => patch("startTime", event.target.value)}
-                className="input"
-              />
-            </label>
-            <label className="block">
-              <span className="label">종료 시각</span>
-              <input
-                type="time"
-                value={form.endTime}
-                onChange={(event) => patch("endTime", event.target.value)}
-                className="input"
-              />
-            </label>
-          </div>
-        ) : null}
-
-        <div>
-          <p className="label">기타</p>
-          <MemoEditor value={form.memo} onChange={(value) => patch("memo", value)} rows={3} placeholder="메모 (선택)" />
+        <div className="mt-3 border-t border-paper-200 pt-2.5">
+          <p className="mb-1 text-[calc(13px*var(--fs))] text-ink-400">메모</p>
+          <MemoEditor value={form.memo} onChange={(value) => patch("memo", value)} rows={2} hint={false} placeholder="메모 (선택)" />
         </div>
 
-        <div className="rounded-xl border border-paper-300/80 bg-paper-50/60 px-3 py-1">
-          <Toggle
+        <MoreOptions badges={badges} className="mt-1">
+          <ToggleRow
             checked={form.favorite}
             onChange={(value) => patch("favorite", value)}
-            label={
-              <span className="inline-flex items-center gap-1.5">
-                <StarIcon size={14} className={form.favorite ? "text-amber-400" : "text-ink-400"} /> 이번 주 꼭
-              </span>
-            }
-            description="주간 화면 상단에 고정됩니다"
+            label="이번 주 꼭"
+            description="주간 화면 위쪽에 고정합니다"
           />
-          <Toggle checked={form.done} onChange={(value) => patch("done", value)} label="완료" />
-          <Toggle checked={form.hidden} onChange={(value) => patch("hidden", value)} label="기본 보기에서 숨김" description="기본 보기에서 감춥니다" />
-          <Toggle
-            checked={form.canceled}
-            onChange={(value) => patch("canceled", value)}
-            label="취소"
-            tone="accent"
+          <ToggleRow checked={form.done} onChange={(value) => patch("done", value)} label="완료" />
+          <ToggleRow
+            checked={form.hidden}
+            onChange={(value) => patch("hidden", value)}
+            label="NOW 숨김"
+            description="NOW 화면과 기본 보기에서 감춥니다"
           />
-        </div>
-
-        {form.canceled ? (
-          <TextInput
-            value={form.cancelReason}
-            onChange={(event) => patch("cancelReason", event.target.value)}
-            placeholder="취소 사유 (선택)"
-          />
-        ) : null}
-
-        <div>
-          <p className="label">연결 프로젝트</p>
-          <ProjectPicker projects={projects} value={form.projectIds} onChange={(ids) => patch("projectIds", ids)} />
-        </div>
+          <ToggleRow checked={form.canceled} onChange={(value) => patch("canceled", value)} label="취소로 표시" />
+          {form.canceled ? (
+            <div className="px-1 pb-1">
+              <TextInput
+                value={form.cancelReason}
+                onChange={(event) => patch("cancelReason", event.target.value)}
+                placeholder="취소 사유 (선택)"
+                aria-label="취소 사유"
+                className="h-9 py-1"
+              />
+            </div>
+          ) : null}
+        </MoreOptions>
 
         <ErrorNote message={error} />
-
-        {existing ? (
-          <p className="flex items-center gap-1 text-[calc(14px*var(--fs))] text-ink-400">
-            <CalendarIcon size={12} />
-            {existing.weekKey ? `주간 키 ${existing.weekKey}` : "일정"}
-          </p>
-        ) : null}
       </div>
     </Modal>
   );

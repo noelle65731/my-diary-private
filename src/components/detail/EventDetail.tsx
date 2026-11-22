@@ -1,8 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useData } from "@/state/store";
-import { useSettings } from "@/state/settings";
 import { useCategoryOptions } from "@/state/categories";
 import { useEventColors } from "@/state/event-colors";
 import { cn } from "@/lib/utils";
@@ -10,19 +9,25 @@ import { EVENT_COLORS } from "@/components/common/event-colors";
 import {
   DetailSection,
   DetailShell,
+  FieldRow,
   InlineChoice,
-  InlineFlags,
+  InlineStatus,
   InlineText,
+  InlineTitle,
+  MoreOptions,
+  SaveState,
+  ToggleRow,
   useCommitOnLeave,
   useDetailDraft,
+  type SavePhase,
 } from "@/components/common/detail";
 import { InlineMemo } from "@/components/editors/MemoField";
 import { ProjectPicker } from "@/components/editors/shared";
+import { StarIcon } from "@/components/icons";
 import { editableMemo, plainOfSpans, spansFromMarkdown } from "@/lib/richtext";
 import { formatShort, startOfWeekISO, todayISO, weekKeyOf, weekdayKo } from "@/lib/date";
 import { notionPageUrl } from "@/lib/utils";
 import {
-  CALENDAR_CATEGORIES,
   currentCalendarCategory,
   isLegacyCalendarCategory,
   type CalendarCategory,
@@ -31,6 +36,9 @@ import {
 } from "@/lib/types";
 
 const KINDS: CalendarKind[] = ["일정", "주간 목표", "주간 메모", "월간 메모"];
+/** 일정 상태 — 예정 · 완료 · 취소 (done/canceled 두 값으로 저장됩니다). */
+const STATUSES = ["예정", "완료", "취소"] as const;
+type EventStatus = (typeof STATUSES)[number];
 
 interface EventForm {
   title: string;
@@ -70,6 +78,12 @@ function formFromEvent(event: CalendarEvent): EventForm {
     cancelReason: event.cancelReason,
     projectIds: event.projectIds,
   };
+}
+
+function statusOf(draft: EventForm): EventStatus {
+  if (draft.canceled) return "취소";
+  if (draft.done) return "완료";
+  return "예정";
 }
 
 function buildPatch(event: CalendarEvent, draft: EventForm, changed: string[]): Record<string, unknown> {
@@ -146,15 +160,18 @@ function EventDetailInner({
   onCloseAll: () => void;
 }) {
   const { data, update, remove } = useData();
-  const { settings } = useSettings();
   const { colorOf, setColor } = useEventColors();
   const { draft, set, markSaved, changedKeys, isDirty } = useDetailDraft(formFromEvent(event));
   const [field, setField] = useState<string | null>(null);
+  const [phase, setPhase] = useState<SavePhase>("idle");
   /** A10/A16: 업무 · 개인 · 공부 and the categories the user added — nothing older. */
   const categoryOptions = useCategoryOptions() as CalendarCategory[];
   const legacyCategory = isLegacyCalendarCategory(event.category) ? event.category : null;
 
   const invalidField = requiredField(draft);
+  const status = statusOf(draft);
+  const multiDay = draft.kind === "일정" && !!draft.endDate && draft.endDate > draft.date;
+  const endDateLabel = draft.endDate && draft.endDate > draft.date ? `${formatShort(draft.endDate)} ${weekdayKo(draft.endDate)}까지` : undefined;
 
   const commit = async (): Promise<boolean> => {
     const patch = buildPatch(event, draft, changedKeys as string[]);
@@ -169,6 +186,7 @@ function EventDetailInner({
     invalid: invalidField,
     onInvalid: () => setField(invalidField ?? "title"),
     commit,
+    onPhase: setPhase,
   });
 
   const leave = (action: () => void) => {
@@ -177,225 +195,272 @@ function EventDetailInner({
     });
   };
 
-  const endDateLabel = draft.endDate && draft.endDate > draft.date ? `${formatShort(draft.endDate)} ${weekdayKo(draft.endDate)}까지` : undefined;
+  const setStatus = (next: EventStatus) => {
+    set("done", next === "완료");
+    set("canceled", next === "취소");
+    setField(null);
+  };
+
+  const badges = [
+    draft.hidden ? "숨김" : null,
+    status === "취소" ? "취소" : null,
+    multiDay ? "여러 날" : null,
+    draft.kind !== "일정" ? draft.kind : null,
+  ].filter((badge): badge is string => !!badge);
 
   return (
     <DetailShell
       open
       onBack={() => leave(onBack)}
       onClose={() => leave(onCloseAll)}
-      label={`${draft.kind} · ${draft.category}`}
-      subtitle={draft.date ? `${formatShort(draft.date)} ${weekdayKo(draft.date)}` : undefined}
+      label={`일정`}
+      ariaLabel={`${draft.kind} · ${draft.category}`}
       notionUrl={notionPageUrl(event)}
-      footer={
-        <>
-          <div className="flex items-center gap-1">
-            {event.trash ? (
-              <button type="button" onClick={() => void update("calendar", event.id, { trash: false })} className="btn-outline btn-xs">
-                휴지통에서 복원
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => {
-                  void remove("calendar", event.id);
-                  onCloseAll();
-                }}
-                className="btn-ghost btn-xs text-rose-500 hover:bg-rose-50"
-              >
-                삭제
-              </button>
-            )}
-          </div>
-          <span className="text-[calc(13.5px*var(--fs))] text-ink-400">
-            {invalidField ? <span className="text-rose-500">필수값을 입력해 주세요</span> : isDirty ? "바뀐 값은 자동으로 저장됩니다" : "변경 없음"}
-          </span>
-        </>
-      }
+      status={<SaveState dirty={isDirty} saving={phase === "saving"} saved={phase === "saved"} error={invalidField === "title" && field !== "title" ? "제목을 입력해 주세요" : null} />}
+      trashed={event.trash}
+      onRestore={() => void update("calendar", event.id, { trash: false })}
+      onTrash={() => {
+        void remove("calendar", event.id);
+        onCloseAll();
+      }}
     >
-      <div className="space-y-1">
-        <InlineText
-          label="제목"
-          required
-          invalid={invalidField === "title"}
+      <div className="pt-1">
+        <InlineTitle
           value={draft.title}
           onChange={(value) => set("title", value)}
           active={field === "title"}
           onActivate={() => setField("title")}
           onDone={() => setField(null)}
-          placeholder="제목 없음"
-          valueClassName="border-none px-0 text-[calc(22px*var(--fs))] font-semibold tracking-tight text-ink-900"
-          inputClassName="text-[calc(16px*var(--fs))] font-medium"
+          invalid={invalidField === "title"}
         />
+      </div>
 
-        <div className="flex flex-wrap items-center gap-1.5 pt-1">
-          <InlineFlags
-            flags={[
-              { key: "done", label: event.kind === "일정" ? "완료" : "완료", on: draft.done },
-              { key: "favorite", label: "이번 주 꼭", on: draft.favorite },
-              { key: "hidden", label: "숨김", on: draft.hidden },
-              { key: "canceled", label: "취소", on: draft.canceled },
-            ]}
-            onToggle={(key) => {
-              if (key === "done") set("done", !draft.done);
-              if (key === "favorite") set("favorite", !draft.favorite);
-              if (key === "hidden") set("hidden", !draft.hidden);
-              if (key === "canceled") set("canceled", !draft.canceled);
-            }}
-          />
-        </div>
+      {/* 상태 — 한 번 눌러 예정 · 완료 · 취소. 오른쪽 별은 이번 주 꼭. */}
+      <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+        <InlineStatus value={status} options={STATUSES} onChange={setStatus} toneOf={statusTone} />
+        <button
+          type="button"
+          aria-pressed={draft.favorite}
+          aria-label={`이번 주 꼭 ${draft.favorite ? "끄기" : "켜기"}`}
+          title="이번 주 꼭 — 주간 화면 위쪽에 고정합니다"
+          onClick={() => set("favorite", !draft.favorite)}
+          className={cn(
+            "inline-flex h-[26px] items-center gap-1 rounded-full border px-2 text-[calc(13.5px*var(--fs))] transition",
+            draft.favorite
+              ? "border-amber-300 bg-amber-50 text-amber-700"
+              : "border-paper-300 bg-white text-ink-400 hover:border-ink-400 hover:text-ink-700",
+          )}
+        >
+          <StarIcon size={13} filled={draft.favorite} className={draft.favorite ? "text-amber-400" : undefined} />
+          이번 주 꼭
+        </button>
+      </div>
 
-        {draft.canceled ? (
-          <div className="mt-1 rounded-xl border border-paper-300 bg-paper-50/70 px-2.5 py-1.5">
+      {draft.canceled ? (
+        <div className="mt-1.5">
+          <FieldRow label="취소 사유">
             <InlineText
               label="취소 사유"
+              bare
               value={draft.cancelReason}
               onChange={(value) => set("cancelReason", value)}
               active={field === "cancelReason"}
               onActivate={() => setField("cancelReason")}
               onDone={() => setField(null)}
-              placeholder="취소 사유 (선택)"
+              placeholder="왜 취소했는지 (선택)"
             />
-          </div>
+          </FieldRow>
+        </div>
+      ) : null}
+
+      <DetailSection title="일정" className="mt-3">
+        <FieldRow label="날짜">
+          <InlineText
+            label="날짜"
+            bare
+            type="date"
+            required
+            invalid={invalidField === "date"}
+            value={draft.date}
+            onChange={(value) => set("date", value)}
+            active={field === "date"}
+            onActivate={() => setField("date")}
+            onDone={() => setField(null)}
+            display={draft.date ? `${formatShort(draft.date)} ${weekdayKo(draft.date)}` : undefined}
+            placeholder="날짜를 정해 주세요"
+          />
+        </FieldRow>
+
+        {draft.kind === "일정" ? (
+          <>
+            <FieldRow label="시간">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <TimeMode pressed={draft.allDay} onClick={() => set("allDay", true)} label="종일" />
+                <TimeMode pressed={!draft.allDay} onClick={() => set("allDay", false)} label="시간 지정" />
+                {draft.allDay ? null : (
+                  <span className="flex flex-nowrap items-center gap-0.5 text-[calc(13.5px*var(--fs))] text-ink-300">
+                    <InlineText
+                      label="시작"
+                      bare
+                      type="time"
+                      value={draft.startTime}
+                      onChange={(value) => set("startTime", value)}
+                      active={field === "startTime"}
+                      onActivate={() => setField("startTime")}
+                      onDone={() => setField(null)}
+                      nowrap
+                    />
+                    <span className="px-0.5">–</span>
+                    <InlineText
+                      label="종료"
+                      bare
+                      type="time"
+                      value={draft.endTime}
+                      onChange={(value) => set("endTime", value)}
+                      active={field === "endTime"}
+                      onActivate={() => setField("endTime")}
+                      onDone={() => setField(null)}
+                      placeholder="종료 시각"
+                      nowrap
+                    />
+                  </span>
+                )}
+              </div>
+            </FieldRow>
+            {multiDay ? (
+              <FieldRow label="종료 날짜">
+                <InlineText
+                  label="종료 날짜"
+                  bare
+                  type="date"
+                  value={draft.endDate}
+                  onChange={(value) => set("endDate", value)}
+                  active={field === "endDate"}
+                  onActivate={() => setField("endDate")}
+                  onDone={() => setField(null)}
+                  display={endDateLabel}
+                />
+              </FieldRow>
+            ) : null}
+          </>
         ) : null}
 
-        <DetailSection title="일정">
-          <div className="grid gap-2 sm:grid-cols-2">
+        <FieldRow label="분류">
+          <InlineChoice
+            label="분류"
+            bare
+            value={draft.category}
+            options={categoryOptions}
+            onChange={(value) => set("category", value)}
+          />
+        </FieldRow>
+
+        <FieldRow label="색">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {EVENT_COLORS.map((choice) => {
+              const active = (colorOf(event.id) ?? "default") === choice.key;
+              return (
+                <button
+                  key={choice.key}
+                  type="button"
+                  data-event-color={choice.key}
+                  aria-label={choice.label}
+                  aria-pressed={active}
+                  title={choice.label}
+                  onClick={() => setColor(event.id, choice.key)}
+                  className={cn(
+                    "h-[18px] w-[18px] rounded-full border border-black/5 transition",
+                    choice.swatch,
+                    active ? "ring-2 ring-ink-900 ring-offset-1" : "hover:scale-110",
+                  )}
+                />
+              );
+            })}
+          </div>
+        </FieldRow>
+
+        {legacyCategory ? (
+          <p className="mt-1 text-[calc(12.5px*var(--fs))] text-ink-400">
+            옛 분류 ‘{legacyCategory}’은(는) ‘{currentCalendarCategory(legacyCategory)}’로 보입니다. 다른 분류를 고르면 그 값으로 저장됩니다.
+          </p>
+        ) : null}
+      </DetailSection>
+
+      <DetailSection title="프로젝트">
+        <ProjectPicker
+          projects={data.projects.filter((item) => item.kind === "프로젝트" && !item.trash)}
+          value={draft.projectIds}
+          onChange={(ids) => set("projectIds", ids)}
+        />
+      </DetailSection>
+
+      <DetailSection title="메모">
+        <InlineMemo
+          label="메모"
+          value={draft.memo}
+          onChange={(value) => set("memo", value)}
+          active={field === "memo"}
+          onActivate={() => setField("memo")}
+          onDone={() => setField(null)}
+          showLabel={false}
+          placeholder="눌러서 메모 · 링크 적기"
+        />
+      </DetailSection>
+
+      {/* 자주 쓰지 않는 설정 — 기본은 접힘, 켜 둔 값은 배지로 보입니다. */}
+      <MoreOptions badges={badges}>
+        <FieldRow label="유형">
+          <InlineChoice label="유형" bare value={draft.kind} options={KINDS} onChange={(value) => set("kind", value)} />
+        </FieldRow>
+        {draft.kind === "일정" && !multiDay ? (
+          <FieldRow label="종료 날짜">
             <InlineText
-              label="날짜"
+              label="종료 날짜"
+              bare
               type="date"
-              required
-              invalid={invalidField === "date"}
-              value={draft.date}
-              onChange={(value) => set("date", value)}
-              active={field === "date"}
-              onActivate={() => setField("date")}
+              value={draft.endDate}
+              onChange={(value) => set("endDate", value)}
+              active={field === "endDate"}
+              onActivate={() => setField("endDate")}
               onDone={() => setField(null)}
-              display={draft.date ? `${formatShort(draft.date)} ${weekdayKo(draft.date)}` : undefined}
-              placeholder="날짜를 정해 주세요"
+              display={endDateLabel}
+              placeholder="여러 날이면 넣기"
             />
-            <div>
-              <p className="text-[calc(13.5px*var(--fs))] text-ink-400">종일</p>
-              <button
-                type="button"
-                aria-pressed={draft.allDay}
-                aria-label={draft.allDay ? "종일 끄기" : "종일 켜기"}
-                onClick={() => set("allDay", !draft.allDay)}
-                className={
-                  draft.allDay
-                    ? "mt-0.5 rounded-full border border-ink-900 bg-ink-900 px-3 py-1 text-[calc(15px*var(--fs))] text-paper-50"
-                    : "mt-0.5 rounded-full border border-paper-400 bg-white px-3 py-1 text-[calc(15px*var(--fs))] text-ink-600"
-                }
-              >
-                {draft.allDay ? "종일" : "시간 지정"}
-              </button>
-            </div>
-          </div>
-
-          {draft.kind === "일정" ? (
-            <div className="mt-1 grid gap-2 sm:grid-cols-3">
-              {draft.allDay ? null : (
-                <>
-                  <InlineText
-                    label="시작"
-                    type="time"
-                    value={draft.startTime}
-                    onChange={(value) => set("startTime", value)}
-                    active={field === "startTime"}
-                    onActivate={() => setField("startTime")}
-                    onDone={() => setField(null)}
-                  />
-                  <InlineText
-                    label="종료"
-                    type="time"
-                    value={draft.endTime}
-                    onChange={(value) => set("endTime", value)}
-                    active={field === "endTime"}
-                    onActivate={() => setField("endTime")}
-                    onDone={() => setField(null)}
-                    placeholder="종료 시각 없음"
-                  />
-                </>
-              )}
-              <InlineText
-                label="종료 날짜"
-                type="date"
-                value={draft.endDate}
-                onChange={(value) => set("endDate", value)}
-                active={field === "endDate"}
-                onActivate={() => setField("endDate")}
-                onDone={() => setField(null)}
-                display={endDateLabel}
-                placeholder="여러 날이면 종료 날짜"
-                hint="비우면 하루 일정입니다. 여러 날 일정은 종료 날짜가 저장됩니다."
-              />
-            </div>
-          ) : null}
-
-          {/* 색 — 노션 팔레트 그대로, 고르면 바로 캘린더 블록에 적용됩니다. */}
-          <div className="mt-2">
-            <p className="text-[calc(13px*var(--fs))] text-ink-400">색</p>
-            <div className="mt-1 flex flex-wrap items-center gap-1.5">
-              {EVENT_COLORS.map((choice) => {
-                const active = (colorOf(event.id) ?? "default") === choice.key;
-                return (
-                  <button
-                    key={choice.key}
-                    type="button"
-                    data-event-color={choice.key}
-                    aria-label={choice.label}
-                    aria-pressed={active}
-                    title={choice.label}
-                    onClick={() => setColor(event.id, choice.key)}
-                    className={cn(
-                      "h-6 w-6 rounded-full border border-black/5 transition",
-                      choice.swatch,
-                      active ? "ring-2 ring-ink-900 ring-offset-1" : "hover:scale-110",
-                    )}
-                  />
-                );
-              })}
-              <span className="ml-1 text-[calc(12.5px*var(--fs))] text-ink-400">노션 색</span>
-            </div>
-          </div>
-
-          <div className="mt-1 grid gap-2 sm:grid-cols-2">
-            <InlineChoice label="유형" value={draft.kind} options={KINDS} onChange={(value) => set("kind", value)} />
-            <InlineChoice
-              label="분류"
-              value={draft.category}
-              options={categoryOptions}
-              onChange={(value) => set("category", value)}
-              hint={
-                legacyCategory
-                  ? `옛 분류 ‘${legacyCategory}’은(는) 지금 분류로 ‘${currentCalendarCategory(legacyCategory)}’에 표시됩니다. 다른 분류를 고르면 그 값으로 저장됩니다.`
-                  : undefined
-              }
-            />
-          </div>
-        </DetailSection>
-
-        <DetailSection title="기타">
-          <InlineMemo
-            label="기타"
-            value={draft.memo}
-            onChange={(value) => set("memo", value)}
-            active={field === "memo"}
-            onActivate={() => setField("memo")}
-            onDone={() => setField(null)}
-            showLabel={false}
-            placeholder="눌러서 메모·링크·두 줄 메모를 적기"
-          />
-        </DetailSection>
-
-        <DetailSection title="연결 프로젝트">
-          <ProjectPicker
-            projects={data.projects.filter((item) => item.kind === "프로젝트" && !item.trash)}
-            value={draft.projectIds}
-            onChange={(ids) => set("projectIds", ids)}
-          />
-        </DetailSection>
-      </div>
+          </FieldRow>
+        ) : null}
+        <ToggleRow
+          checked={draft.hidden}
+          onChange={(value) => set("hidden", value)}
+          label="NOW 숨김"
+          description="NOW 화면과 기본 보기에서 감춥니다"
+        />
+      </MoreOptions>
     </DetailShell>
+  );
+}
+
+function statusTone(status: EventStatus): string {
+  if (status === "취소") return "border-rose-200 bg-rose-50 text-rose-600";
+  if (status === "완료") return "border-sage-400 bg-sage-400 text-white";
+  return "border-ink-700 bg-white text-ink-800";
+}
+
+/** 종일 / 시간 지정 — 두 칩 중 하나가 켜져 있습니다. */
+function TimeMode({ pressed, onClick, label }: { pressed: boolean; onClick: () => void; label: string }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={pressed}
+      aria-label={pressed ? `${label} (켜짐)` : label}
+      onClick={onClick}
+      className={cn(
+        "rounded-full border px-2.5 py-[3px] text-[calc(13.5px*var(--fs))] leading-5 transition",
+        pressed
+          ? "border-ink-900 bg-ink-900 text-paper-50"
+          : "border-paper-300 bg-white text-ink-400 hover:border-ink-400 hover:text-ink-700",
+      )}
+    >
+      {label}
+    </button>
   );
 }

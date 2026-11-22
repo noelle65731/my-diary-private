@@ -5,6 +5,7 @@ import { useData } from "@/state/store";
 import {
   DetailSection,
   DetailShell,
+  SaveState,
   InlineChoice,
   InlineFlags,
   InlineText,
@@ -118,31 +119,19 @@ function BinderDetailInner({
       label={`${draft.kind} · ${formatShort(draft.date)}`}
       subtitle={formatFullKo(draft.date)}
       notionUrl={notionPageUrl(entry)}
-      footer={
-        <>
-          <div className="flex items-center gap-1">
-            {entry.trash ? (
-              <button type="button" onClick={() => void update("binder", entry.id, { trash: false })} className="btn-outline btn-xs">
-                휴지통에서 복원
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={() => {
-                  void remove("binder", entry.id);
-                  onCloseAll();
-                }}
-                className="btn-ghost btn-xs text-rose-500 hover:bg-rose-50"
-              >
-                삭제
-              </button>
-            )}
-          </div>
-          <span className="text-[calc(13.5px*var(--fs))] text-ink-400">
-            {invalidField ? <span className="text-rose-500">필수값을 입력해 주세요</span> : isDirty ? "바뀐 값은 자동으로 저장됩니다" : "변경 없음"}
-          </span>
-        </>
+      status={
+        invalidField ? (
+          <span className="text-rose-500">필수값을 입력해 주세요</span>
+        ) : (
+          <SaveState dirty={isDirty} />
+        )
       }
+      trashed={entry.trash}
+      onRestore={() => void update("binder", entry.id, { trash: false })}
+      onTrash={() => {
+        void remove("binder", entry.id);
+        onCloseAll();
+      }}
     >
       <div className="space-y-1">
         <InlineText
