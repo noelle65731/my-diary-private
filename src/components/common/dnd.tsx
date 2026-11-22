@@ -15,20 +15,37 @@ import { createPortal } from "react-dom";
 import { isTypingTarget } from "@/lib/utils";
 
 /**
- * One pointer-event drag layer for the whole app.
+ * One drag layer for the whole app.
  *
- * HTML5 `draggable` never fires on iOS/Android, so every draggable surface uses
- * Pointer Events instead: mouse starts a drag after a few pixels, touch and pen
- * start one after a short press (so the page can still be scrolled by swiping)
- * and the drag itself blocks page scrolling through a non-passive touchmove
- * listener. Drop targets are plain DOM attributes, which keeps the components
- * free of drag state:
+ * HTML5 `draggable` never fires on iOS/Android, so every draggable surface uses the
+ * press-and-hold gesture below. Mouse starts a drag after a few pixels; touch and pen
+ * start one after a short press (so the page can still be scrolled by swiping).
+ * Drop targets are plain DOM attributes, which keeps the components free of drag state:
  *
  *   data-drop-zone="cal-day" data-drop-date="2026-11-20"
  *
  * The zone name and every other `data-drop-*` value arrive in `DropTarget.data`
  * (`date`, `id`, `idx`, …), camel-cased. The element under the pointer is also
  * highlighted through `data-drop-hover`, styled in globals.css.
+ *
+ * A37 — 왜 손가락은 포인터 이벤트가 아니라 터치 이벤트로 끄는가:
+ * iOS 사파리(WebKit)는 손가락이 스크롤 가능한 상자 위에서 움직이면 스크롤 제스처로
+ * 판단하고 `pointercancel` 을 보내 끌기 전체를 끊습니다. 게다가 끌기가 시작되면서 시트를
+ * `pointer-events: none` 으로 감추면(하이라이트·놓을 자리를 찾기 위해 반드시 필요합니다)
+ * WebKit 은 그 타깃이 사라진 것으로 보고 역시 포인터 스트림을 취소합니다. 두 번째 것은
+ * 시트가 눈에 띄게 비켜 나기도 전에 끌기를 되돌리므로, 아이폰에서는 "꾹 눌러도 시트가
+ * 그대로" 있는 것처럼 보였습니다. 액티베이션 뒤에는 `touch-action` 을 바꿔도 이미 시작된
+ * 제스처에는 적용되지 않습니다(불가능).
+ *
+ * 그래서 손가락은 터치 이벤트(touchstart/touchmove/touchend)로 끕니다:
+ *   - 터치 이벤트는 touchstart 때 정해진 타깃으로 계속 배달되므로, 그 사이 시트를 감추거나
+ *     `pointer-events: none` 으로 바꿔도 끊기지 않습니다.
+ *   - 비수동(non-passive) `touchmove` 에서 `preventDefault()` 를 부르면 브라우저가 스크롤을
+ *     가져가지 않습니다(끌기가 무르익기 전에는 부르지 않으므로, 시트는 손가락으로 계속
+ *     스크롤됩니다).
+ * 마우스는 예전처럼 포인터 이벤트로 7px 움직이면 시작합니다. 클릭은 그대로 항목 열기이고
+ * (제자리에서 누르고 있기만 하면 아무것도 옮기지 않습니다), 느린 클릭이 끌기로 새지 않게
+ * 일부러 "꾹 누르기"를 두지 않았습니다.
  */
 
 export interface DragDescriptor {
@@ -80,11 +97,19 @@ const DndContext = createContext<DndApi | null>(null);
 const MOUSE_THRESHOLD = 7;
 const TOUCH_HOLD_MS = 160;
 const TOUCH_SCROLL_TOLERANCE = 10;
+/** A37: 꾹 눌러 든 뒤 이만큼은 움직여야 '옮기기' — 그냥 눌렀다 떼면 아무것도 옮기지 않습니다. */
+const TOUCH_MOVE_EPSILON = 3;
 const EDGE_SCROLL = 64;
 
 interface Gesture {
   pointerId: number;
   pointerType: string;
+  /** A37: 손가락은 터치 이벤트로, 마우스는 포인터 이벤트로 끕니다. */
+  mode: "pointer" | "touch";
+  /** A37: 터치 이벤트가 실제로 오고 있는지 — 펜처럼 포인터 이벤트만 오는 입력은 포인터로 계속 끕니다. */
+  sawTouch: boolean;
+  /** A37: 따라가는 손가락 하나의 identifier — 다른 손가락이 끼어들면 취소합니다. */
+  touchId: number | null;
   startX: number;
   startY: number;
   x: number;
@@ -94,6 +119,8 @@ interface Gesture {
   finish: DragFinish;
   options: DragSourceOptions;
   active: boolean;
+  /** A37: 끌기가 시작된 뒤 실제로 움직였는지. 제자리에서 눌렀다 뗀 것은 클릭으로 남깁니다. */
+  moved: boolean;
   /** A35: 드래그가 시작된 자리 — 손을 떼기 전에 움직였는지 보아 가장자리 자동 스크롤을 가립니다. */
   anchorX: number;
   anchorY: number;
@@ -107,6 +134,16 @@ function pickElement(x: number, y: number): Element | null {
   const seam = (window as unknown as { __dndPick?: (x: number, y: number) => Element | null }).__dndPick;
   if (typeof seam === "function") return seam(x, y);
   return document.elementFromPoint(x, y);
+}
+
+/** A37: 따라가던 손가락을 찾습니다. `id` 가 없으면(아직 못 봤으면) 첫 손가락을 씁니다. */
+function touchOf(list: TouchList, id: number | null): Touch | null {
+  for (let index = 0; index < list.length; index += 1) {
+    const item = list.item(index);
+    if (!item) continue;
+    if (id === null || item.identifier === id) return item;
+  }
+  return null;
 }
 
 /**
@@ -214,9 +251,13 @@ export function DndProvider({ children }: { children: ReactNode }) {
     if (isTypingTarget(event.target)) return;
 
     const el = event.currentTarget;
+    const isTouch = event.pointerType !== "mouse";
     const gesture: Gesture = {
       pointerId: typeof event.pointerId === "number" ? event.pointerId : 1,
       pointerType: event.pointerType || "mouse",
+      mode: isTouch ? "touch" : "pointer",
+      sawTouch: false,
+      touchId: null,
       startX: event.clientX,
       startY: event.clientY,
       x: event.clientX,
@@ -226,6 +267,7 @@ export function DndProvider({ children }: { children: ReactNode }) {
       finish,
       options,
       active: false,
+      moved: false,
       anchorX: event.clientX,
       anchorY: event.clientY,
       holdTimer: null,
@@ -312,6 +354,9 @@ export function DndProvider({ children }: { children: ReactNode }) {
       current.active = true;
       current.anchorX = current.x;
       current.anchorY = current.y;
+      /* A37: 마우스는 7px 움직여야 시작하므로 그 자체로 '옮기기'입니다. 손가락은 꾹 누르기만
+         으로도 시작하므로, 실제로 움직였는지는 터치무브에서 따로 봅니다. */
+      if (current.mode === "pointer") current.moved = true;
       if (current.holdTimer !== null) {
         window.clearTimeout(current.holdTimer);
         current.holdTimer = null;
@@ -323,17 +368,22 @@ export function DndProvider({ children }: { children: ReactNode }) {
       document.body.dataset.dndKind = current.descriptor.kind;
       window.getSelection()?.removeAllRanges();
       current.options.onStart?.();
+      /* A37: 시트를 감춘 직후의 화면에서 놓일 자리를 바로 짚어 둡니다(안내 문구까지). */
+      updateHover();
       setGhost(current.descriptor);
       startAutoScroll();
     };
 
     const detach = () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-      window.removeEventListener("pointercancel", onCancel);
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+      window.removeEventListener("pointercancel", onPointerCancel);
       window.removeEventListener("keydown", onKey);
-      document.removeEventListener("touchmove", onTouchMove);
       window.removeEventListener("contextmenu", onContextMenu);
+      document.removeEventListener("touchstart", onTouchStart, true);
+      document.removeEventListener("touchmove", onTouchMove, true);
+      document.removeEventListener("touchend", onTouchEnd, true);
+      document.removeEventListener("touchcancel", onTouchCancel, true);
     };
 
     const cleanup = () => {
@@ -354,41 +404,106 @@ export function DndProvider({ children }: { children: ReactNode }) {
       current?.options.onEnd?.();
     };
 
-    function onMove(nativeEvent: PointerEvent) {
+    /**
+     * A37: 끌기를 마칩니다. 꾹 눌러 든 뒤 실제로 움직였을 때만 옮깁니다 — 제자리에서 눌렀다
+     * 떼면(또는 느리게 클릭하면) 아무것도 옮기지 않고, 그 클릭은 원래대로 항목을 엽니다.
+     */
+    const finishGesture = () => {
       const current = gestureRef.current;
       if (!current) return;
+      const dropped = current.active && current.moved;
+      const target = dropped && current.hoverEl ? readDropTarget(current.hoverEl) : null;
+      const point = { x: current.x, y: current.y };
+      const finishDrag = current.finish;
+      if (dropped) suppressUntil.current = performance.now() + 450;
+      cleanup();
+      if (dropped) finishDrag(target, point);
+    };
+
+    function onPointerMove(nativeEvent: PointerEvent) {
+      const current = gestureRef.current;
+      if (!current) return;
+      if (current.mode === "touch" && current.sawTouch) return;
       if (nativeEvent.pointerId && nativeEvent.pointerId !== current.pointerId) return;
       current.x = nativeEvent.clientX;
       current.y = nativeEvent.clientY;
       if (!current.active) {
         const distance = Math.hypot(current.x - current.startX, current.y - current.startY);
-        if (current.pointerType === "mouse") {
-          if (distance >= MOUSE_THRESHOLD) activate();
-        } else if (distance > TOUCH_SCROLL_TOLERANCE) {
-          // Moved before the press matured: the person is scrolling, not dragging.
-          cleanup();
-          return;
-        }
+        if (distance >= MOUSE_THRESHOLD) activate();
       }
       if (gestureRef.current?.active) {
+        if (Math.hypot(current.x - current.anchorX, current.y - current.anchorY) >= 1) current.moved = true;
         placeGhost();
         updateHover();
       }
     }
 
-    function onUp() {
+    function onPointerUp() {
       const current = gestureRef.current;
       if (!current) return;
-      const wasActive = current.active;
-      const target = wasActive && current.hoverEl ? readDropTarget(current.hoverEl) : null;
-      const point = { x: current.x, y: current.y };
-      const finishDrag = current.finish;
-      if (wasActive) suppressUntil.current = performance.now() + 450;
-      cleanup();
-      if (wasActive) finishDrag(target, point);
+      if (current.mode === "touch" && current.sawTouch) return;
+      finishGesture();
     }
 
-    function onCancel() {
+    function onPointerCancel() {
+      const current = gestureRef.current;
+      if (!current) return;
+      /* A37: 손가락에는 터치 이벤트로 이어 가므로 아이폰이 보내는 pointercancel 은 무시합니다. */
+      if (current.mode === "touch" && current.sawTouch) return;
+      cleanup();
+    }
+
+    function onTouchStart(nativeEvent: TouchEvent) {
+      const current = gestureRef.current;
+      if (!current || current.mode !== "touch") return;
+      current.sawTouch = true;
+      if (nativeEvent.touches.length > 1) {
+        cleanup();
+        return;
+      }
+      const touch = nativeEvent.changedTouches.item(0) ?? nativeEvent.touches.item(0);
+      if (touch && current.touchId === null) current.touchId = touch.identifier;
+    }
+
+    function onTouchMove(nativeEvent: TouchEvent) {
+      const current = gestureRef.current;
+      if (!current || current.mode !== "touch") return;
+      current.sawTouch = true;
+      if (nativeEvent.touches.length > 1) {
+        // 두 번째 손가락이 끼어들면(핀치·두 손가락 스크롤) 끌기를 접습니다.
+        cleanup();
+        return;
+      }
+      const touch = touchOf(nativeEvent.touches, current.touchId) ?? touchOf(nativeEvent.changedTouches, current.touchId);
+      if (!touch) return;
+      if (current.touchId === null) current.touchId = touch.identifier;
+      current.x = touch.clientX;
+      current.y = touch.clientY;
+      if (!current.active) {
+        // 아직 무르익기 전에 크게 움직였으면 스크롤입니다 — 시트를 그대로 두고 손을 뗍니다.
+        if (Math.hypot(current.x - current.startX, current.y - current.startY) > TOUCH_SCROLL_TOLERANCE) cleanup();
+        return;
+      }
+      /* A37: 끌기가 시작된 뒤에는 브라우저가 스크롤을 가져가지 못하게 막습니다. 이 한 줄이
+         없으면 iOS 사파리가 스크롤로 판단하고 터치·포인터 스트림을 끊습니다. */
+      if (nativeEvent.cancelable) nativeEvent.preventDefault();
+      if (Math.hypot(current.x - current.anchorX, current.y - current.anchorY) >= TOUCH_MOVE_EPSILON) current.moved = true;
+      placeGhost();
+      updateHover();
+    }
+
+    function onTouchEnd(nativeEvent: TouchEvent) {
+      const current = gestureRef.current;
+      if (!current || current.mode !== "touch") return;
+      if (!touchOf(nativeEvent.changedTouches, current.touchId)) return;
+      if (touchOf(nativeEvent.touches, current.touchId)) return;
+      finishGesture();
+    }
+
+    function onTouchCancel() {
+      const current = gestureRef.current;
+      if (!current || current.mode !== "touch") return;
+      // 브라우저가 제스처를 가져갔습니다(스크롤·시스템 동작) — 시트를 원래대로 돌립니다.
       cleanup();
     }
 
@@ -396,23 +511,27 @@ export function DndProvider({ children }: { children: ReactNode }) {
       if (nativeEvent.key === "Escape") cleanup();
     }
 
-    function onTouchMove(nativeEvent: TouchEvent) {
-      if (gestureRef.current?.active) nativeEvent.preventDefault();
-    }
-
     function onContextMenu(nativeEvent: Event) {
       if (gestureRef.current?.active) nativeEvent.preventDefault();
     }
 
-    window.addEventListener("pointermove", onMove, { passive: true });
-    window.addEventListener("pointerup", onUp);
-    window.addEventListener("pointercancel", onCancel);
     window.addEventListener("keydown", onKey);
     window.addEventListener("contextmenu", onContextMenu);
-    document.addEventListener("touchmove", onTouchMove, { passive: false });
 
-    if (gesture.pointerType !== "mouse") {
+    if (gesture.mode === "touch") {
+      document.addEventListener("touchstart", onTouchStart, { capture: true, passive: true });
+      document.addEventListener("touchmove", onTouchMove, { capture: true, passive: false });
+      document.addEventListener("touchend", onTouchEnd, { capture: true });
+      document.addEventListener("touchcancel", onTouchCancel, { capture: true });
+      /* 펜처럼 터치 이벤트 없이 포인터 이벤트만 오는 입력의 안전망 — 터치가 한 번이라도 오면 무시됩니다. */
+      window.addEventListener("pointermove", onPointerMove, { passive: true });
+      window.addEventListener("pointerup", onPointerUp);
+      window.addEventListener("pointercancel", onPointerCancel);
       gesture.holdTimer = window.setTimeout(() => activate(), TOUCH_HOLD_MS);
+    } else {
+      window.addEventListener("pointermove", onPointerMove, { passive: true });
+      window.addEventListener("pointerup", onPointerUp);
+      window.addEventListener("pointercancel", onPointerCancel);
     }
   }, [placeGhost]);
 
