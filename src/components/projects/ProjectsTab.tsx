@@ -199,7 +199,23 @@ export function ProjectsTab() {
   }, [orderedRoutines]);
 
   const openTasks = tasks.filter((task) => !task.trash && task.status !== "완료" && task.status !== "취소" && !task.history);
-  const inbox = openTasks.filter((task) => task.projectIds.length === 0);
+  /**
+   * A36: index 카드도 프로젝트 카드와 같은 규격으로 — 같은 정렬(남은 일은 날짜순, 기록은 최근 것부터)을
+   * 거친 목록에서 남은 할 일과 완료한 할 일을 나눕니다. 히스토리로 보낸 항목은 index 몫이 아닙니다.
+   */
+  const indexChildren = sortProjectTaskList(
+    tasks.filter((task) => !task.trash && !task.history && task.projectIds.length === 0),
+    settings.projectTaskOrder,
+  );
+  const indexOpen = indexChildren.filter((task) => task.status !== "완료" && task.status !== "취소");
+  const indexCompleted = indexChildren
+    .filter((task) => task.status === "완료")
+    .sort((a, b) => (b.doneAt ?? "").localeCompare(a.doneAt ?? ""));
+  /** A36: '완료 보기'를 켜면 index 카드도 완료한 할 일만 보여 줍니다(프로젝트 카드와 같게). */
+  const indexDoneOnly = settings.showCompletedTasks;
+  const indexPreview = indexDoneOnly ? indexCompleted : indexOpen;
+  /** A19/A36: '최근 기록'은 토글과 상관없이 늘 보이고, 최근 두 개까지. */
+  const indexRecent = indexDoneOnly ? [] : indexCompleted.slice(0, RECENT_LOG_MAX);
   const projectCount = data.projects.filter((task) => task.kind === "프로젝트" && !task.trash && task.status !== "완료" && task.status !== "취소").length;
 
   const toggleTask = (task: ProjectTask) =>
@@ -440,6 +456,7 @@ export function ProjectsTab() {
           <div className="cards-grid" style={{ "--proj-cols": cols } as React.CSSProperties}>
             <article
               data-drop-card="index"
+              data-index-card
               {...dropProps("index", (taskId) => moveTaskToCard(taskId, null))}
               className={cn(
                 "flex min-h-[10rem] flex-col rounded-2xl border px-3.5 py-3 transition",
@@ -455,15 +472,24 @@ export function ProjectsTab() {
                   <p className="truncate text-[calc(14px*var(--fs))] text-ink-500">아직 분류되지 않은 할 일</p>
                 </div>
               </header>
-              <ul className="mt-2.5 space-y-1.5">
-                {inbox.slice(0, CARD_OPEN_PREVIEW).map((task) => (
+              <p className="mt-1.5 text-[calc(14px*var(--fs))] text-ink-500">
+                {indexDoneOnly ? `완료한 할 일 ${indexCompleted.length}` : `남은 할 일 ${indexOpen.length}`}
+              </p>
+              <ul className="mt-1 space-y-1.5">
+                {indexPreview.slice(0, CARD_OPEN_PREVIEW).map((task) => (
                   <TaskLine key={task.id} task={task} onToggle={() => toggleTask(task)} onOpen={() => void openTask(task.id)} />
                 ))}
-                {inbox.length === 0 ? <li className="text-[calc(14px*var(--fs))] text-ink-300">비어 있습니다.</li> : null}
-                {inbox.length > CARD_OPEN_PREVIEW ? (
-                  <li className="pl-[1.375rem] text-[calc(13.5px*var(--fs))] text-ink-400">+{inbox.length - CARD_OPEN_PREVIEW}개 더</li>
+                {indexPreview.length === 0 ? (
+                  <li className="text-[calc(14px*var(--fs))] text-ink-300">
+                    {indexDoneOnly ? "완료한 할 일이 없습니다." : "비어 있습니다."}
+                  </li>
+                ) : null}
+                {indexPreview.length > CARD_OPEN_PREVIEW ? (
+                  <li className="pl-[1.375rem] text-[calc(13.5px*var(--fs))] text-ink-400">+{indexPreview.length - CARD_OPEN_PREVIEW}개 더</li>
                 ) : null}
               </ul>
+
+              <RecentLog logKey="index" tasks={indexRecent} onOpenTask={(id) => void openTask(id)} />
               <form
                 onSubmit={(event) => {
                   event.preventDefault();
@@ -820,25 +846,7 @@ function ProjectCard({
         ) : null}
       </ul>
 
-      {recent.length > 0 ? (
-        <div className="mt-2 border-t border-black/[0.06] pt-1.5">
-          <p className="text-[calc(13px*var(--fs))] text-ink-400">최근 기록</p>
-          <ul className="mt-0.5 space-y-0.5">
-            {recent.map((task) => (
-              <li key={task.id} className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => onOpenTask(task.id)}
-                  className="min-w-0 flex-1 truncate text-left text-[calc(14px*var(--fs))] text-ink-500"
-                >
-                  {task.title}
-                </button>
-                <span className="flex-none whitespace-nowrap text-[calc(13px*var(--fs))] tabular-nums text-ink-400">{recordDateLabel(task)}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
+      <RecentLog logKey={project.id} tasks={recent} onOpenTask={onOpenTask} />
 
       {mode === "history" ? (
         <button
@@ -860,6 +868,41 @@ function ProjectCard({
         ) : null
       )}
     </article>
+  );
+}
+
+/**
+ * A36: 카드 아래 '최근 기록' — 완료한 할 일의 이름과 끝낸 날(시간이 있으면 시간까지)을 보여 주고,
+ * 누르면 상세가 열립니다. 프로젝트 카드와 index 카드가 함께 씁니다.
+ */
+function RecentLog({
+  logKey,
+  tasks,
+  onOpenTask,
+}: {
+  logKey: string;
+  tasks: ProjectTask[];
+  onOpenTask: (id: string) => void;
+}) {
+  if (tasks.length === 0) return null;
+  return (
+    <div data-recent-log={logKey} className="mt-2 border-t border-black/[0.06] pt-1.5">
+      <p className="text-[calc(13px*var(--fs))] text-ink-400">최근 기록</p>
+      <ul className="mt-0.5 space-y-0.5">
+        {tasks.map((task) => (
+          <li key={task.id} className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => onOpenTask(task.id)}
+              className="min-w-0 flex-1 truncate text-left text-[calc(14px*var(--fs))] text-ink-500"
+            >
+              {task.title}
+            </button>
+            <span className="flex-none whitespace-nowrap text-[calc(13px*var(--fs))] tabular-nums text-ink-400">{recordDateLabel(task)}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
