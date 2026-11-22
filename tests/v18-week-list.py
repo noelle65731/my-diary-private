@@ -355,7 +355,7 @@ with sync_playwright() as p:
     check("콘솔 오류 0건(PC)", len(errors) == 0, json.dumps(errors[:6], ensure_ascii=False))
     page.click('button:has-text("주간")')
     page.wait_for_timeout(800)
-    page.screenshot(path=f"{OUT}/diary-v18-week-pc.png", full_page=True)
+    page.screenshot(path=f"{OUT}/diary-v18-test-week-pc.png", full_page=True)
     browser.close()
 
     # ── 모바일 ─────────────────────────────────────────────────────────────
@@ -376,11 +376,11 @@ with sync_playwright() as p:
     check("m. + 일정 → 그 날짜", page.locator("input[aria-label='날짜']").first.input_value() == "2026-11-25")
     page.keyboard.press("Escape")
     page.wait_for_timeout(500)
-    page.screenshot(path=f"{OUT}/diary-v18-week-mobile.png", full_page=False)
+    page.screenshot(path=f"{OUT}/diary-v18-test-week-mobile.png", full_page=False)
     page.click('button:has-text("3일")')
     page.wait_for_timeout(800)
     check("m. 3일에도 목록 구역", page.locator("[data-week-list-block]").count() == 1)
-    page.screenshot(path=f"{OUT}/diary-v18-three-mobile.png", full_page=False)
+    page.screenshot(path=f"{OUT}/diary-v18-test-three-mobile.png", full_page=False)
     check("m. 콘솔 오류 0건", len(errors) == 0, json.dumps(errors[:6], ensure_ascii=False))
     browser.close()
 
