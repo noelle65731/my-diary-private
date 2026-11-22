@@ -161,7 +161,7 @@ export function Modal({
           role="dialog"
           aria-modal="true"
           className={cn(
-            "relative z-10 flex max-h-[92vh] w-full animate-slide-up flex-col overflow-hidden rounded-t-3xl border border-paper-300 bg-white shadow-lift sm:animate-pop-in sm:rounded-3xl",
+            "relative z-10 flex max-h-[calc(100dvh-0.5rem)] w-full animate-slide-up flex-col overflow-hidden rounded-t-3xl border border-paper-300 bg-white shadow-lift sm:max-h-[92dvh] sm:animate-pop-in sm:rounded-3xl",
             sizeClass[size],
           )}
         >
@@ -182,7 +182,9 @@ export function Modal({
             </button>
           </div>
           <div data-sheet-scroll="true" className={cn("min-h-0 flex-1 overflow-y-auto px-5 py-4", bodyClassName)}>{children}</div>
-          {footer ? <div className="border-t border-paper-300/80 bg-paper-50/60 px-5 py-3">{footer}</div> : null}
+          {footer ? (
+            <div className="border-t border-paper-300/80 bg-paper-50/60 px-5 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:pb-3">{footer}</div>
+          ) : null}
         </div>
       </div>
     </Portal>
@@ -228,7 +230,7 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
           aria-modal="true"
           aria-label={typeof title === "string" && title ? title : "목록"}
           className={cn(
-            "pointer-events-auto relative z-10 flex max-h-[90vh] w-full animate-slide-up flex-col overflow-hidden rounded-t-3xl border border-paper-300 bg-white shadow-lift sm:my-0 sm:max-h-none sm:animate-slide-in-right sm:rounded-none sm:rounded-l-3xl sm:border-y-0 sm:border-r-0",
+            "pointer-events-auto relative z-10 flex max-h-[calc(100dvh-0.5rem)] w-full animate-slide-up flex-col overflow-hidden rounded-t-3xl border border-paper-300 bg-white shadow-lift sm:my-0 sm:max-h-none sm:animate-slide-in-right sm:rounded-none sm:rounded-l-3xl sm:border-y-0 sm:border-r-0",
             width === "lg" ? "sm:w-[520px]" : "sm:w-[420px]",
           )}
         >
@@ -241,8 +243,12 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
               <XIcon size={18} />
             </button>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">{children}</div>
-          {footer ? <div className="border-t border-paper-300/80 bg-paper-50/60 px-5 py-3 pb-safe">{footer}</div> : null}
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4">{children}</div>
+          {footer ? (
+            <div className="border-t border-paper-300/80 bg-paper-50/60 px-5 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:pb-3">
+              {footer}
+            </div>
+          ) : null}
         </div>
       </div>
     </Portal>

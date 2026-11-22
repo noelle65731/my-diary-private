@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useData } from "@/state/store";
+import { useSettings } from "@/state/settings";
 import { useCategoryOptions } from "@/state/categories";
 import { useEventColors } from "@/state/event-colors";
 import { cn } from "@/lib/utils";
@@ -86,7 +87,12 @@ function statusOf(draft: EventForm): EventStatus {
   return "예정";
 }
 
-function buildPatch(event: CalendarEvent, draft: EventForm, changed: string[]): Record<string, unknown> {
+function buildPatch(
+  event: CalendarEvent,
+  draft: EventForm,
+  changed: string[],
+  weekStartsOn: 0 | 1 = 1,
+): Record<string, unknown> {
   const patch: Record<string, unknown> = {};
   const has = (key: string) => changed.includes(key);
 
@@ -104,8 +110,8 @@ function buildPatch(event: CalendarEvent, draft: EventForm, changed: string[]): 
     patch.endTime = timed ? draft.endTime || null : null;
     // The end date is kept for a multi-day event; a single day event ends on its own date.
     patch.endDate = draft.kind === "일정" ? (multiDay ? draft.endDate : draft.date) : draft.date;
-    const weekStart = startOfWeekISO(draft.date);
-    patch.weekKey = draft.kind === "일정" ? "" : weekKeyOf(weekStart);
+    const weekStart = startOfWeekISO(draft.date, weekStartsOn);
+    patch.weekKey = draft.kind === "일정" ? "" : weekKeyOf(weekStart, weekStartsOn);
     patch.baseDate = draft.kind === "일정" ? null : weekStart;
   }
 
@@ -160,6 +166,8 @@ function EventDetailInner({
   onCloseAll: () => void;
 }) {
   const { data, update, remove } = useData();
+  /** A40: 저장할 때 주간 키를 설정의 주 시작에 맞춥니다. */
+  const { settings } = useSettings();
   const { colorOf, setColor } = useEventColors();
   const { draft, set, markSaved, changedKeys, isDirty } = useDetailDraft(formFromEvent(event));
   const [field, setField] = useState<string | null>(null);
@@ -174,7 +182,7 @@ function EventDetailInner({
   const endDateLabel = draft.endDate && draft.endDate > draft.date ? `${formatShort(draft.endDate)} ${weekdayKo(draft.endDate)}까지` : undefined;
 
   const commit = async (): Promise<boolean> => {
-    const patch = buildPatch(event, draft, changedKeys as string[]);
+    const patch = buildPatch(event, draft, changedKeys as string[], settings.weekStartsOn);
     if (Object.keys(patch).length === 0) return true;
     const ok = await update("calendar", event.id, patch);
     if (ok) markSaved();

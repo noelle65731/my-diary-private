@@ -38,6 +38,9 @@ interface UiContextValue {
   clearFocus: () => void;
   searchOpen: boolean;
   setSearchOpen: (open: boolean) => void;
+  /** A40: 일괄 관리 창 — 검색과 별개의, 여러 항목을 고쳐 쓰는 화면. */
+  bulkOpen: boolean;
+  setBulkOpen: (open: boolean) => void;
   /** P0-1: one web trash for every record type — 캘린더·프로젝트·루틴·바인더·아카이브. */
   trashFilter: Resource | "all" | null;
   openTrash: (resource?: Resource | "all") => void;
@@ -79,6 +82,7 @@ export function UiProvider({ children }: { children: ReactNode }) {
   });
   const [focus, setFocus] = useState<FocusTarget | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
   const [trashFilter, setTrashFilter] = useState<Resource | "all" | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
@@ -227,6 +231,8 @@ export function UiProvider({ children }: { children: ReactNode }) {
       clearFocus,
       searchOpen,
       setSearchOpen,
+      bulkOpen,
+      setBulkOpen,
       trashFilter,
       openTrash,
       closeTrash,
@@ -253,6 +259,7 @@ export function UiProvider({ children }: { children: ReactNode }) {
       openItem,
       clearFocus,
       searchOpen,
+      bulkOpen,
       trashFilter,
       openTrash,
       closeTrash,

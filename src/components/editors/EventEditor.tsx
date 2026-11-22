@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useData } from "@/state/store";
+import { useSettings } from "@/state/settings";
 import { Modal, Segmented, TextInput } from "@/components/common/primitives";
 import { EditorFooter, ErrorNote, ProjectPicker } from "@/components/editors/shared";
 import { MemoEditor } from "@/components/editors/MemoField";
@@ -116,6 +117,8 @@ function EventEditorInner({
   onClose: () => void;
 }) {
   const { data, create, update, remove } = useData();
+  /** A40: 주간 키·기준일을 설정의 주 시작(일요일/월요일)에 맞춥니다. */
+  const { settings } = useSettings();
   const existing = eventId ? data.calendar.find((item) => item.id === eventId) ?? null : null;
   const { colorOf, setColor } = useEventColors();
   const categories = useCategoryOptions();
@@ -137,7 +140,7 @@ function EventEditorInner({
 
   /** 저장 본문 — 색만 바뀌었는지 비교하려고 따로 만들어 둡니다. */
   const buildPayload = (state: FormState): Record<string, unknown> => {
-    const weekStart = startOfWeekISO(state.date);
+    const weekStart = startOfWeekISO(state.date, settings.weekStartsOn);
     const multi = state.kind === "일정" && !!state.endDate && state.endDate > state.date;
     const spans = spansFromMarkdown(state.memo);
     return {
@@ -158,7 +161,7 @@ function EventEditorInner({
       cancelReason: state.cancelReason,
       cancelAt: state.canceled ? existing?.cancelAt ?? todayISO() : null,
       projectIds: state.projectIds,
-      weekKey: state.kind === "일정" ? "" : weekKeyOf(weekStart),
+      weekKey: state.kind === "일정" ? "" : weekKeyOf(weekStart, settings.weekStartsOn),
       baseDate: state.kind === "일정" ? null : weekStart,
     };
   };

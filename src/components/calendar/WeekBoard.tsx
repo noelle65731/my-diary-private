@@ -66,6 +66,30 @@ interface WeekBoardProps {
 
 /** 프로젝트가 없는 할 일은 게시판에서 index 행으로 모입니다. */
 const INBOX_KEY = "inbox";
+/** A40: 주간·3일 보기의 프로젝트 행·루틴 행 순서는 이 브라우저에 남깁니다. */
+const ROW_ORDER_KEY = "my-diary:week-row-order:v1";
+
+type RowOrder = { projects: string[]; routines: string[] };
+
+function readRowOrder(): RowOrder {
+  if (typeof window === "undefined") return { projects: [], routines: [] };
+  try {
+    const raw = window.localStorage.getItem(ROW_ORDER_KEY);
+    const parsed = raw ? (JSON.parse(raw) as Partial<RowOrder>) : {};
+    return {
+      projects: Array.isArray(parsed.projects) ? parsed.projects.filter((id): id is string => typeof id === "string") : [],
+      routines: Array.isArray(parsed.routines) ? parsed.routines.filter((id): id is string => typeof id === "string") : [],
+    };
+  } catch {
+    return { projects: [], routines: [] };
+  }
+}
+
+/** 저장된 순서에 있는 행이 먼저, 새로 생긴 행은 그 뒤에 원래 순서대로. */
+function orderOf(list: string[], key: string): number {
+  const index = list.indexOf(key);
+  return index < 0 ? Number.MAX_SAFE_INTEGER : index;
+}
 /** A32: 행을 만드는 기준과 똑같이, 이 할 일이 어느 행에 속하는지 돌려줍니다. */
 const rowKeyOf = (task: ProjectTask, projects: ProjectTask[]) =>
   projects.find((item) => item.id === (task.projectIds[0] ?? ""))?.id ?? INBOX_KEY;
@@ -111,6 +135,18 @@ export function WeekBoard({
   const todayCell = "bg-[#f4f6fa]";
   /** A6: the first project row carries the collapse-all control for the whole project area. */
   const [projectsCollapsed, setProjectsCollapsed] = useState(false);
+  /** A40: 프로젝트 행·루틴 행을 끌어 올리고 내리는 순서. */
+  const [rowOrder, setRowOrder] = useState<RowOrder>(() => readRowOrder());
+  const saveRowOrder = (kind: keyof RowOrder, ids: string[]) =>
+    setRowOrder((current) => {
+      const next = { ...current, [kind]: ids };
+      try {
+        window.localStorage.setItem(ROW_ORDER_KEY, JSON.stringify(next));
+      } catch {
+        /* 저장 공간이 없으면 이번 화면에서만 유지됩니다. */
+      }
+      return next;
+    });
   /** The routine area folds away as a whole, the same way the project area does. */
   const [routinesCollapsed, setRoutinesCollapsed] = useState(false);
   /** B5: all-day 4건 → 3건 + 펼치기, and the 시간표 lifts when the rows fold. */
@@ -282,12 +318,16 @@ export function WeekBoard({
       .sort((a, b) => {
         if (a[0] === "inbox") return -1;
         if (b[0] === "inbox") return 1;
+        // A40: 끌어서 정한 행 순서가 먼저, 정한 적 없는 행은 분류 순서대로 뒤에.
+        const oa = orderOf(rowOrder.projects, a[0]);
+        const ob = orderOf(rowOrder.projects, b[0]);
+        if (oa !== ob) return oa - ob;
         const order = { 업무: 0, 개인: 1, 공부: 2 } as const;
         const pa = a[1].project;
         const pb = b[1].project;
         return (order[(pa?.category ?? "개인") as keyof typeof order] ?? 1) - (order[(pb?.category ?? "개인") as keyof typeof order] ?? 1);
       });
-  }, [weekTasks, projects, mode, hiddenProjectIds]);
+  }, [weekTasks, projects, mode, hiddenProjectIds, rowOrder.projects]);
 
   /**
    * A19: 프로젝트 칸 시트에 보여 줄 그 날의 할 일 — 진행 중인 것과 완료한 것 모두.
@@ -362,7 +402,53 @@ export function WeekBoard({
   const allDayHeight = allDayBars.length === 0 ? 0 : Math.max(visibleLanes, 1) * allDayLane + (overflows ? 15 : 0) + 2;
   const routineTotal = routineGroups.reduce((sum, group) => sum + group.items.length, 0);
   /** A16: no 분류 header rows — each row carries its own badge, sorted by 분류 first. */
-  const routineRows = routineGroups.flatMap((group) => group.items.map((routine) => ({ routine, category: group.category })));
+  /** A40: 루틴 행도 끌어서 정한 순서를 따릅니다(정한 적 없으면 분류·원래 순서). */
+  const routineRows = [...routineGroups.flatMap((group) => group.items.map((routine) => ({ routine, category: group.category })))]
+    .sort((a, b) => orderOf(rowOrder.routines, a.routine.id) - orderOf(rowOrder.routines, b.routine.id));
+
+  /** A40: 행을 끌어 다른 행 앞으로 옮깁니다 — 저장된 순서 배열만 다시 적습니다. */
+  const moveRow = (kind: keyof RowOrder, dragId: string, targetId: string, after = false) => {
+    if (!dragId || !targetId || dragId === targetId) return;
+    const current =
+      kind === "projects"
+        ? rows.map(([key]) => key).filter((key) => key !== INBOX_KEY)
+        : routineRows.map(({ routine }) => routine.id);
+    const next = current.filter((id) => id !== dragId);
+    const at = next.indexOf(targetId);
+    if (at < 0) return;
+    // A40: 대상 행의 아래쪽 절반에 놓으면 그 아래로 — 위/아래 모두 자연스럽게 옮깁니다.
+    next.splice(at + (after ? 1 : 0), 0, dragId);
+    saveRowOrder(kind, next);
+  };
+
+  /** 행 이름 왼쪽의 손잡이 — 마우스도 손가락도 이 자리에서 끕니다. */
+  const startRowDrag = (kind: keyof RowOrder, id: string, label: string) => (event: ReactPointerEvent<HTMLElement>) => {
+    dnd.start(
+      event,
+      { kind: kind === "projects" ? "project-row" : "routine-row", id, label },
+      (target, point) => {
+        if (!target) return;
+        const after = point.y > target.rect.top + target.rect.height / 2;
+        if (kind === "projects" && target.zone === "week-project-row" && target.data.project) {
+          if (target.data.project === INBOX_KEY) return;
+          moveRow("projects", id, target.data.project, after);
+          return;
+        }
+        if (kind === "routines" && target.zone === "week-routine-row" && target.data.routine) {
+          moveRow("routines", id, target.data.routine, after);
+        }
+      },
+      {
+        getHint: (target) => {
+          if (kind === "projects" && target.zone === "week-project-row" && target.data.project && target.data.project !== INBOX_KEY) {
+            return `${rowTitleOf(target.data.project)} 위로 옮기기`;
+          }
+          if (kind === "routines" && target.zone === "week-routine-row" && target.data.routine) return "이 루틴 위로 옮기기";
+          return null;
+        },
+      },
+    );
+  };
 
   /**
    * 모바일 기본 모드: 시간표를 세 칸만 그립니다(종일 한 칸 + 시간 세 칸 = 네 칸).
@@ -806,11 +892,26 @@ export function WeekBoard({
               <div
                 data-drop-zone="week-project-row"
                 data-drop-project={key}
+                data-week-project-row={key}
                 className={cn(
                   "group/row relative sticky left-0 z-20 flex min-h-[2rem] items-center justify-center border-r border-paper-300 px-1 py-0.5 text-center",
                   project ? pastelOf(project.id).bg : "bg-white",
                 )}
               >
+                {project ? (
+                  <span
+                    role="button"
+                    tabIndex={-1}
+                    aria-label={`${project.title} 행 순서 바꾸기`}
+                    title="끌어서 행 순서 바꾸기"
+                    data-week-row-grip={project.id}
+                    onPointerDown={startRowDrag("projects", key, project.title)}
+                    onClick={(event) => event.stopPropagation()}
+                    className="absolute left-0.5 top-1/2 -translate-y-1/2 cursor-grab touch-none select-none px-0.5 text-[calc(11px*var(--fs))] leading-none text-ink-300 opacity-40 transition hover:text-ink-700 group-hover/row:opacity-100 active:cursor-grabbing"
+                  >
+                    ⠿
+                  </span>
+                ) : null}
                 <div className="flex min-w-0 flex-1 items-center justify-center gap-1 text-center">
                   {project ? (
                     <span className={cn("h-2 w-2 flex-none rounded-full", tone ? tone.dot : "bg-paper-400")} aria-hidden="true" />
@@ -1083,10 +1184,29 @@ export function WeekBoard({
               <div key={routine.id} className="grid border-t border-paper-300/50" style={grid}>
                 <button
                   type="button"
+                  data-drop-zone="week-routine-row"
+                  data-drop-routine={routine.id}
+                  data-week-routine-row={routine.id}
                   onClick={() => onOpenRoutine(routine.id)}
-                  className="sticky left-0 z-20 flex min-w-0 items-center gap-1 border-r border-paper-300 bg-white py-[3px] pl-1.5 pr-1 text-left hover:text-ink-900"
+                  className="sticky left-0 z-20 flex min-w-0 items-center gap-1 border-r border-paper-300 bg-white py-[3px] pl-[0.9rem] pr-1 text-left hover:text-ink-900"
+                  style={{ position: "sticky" }}
                   title={`${category} · ${routine.title}`}
                 >
+                  <span
+                    role="button"
+                    tabIndex={-1}
+                    aria-label={`${routine.title} 행 순서 바꾸기`}
+                    title="끌어서 행 순서 바꾸기"
+                    data-week-row-grip={routine.id}
+                    onPointerDown={(event) => {
+                      event.stopPropagation();
+                      startRowDrag("routines", routine.id, routine.title)(event);
+                    }}
+                    onClick={(event) => event.stopPropagation()}
+                    className="absolute left-0.5 top-1/2 -translate-y-1/2 cursor-grab touch-none select-none px-0.5 text-[calc(11px*var(--fs))] leading-none text-ink-300 opacity-40 transition hover:text-ink-700 group-hover/row:opacity-100 active:cursor-grabbing"
+                  >
+                    ⠿
+                  </span>
                   <span
                     className={cn(
                       "flex-none rounded px-1 text-[calc(11.5px*var(--fs))] font-medium leading-[1.5]",

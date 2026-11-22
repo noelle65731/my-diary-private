@@ -10,6 +10,8 @@ import { MiniMonth } from "@/components/calendar/MiniMonth";
 
 interface WeekPanelProps {
   weekStart: string;
+  /** A40: 주 시작 설정 — 목표·메모의 주간 키도 이 기준으로 나눕니다. */
+  weekStartsOn?: 0 | 1;
   events: CalendarEvent[];
   tasks: ProjectTask[];
   /** A10: a goal is written and edited right here — no separate window. */
@@ -150,6 +152,7 @@ function MemoBox({
 
 export function WeekPanel({
   weekStart,
+  weekStartsOn = 1,
   events,
   tasks,
   onCreateGoal,
@@ -165,7 +168,7 @@ export function WeekPanel({
   onMonth,
 }: WeekPanelProps) {
   const weekEnd = addDaysISO(weekStart, 6);
-  const weekKey = weekKeyOf(weekStart);
+  const weekKey = weekKeyOf(weekStart, weekStartsOn);
   const inWeek = (date: string | null) => !!date && date >= weekStart && date <= weekEnd;
   const visible = <T extends { hidden: boolean; trash: boolean }>(item: T) => !item.trash && !item.hidden;
   const createdOn = (iso: string) => {

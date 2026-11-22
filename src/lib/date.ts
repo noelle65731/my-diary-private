@@ -118,15 +118,21 @@ export function isoWeekNumber(iso: string): number {
   return 1 + Math.round((t.getTime() - firstThursday.getTime()) / (7 * 86400000));
 }
 
-/** `2026-W47` — also the value stored in the Notion `주간 키` property. */
-export function weekKeyOf(iso: string): string {
-  const d = fromISO(iso);
-  const day = (d.getDay() + 6) % 7;
-  const thursday = new Date(d.getFullYear(), d.getMonth(), d.getDate() - day + 3, 12);
-  return `${thursday.getFullYear()}-W${pad2(isoWeekNumber(iso))}`;
+/**
+ * A40: `주간 키` — 그 주의 시작 날짜(`2026-11-16`).
+ *
+ * 예전에는 ISO 주 번호(`2026-W47`)를 썼는데, 그 번호는 늘 월요일 기준이라 주 시작을
+ * 일요일로 바꾸면 일요일 주와 그 앞 월요일 주가 같은 키를 갖는 일이 생겼습니다
+ * (주를 넘겨도 목표가 그대로 보이던 버그). 주 시작 날짜를 그대로 키로 쓰면
+ * `weekStartsOn` 과 상관없이 한 주가 한 키를 갖습니다. 옛 값은 날짜 범위로 계속 읽습니다.
+ */
+export function weekKeyOf(iso: string, weekStartsOn: 0 | 1 = 1): string {
+  return startOfWeekISO(iso, weekStartsOn);
 }
 
 export function weekKeyToMonday(key: string): string {
+  // A40: 새 키는 주 시작 날짜 자체입니다. 옛 `2026-W47` 만 주 번호로 풀어 줍니다.
+  if (!key.includes("-W")) return key;
   const [yearStr, weekStr] = key.split("-W");
   const year = Number(yearStr);
   const week = Number(weekStr);

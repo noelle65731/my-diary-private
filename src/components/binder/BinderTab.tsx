@@ -388,7 +388,7 @@ function DiaryRow({
   const isToday = isSameISO(day, todayISO());
   const holiday = holidayName(day);
   const dow = new Date(`${day}T12:00:00`).getDay();
-  const preview = entry ? previewText(entry.body, Math.max(1, lines)) : [];
+  const preview = entry ? previewText(entry.body, Math.max(3, lines)) : [];
 
   const [text, setText] = useState(entry?.body ?? "");
   const [saved, setSaved] = useState<"idle" | "saving" | "saved">("idle");
@@ -584,11 +584,14 @@ function DiaryRow({
           >
             {entry ? (
               <>
-                {preview.map((line, index) => (
-                  <p key={index} className="mt-0.5 line-clamp-1 text-[calc(14px*var(--fs))] leading-[1.6] text-ink-600">
-                    {truncate(line, 90)}
+                {preview.length > 0 ? (
+                  <p
+                    data-binder-preview
+                    className="mt-0.5 line-clamp-3 whitespace-pre-line break-keep text-[calc(14px*var(--fs))] leading-[1.6] text-ink-600"
+                  >
+                    {truncate(preview.join("\n"), 320)}
                   </p>
-                ))}
+                ) : null}
                 <span className="mt-1 hidden items-center gap-2 text-[calc(12px*var(--fs))] text-ink-400 group-hover:flex">
                   <span>이어 쓰기</span>
                   <button

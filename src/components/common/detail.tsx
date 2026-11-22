@@ -125,7 +125,7 @@ export function DetailShell({
           role="dialog"
           aria-modal="true"
           aria-label={ariaLabel ?? (typeof label === "string" ? label : "상세")}
-          className="relative z-10 flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-3xl border border-paper-300 bg-white shadow-lift animate-slide-up sm:max-w-2xl sm:animate-pop-in sm:rounded-3xl"
+          className="relative z-10 flex max-h-[calc(100dvh-0.5rem)] w-full flex-col overflow-hidden rounded-t-3xl border border-paper-300 bg-white shadow-lift animate-slide-up sm:max-h-[92dvh] sm:max-w-2xl sm:animate-pop-in sm:rounded-3xl"
         >
           <header
             className="flex flex-none items-center gap-0.5 py-1 pl-1 pr-2"
@@ -147,11 +147,11 @@ export function DetailShell({
             </button>
           </header>
 
-          <div data-sheet-scroll="true" className="min-h-0 overflow-y-auto px-4 pb-6 pt-0.5 sm:px-6">
+          <div data-sheet-scroll="true" className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-6 pt-0.5 sm:px-6">
             <div className="mx-auto w-full max-w-[44rem]">{children}</div>
           </div>
 
-          <div className="flex flex-none items-center border-t border-paper-200 bg-paper-50/70 px-2.5 py-1.5 pb-safe">
+          <div className="flex flex-none items-center border-t border-paper-200 bg-paper-50/70 px-2.5 pt-1.5 pb-[calc(0.4rem+env(safe-area-inset-bottom))] sm:pb-[calc(0.4rem+env(safe-area-inset-bottom))]">
             <div className="w-full">{footer ?? actionBar}</div>
           </div>
         </div>

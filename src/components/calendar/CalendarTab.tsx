@@ -22,7 +22,7 @@ import { holidayName } from "@/lib/holidays";
 import { cn, matchesMode } from "@/lib/utils";
 import type { CalendarEvent, ModeFilter, ProjectTask, Routine } from "@/lib/types";
 import { currentCalendarCategory, isLegacyCalendarCategory } from "@/lib/types";
-import { ChevronLeftIcon, ChevronRightIcon, PlusIcon, SearchIcon, TrashIcon } from "@/components/icons";
+import { ChevronLeftIcon, ChevronRightIcon, ListIcon, PlusIcon, SearchIcon, TrashIcon } from "@/components/icons";
 import { ModeChips } from "@/components/common/ModeChips";
 import { WeekBoard } from "@/components/calendar/WeekBoard";
 import { useAutoHideScrollbar } from "@/lib/use-auto-hide-scroll";
@@ -60,7 +60,7 @@ export function CalendarTab() {
   const { settings, addCategory, removeCategory, set: setSetting } = useSettings();
   // A16: the 분류 filter shares one list with the routine/task pickers.
   const categoryOptions = useCategoryOptions();
-  const { focus, clearFocus, openBinderForDate, setSearchOpen, openTrash, views, setView: setTabView, openTaskDraft } = useUi();
+  const { focus, clearFocus, openBinderForDate, setSearchOpen, setBulkOpen, openTrash, views, setView: setTabView, openTaskDraft } = useUi();
   /** A39: 주간·3일 게시판에서 일정 ↔ 할 일로 끌어 옮길 때의 변환(생성 후 원래 항목 정리). */
   const { eventToTask, taskToEvent } = useConvert();
 
@@ -268,7 +268,7 @@ export function CalendarTab() {
       kind: "주간 목표",
       category: "개인",
       date: weekStart,
-      weekKey: weekKeyOf(weekStart),
+      weekKey: weekKeyOf(weekStart, settings.weekStartsOn),
       baseDate: weekStart,
     });
   };
@@ -443,7 +443,7 @@ export function CalendarTab() {
       kind: "주간 메모",
       category: "개인",
       date: weekStart,
-      weekKey: weekKeyOf(weekStart),
+      weekKey: weekKeyOf(weekStart, settings.weekStartsOn),
       baseDate: weekStart,
       memo: text,
     });
@@ -453,6 +453,7 @@ export function CalendarTab() {
   const renderWeekPanel = () => (
     <WeekPanel
       weekStart={weekStart}
+      weekStartsOn={settings.weekStartsOn}
       events={events}
       tasks={tasks}
       onCreateGoal={addWeeklyGoal}
@@ -475,11 +476,11 @@ export function CalendarTab() {
   const routineTemplates = routines.filter((routine) => routine.kind === "루틴" && !routine.history);
 
   return (
-    <div className="flex items-start gap-6 xl:gap-8">
-      <div className="min-w-0 flex-1">
-      {/* toolbar */}
-      <div className="flex flex-col gap-2">
-        <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
+    <div className="flex min-h-0 flex-1 items-stretch gap-6 xl:gap-8">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      {/* toolbar — A40: 위로 바짝 올려 캘린더가 화면을 더 씁니다. */}
+      <div className="flex flex-none flex-col gap-1.5">
+        <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-1.5">
           <div className="flex min-w-0 items-baseline gap-2.5">
             <h1 className="truncate text-[calc(22px*var(--fs))] font-semibold leading-none tracking-[-0.02em] text-ink-900">
               {title}
@@ -525,6 +526,18 @@ export function CalendarTab() {
 
             <button type="button" onClick={() => setSearchOpen(true)} className="icon-btn hidden bg-paper-200 hover:bg-paper-300/70 md:inline-flex" aria-label="검색">
               <SearchIcon size={15} />
+            </button>
+            {/* A40: 검색과 별개인 일괄 관리 — 여러 일정·할 일을 한 번에 고칩니다. */}
+            <button
+              type="button"
+              data-bulk-open="calendar"
+              onClick={() => setBulkOpen(true)}
+              aria-label="일괄 관리"
+              title="여러 일정·할 일을 한 번에 고치기"
+              className="inline-flex h-7 items-center gap-1 rounded-full bg-paper-200 px-2 text-[calc(13.5px*var(--fs))] font-medium text-ink-600 transition hover:bg-paper-300/70 hover:text-ink-900 md:px-2.5"
+            >
+              <ListIcon size={13} />
+              <span className="hidden sm:inline">일괄 관리</span>
             </button>
             {/* A39: 프로젝트 탭과 같은 NOW 토글 — 두 탭이 같은 설정을 함께 씁니다. */}
             <button
@@ -647,11 +660,11 @@ export function CalendarTab() {
         </>
       ) : null}
 
-      <div className="mt-3 min-h-0">
+      <div className="mt-2 min-h-0 flex-1">
         <div
           className={cn(
             "min-w-0",
-            (view === "month" || view === "week" || view === "three" || view === "day") && "h-[calc(100dvh-11.5rem)] min-h-[26rem]",
+            (view === "month" || view === "week" || view === "three" || view === "day") && "h-full min-h-0",
           )}
         >
           {view === "month" ? (
@@ -675,6 +688,7 @@ export function CalendarTab() {
                 setCursor(day);
                 setView("week");
               }}
+              onMonthShift={(direction) => setCursor((current) => addMonthsISO(current, direction))}
               onOpenEvent={openEvent}
               onOpenTask={openTask}
               onToggleTask={toggleTask}

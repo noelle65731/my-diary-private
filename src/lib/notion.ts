@@ -249,6 +249,45 @@ export async function retrieveDatabaseSchema(databaseId: string): Promise<Databa
   });
 }
 
+/**
+ * A40: 일정 색을 기기 사이에서 나누려면 Calendar DB 에 `색` select 속성이 있어야 합니다.
+ * 이미 있으면 그대로 두고, 없으면 선택지까지 만들어 둡니다(있으면 null, 없으면 만든 뒤 true).
+ *
+ * 스키마 변경은 `PATCH /databases/{id}`(예전 방식)와 `PATCH /data_sources/{id}`(새 방식)
+ * 둘 다 지원되므로, 먼저 예전 방식으로 시도하고 실패하면 데이터 소스로 다시 시도합니다.
+ */
+export async function ensureSelectProperty(
+  databaseId: string,
+  name: string,
+  options: string[],
+): Promise<"exists" | "created"> {
+  const schema = await retrieveDatabaseSchema(databaseId);
+  if (schema.some((property) => property.name === name)) return "exists";
+
+  const body = {
+    properties: {
+      [name]: {
+        select: { options: options.map((option) => ({ name: option })) },
+      },
+    },
+  };
+  try {
+    await request(`/databases/${databaseId}`, { method: "PATCH", body: JSON.stringify(body) }, V_LEGACY);
+    return "created";
+  } catch (error) {
+    if (!(error instanceof NotionError)) throw error;
+    /* 새 데이터 소스 모델: 환경변수에 데이터 소스 id 가 들어 있을 수 있어 두 길을 모두 시도합니다. */
+    let dsId: string | null = null;
+    try {
+      dsId = await resolveDataSourceId(databaseId);
+    } catch {
+      dsId = null;
+    }
+    await request(`/data_sources/${dsId ?? databaseId}`, { method: "PATCH", body: JSON.stringify(body) }, V_DATA_SOURCE);
+    return "created";
+  }
+}
+
 export async function archivePage(pageId: string): Promise<void> {
   try {
     await request(`/pages/${pageId}`, {

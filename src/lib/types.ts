@@ -96,6 +96,8 @@ export interface CalendarEvent extends BaseItem {
   cancelAt: string | null;
   weekKey: string;
   baseDate: string | null;
+  /** A40: 노션 `색` select 값 — 기기 사이에서 같은 일정 색을 보여 주기 위한 이름(회색·파랑 …). */
+  color?: string | null;
 }
 
 export interface ProjectTask extends BaseItem {

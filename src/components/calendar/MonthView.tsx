@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { calendarEventMode, type CalendarEvent, type ModeFilter, type ProjectTask, type Routine } from "@/lib/types";
 import { daysInMonth, formatShort, isSameISO, monthMatrix, timeRangeLabel, todayISO, weekdayKo } from "@/lib/date";
 import { holidayName } from "@/lib/holidays";
@@ -30,6 +30,8 @@ interface MonthViewProps {
   onSelectDay: (day: string) => void;
   /** A21: 한 주 줄(빈 공간)을 누르면 그 주의 주간 보기로 — `day`는 그 주 아무 날이나 됩니다. */
   onSelectWeek?: (day: string) => void;
+  /** A40: 좌우 스와이프(터치·트랙패드·마우스 끌기)로 이전/다음 달 — 1은 다음 달. */
+  onMonthShift?: (direction: number) => void;
   onOpenEvent: (id: string) => void;
   onOpenTask: (id: string) => void;
   /** A10: a tap on the month checkbox completes the task, a second tap clears it. */
@@ -75,6 +77,7 @@ export function MonthView({
   closeDayListSignal = 0,
   onSelectDay,
   onSelectWeek,
+  onMonthShift,
   onOpenEvent,
   onOpenTask,
   onToggleTask,
@@ -105,28 +108,101 @@ export function MonthView({
 
   /** A day list opened from a cell — the month stays on screen behind it. */
   const [openDay, setOpenDay] = useState<string | null>(null);
-  /** A16: on a phone a tap shows the day's list first; the editor opens from that list. */
-  const [touchLayout, setTouchLayout] = useState(false);
-  useEffect(() => {
-    const query = window.matchMedia("(max-width: 639px)");
-    const sync = () => setTouchLayout(query.matches);
-    sync();
-    query.addEventListener("change", sync);
-    return () => query.removeEventListener("change", sync);
-  }, []);
+  /**
+   * A40: 한 번 누르면 그 날의 목록부터 보여 줍니다(폰·PC 같게). 날짜 숫자만 일간 보기로 가고,
+   * 항목의 세부 수정은 목록 안에서 한 번 더 눌러 들어갑니다.
+   */
   const openItemFirst = (kind: "event" | "task", id: string, day: string) => {
-    if (touchLayout) {
-      setOpenDay(day);
-      return;
-    }
-    if (kind === "event") onOpenEvent(id);
-    else onOpenTask(id);
+    void kind;
+    void id;
+    setOpenDay(day);
   };
 
   useEffect(() => {
     if (closeDayListSignal === 0) return;
     setOpenDay(null);
   }, [closeDayListSignal]);
+
+  /* ── A40: 좌우로 넘겨 이전/다음 달 — 손가락·트랙패드·마우스 끌기 모두 같은 자리에서 합니다.
+     항목 끌기(HTML5 drag)와 누르기는 그대로 두기 위해, 마우스 끌기는 빈칸·날짜에서만 시작합니다. ── */
+  const swipeStart = useRef<{ x: number; y: number } | null>(null);
+  const mouseSwipe = useRef<{ x: number; y: number } | null>(null);
+  const wheelDelta = useRef(0);
+  const wheelLock = useRef(0);
+  const suppressClick = useRef(0);
+  const [swipeShift, setSwipeShift] = useState(0);
+
+  const shiftMonth = (direction: number) => {
+    if (!onMonthShift) return;
+    // 스와이프 직후의 클릭은 무시합니다 — 달이 넘어가며 다른 날의 목록이 열리지 않게.
+    suppressClick.current = performance.now() + 450;
+    setSwipeShift(0);
+    onMonthShift(direction);
+  };
+
+  const onTouchStart = (event: React.TouchEvent<HTMLElement>) => {
+    if (event.touches.length !== 1) {
+      swipeStart.current = null;
+      return;
+    }
+    const touch = event.touches[0];
+    swipeStart.current = touch ? { x: touch.clientX, y: touch.clientY } : null;
+  };
+
+  const onTouchEnd = (event: React.TouchEvent<HTMLElement>) => {
+    const start = swipeStart.current;
+    swipeStart.current = null;
+    setSwipeShift(0);
+    if (!start) return;
+    const touch = event.changedTouches[0];
+    if (!touch) return;
+    const dx = touch.clientX - start.x;
+    const dy = touch.clientY - start.y;
+    if (Math.abs(dx) > 52 && Math.abs(dx) > Math.abs(dy) * 1.3) shiftMonth(dx < 0 ? 1 : -1);
+  };
+
+  const onPointerDownGrid = (event: React.PointerEvent<HTMLElement>) => {
+    if (event.pointerType !== "mouse" || event.button !== 0) return;
+    const target = event.target as HTMLElement | null;
+    // 날짜 숫자·항목·+N 은 자기 동작을 합니다(끌기 시작으로 오인하지 않게).
+    if (target?.closest("[data-month-item], [data-day-num], [data-month-more], button, a")) return;
+    mouseSwipe.current = { x: event.clientX, y: event.clientY };
+  };
+
+  const onPointerMoveGrid = (event: React.PointerEvent<HTMLElement>) => {
+    const start = mouseSwipe.current;
+    if (!start) return;
+    const dx = event.clientX - start.x;
+    const dy = event.clientY - start.y;
+    if (Math.abs(dy) > 40 && Math.abs(dy) > Math.abs(dx)) {
+      mouseSwipe.current = null;
+      setSwipeShift(0);
+      return;
+    }
+    if (Math.abs(dx) > 20) setSwipeShift(Math.max(-28, Math.min(28, dx * 0.25)));
+  };
+
+  const endMouseSwipe = (event: React.PointerEvent<HTMLElement>) => {
+    const start = mouseSwipe.current;
+    mouseSwipe.current = null;
+    if (!start) return;
+    const dx = event.clientX - start.x;
+    setSwipeShift(0);
+    if (Math.abs(dx) > 60) shiftMonth(dx < 0 ? 1 : -1);
+  };
+
+  const onWheelGrid = (event: React.WheelEvent<HTMLElement>) => {
+    if (Math.abs(event.deltaX) < 12 || Math.abs(event.deltaX) < Math.abs(event.deltaY) * 1.15) return;
+    const now = performance.now();
+    if (now < wheelLock.current) return;
+    wheelDelta.current += event.deltaX;
+    if (Math.abs(wheelDelta.current) > 70) {
+      const direction = wheelDelta.current > 0 ? 1 : -1;
+      wheelDelta.current = 0;
+      wheelLock.current = now + 650;
+      shiftMonth(direction);
+    }
+  };
 
   /**
    * A39: 고른 분류(업무·개인·공부·사용자 분류)가 일정·할 일·루틴 모두에 똑같이 걸립니다.
@@ -202,7 +278,35 @@ export function MonthView({
         })}
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+      <div
+        className="flex min-h-0 flex-1 flex-col overflow-y-auto"
+        style={{ touchAction: "pan-y" }}
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
+        onTouchCancel={() => {
+          swipeStart.current = null;
+          setSwipeShift(0);
+        }}
+        onPointerDown={onPointerDownGrid}
+        onPointerMove={onPointerMoveGrid}
+        onPointerUp={endMouseSwipe}
+        onPointerCancel={() => {
+          mouseSwipe.current = null;
+          setSwipeShift(0);
+        }}
+        onPointerLeave={() => {
+          mouseSwipe.current = null;
+          setSwipeShift(0);
+        }}
+        onWheel={onWheelGrid}
+        onClickCapture={(event) => {
+          if (performance.now() < suppressClick.current) {
+            event.stopPropagation();
+            event.preventDefault();
+          }
+        }}
+      >
+        <div className="flex min-h-0 flex-1 flex-col transition-transform duration-150" style={{ transform: `translateX(${swipeShift}px)` }}>
       {matrix.map((row, rowIndex) => {
         const cells = showWeekends ? row : row.filter((_, index) => {
           const dow = new Date(`${row[index]}T12:00:00`).getDay();
@@ -218,6 +322,8 @@ export function MonthView({
               // 각자 할 일을 하도록 그대로 두고, 줄의 빈 공간만 주간 이동으로 씁니다.
               const target = event.target as HTMLElement;
               if (!onSelectWeek) return;
+              // A40: 칸 안(빈칸·일정·할 일)은 그 날의 목록을 열고, 줄의 바깥 여백만 주간으로 갑니다.
+              if (target.closest("[data-month-cell]")) return;
               if (target.closest("[data-month-item]") || target.closest("[data-day-num]") || target.closest("[data-month-more]")) return;
               onSelectWeek(weekStartDay);
             }}
@@ -242,12 +348,8 @@ export function MonthView({
                   data-drop-zone="month-day"
                   data-drop-day={day}
                   onClick={(event) => {
-                    // A21: 주 줄이 주간 보기로 가는 동안에는 빈 공간 클릭으로 하루 목록을 열지 않습니다
-                    // (하루 목록은 `할 일 N` · `+N 더`에서 열립니다). 주간 이동이 없을 때만 예전처럼 엽니다.
-                    if (onSelectWeek) return;
-                    // A16/A19: on a phone the whole cell leads to that day's list, and on a
-                    // desktop the white space, the date and +N do too — chips keep opening
-                    // their own record, so a click that landed on one is left alone.
+                    // A40: 날짜 숫자는 그 날의 일간 보기로, 칸의 빈칸·일정·할 일은 그 날 목록을 먼저 엽니다
+                    // (목록 안에서 급 항목을 누르면 세부 수정으로 들어갑니다).
                     if ((event.target as HTMLElement).closest("[data-month-item]")) return;
                     setOpenDay(day);
                   }}
@@ -453,6 +555,7 @@ export function MonthView({
       })}
 
       </div>
+        </div>
 
       {routineTemplates.length > 0 ? (
         <div className="mt-2 max-h-[26%] flex-none space-y-2 overflow-y-auto xl:hidden">

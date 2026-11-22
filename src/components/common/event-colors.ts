@@ -94,6 +94,24 @@ export const EVENT_COLORS: EventColorChoice[] = [
 ];
 
 const BY_KEY = new Map(EVENT_COLORS.map((choice) => [choice.key, choice]));
+const BY_LABEL = new Map(EVENT_COLORS.map((choice) => [choice.label, choice]));
+
+/** A40: 노션 `색` select 값(회색·파랑 … 또는 key)을 앱의 색 키로 읽습니다. */
+export function eventColorKeyOf(value: string | null | undefined): EventColorKey | null {
+  if (!value) return null;
+  const clean = value.trim();
+  if (!clean) return null;
+  const byKey = BY_KEY.get(clean as EventColorKey);
+  if (byKey) return byKey.key;
+  const byLabel = BY_LABEL.get(clean);
+  return byLabel ? byLabel.key : null;
+}
+
+/** 색 키를 노션 select 선택지 이름으로 — 저장할 때 씁니다. */
+export function eventColorLabel(key: EventColorKey | null | undefined): string {
+  if (!key) return "";
+  return BY_KEY.get(key)?.label ?? "";
+}
 
 export function eventColorTone(key: EventColorKey | null | undefined): Tone | null {
   if (!key) return null;

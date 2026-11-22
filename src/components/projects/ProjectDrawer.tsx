@@ -81,12 +81,14 @@ export function ProjectDrawer({
         : [],
     settings.projectTaskOrder,
   );
-  const done = tasks.filter((task) => task.status === "완료").length;
+  /** A40: 완료와 취소는 함께 '완료' 영역에 — 취소를 완료로 세지 않고 상태 그대로 남깁니다. */
+  const completed = tasks.filter((task) => task.status === "완료").length;
+  const done = completed + tasks.filter((task) => task.status === "취소").length;
   const openCount = tasks.filter((task) => task.status !== "완료" && task.status !== "취소").length;
-  const progress = tasks.length > 0 ? Math.round((done / tasks.length) * 100) : 0;
+  const progress = tasks.length > 0 ? Math.round((completed / tasks.length) * 100) : 0;
   const filtered = tasks.filter((task) => {
     if (filter === "ing") return task.status !== "완료" && task.status !== "취소";
-    if (filter === "done") return task.status === "완료";
+    if (filter === "done") return task.status === "완료" || task.status === "취소";
     return true;
   });
 
@@ -104,11 +106,14 @@ export function ProjectDrawer({
     }
   };
 
-  const toggle = (task: ProjectTask) =>
+  const toggle = (task: ProjectTask) => {
+    // A40: 취소한 일은 누르면 완료로 바뀌지 않습니다 — 상태 그대로, 되돌리기는 상세에서.
+    if (task.status === "취소") return;
     void update("projects", task.id, {
       status: task.status === "완료" ? "미완료" : "완료",
       doneAt: task.status === "완료" ? null : todayISO(),
     });
+  };
 
   const addTask = async () => {
     if ((!project && !isIndex) || !draft.trim() || busy) return;
@@ -151,7 +156,7 @@ export function ProjectDrawer({
         options={[
           { value: "all", label: `전체 ${tasks.length}` },
           { value: "ing", label: `진행 ${openCount}` },
-          { value: "done", label: `완료 ${done}` },
+          { value: "done", label: `완료·취소 ${done}` },
         ]}
       />
       {project ? (

@@ -149,7 +149,7 @@ function readDate(props: Props, name: string): DateValue {
 /* ── B2: properties the app was not written against ── */
 
 const KNOWN: Record<string, string[]> = {
-  calendar: ["제목", "유형", "분류", "날짜", "완료", "취소", "취소 사유", "취소 시각", "기타", "NOW 숨김", "즐겨찾기", "휴지통", "주간 키", "작성 기준일", "연결 프로젝트", "정렬"],
+  calendar: ["제목", "유형", "분류", "날짜", "완료", "취소", "취소 사유", "취소 시각", "기타", "NOW 숨김", "즐겨찾기", "휴지통", "주간 키", "작성 기준일", "연결 프로젝트", "정렬", "색"],
   projects: ["제목", "유형", "분류", "상태", "날짜", "마감일", "완료일", "확인일", "긴급", "중요", "NOW 숨김", "즐겨찾기", "History", "휴지통", "기타", "대기 대상", "대기 내용", "취소 사유", "취소 시각", "반복 묶음 ID", "연결 프로젝트", "정렬"],
   routines: ["제목", "유형", "분류", "날짜", "반복 요일", "목표 횟수", "실행 횟수", "한 번의 양", "단위", "NOW 숨김", "History", "휴지통", "연결 루틴", "정렬"],
   binder: ["제목", "유형", "날짜", "링크", "태그", "즐겨찾기", "아카이브 표시", "휴지통", "기록 데이터", "사진", "연결 프로젝트", "정렬"],
@@ -458,6 +458,7 @@ export function mapCalendar(page: NotionPage): CalendarEvent {
     cancelAt: readDate(props, "취소 시각").date,
     weekKey: readRichText(props, "주간 키"),
     baseDate: readDate(props, "작성 기준일").date,
+    color: readSelect(props, "색"),
   };
 }
 
@@ -591,6 +592,11 @@ export function buildProperties(resource: keyof typeof mappers, patch: Patch, cu
     if (has(patch, "memo") || has(patch, "memoRich")) out["기타"] = memoValue(patch);
     if (has(patch, "weekKey")) out["주간 키"] = richText(str(patch, "weekKey"));
     if (has(patch, "baseDate")) out["작성 기준일"] = dateValue(patch["baseDate"] as string | null);
+    // A40: 일정 색 — 비우면 노션 선택지를 지웁니다(null).
+    if (has(patch, "color")) {
+      const name = str(patch, "color");
+      out["색"] = { select: name ? { name } : null };
+    }
   }
 
   if (resource === "projects") {

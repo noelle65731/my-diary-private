@@ -16,7 +16,7 @@ import { ProjectIcon } from "@/components/common/ProjectIcon";
 import { CheckIcon, ChevronRightIcon, EyeIcon, InboxIcon, PlusIcon, RepeatIcon, TrashIcon } from "@/components/icons";
 import { ModeChips } from "@/components/common/ModeChips";
 import { INDEX_DRAWER_ID, ProjectDrawer } from "@/components/projects/ProjectDrawer";
-import { ScheduleCard, ScheduleDrawer } from "@/components/projects/ScheduleCard";
+import { ScheduleCard, ScheduleDrawer, scheduleDateLabel } from "@/components/projects/ScheduleCard";
 import { TaskDetail } from "@/components/detail/TaskDetail";
 import { EventDetail } from "@/components/detail/EventDetail";
 import { useDnd } from "@/components/common/dnd";
@@ -29,11 +29,12 @@ import { sortProjectTaskList, sortTasksByDate } from "@/lib/order";
 type ProjectView = "tracks" | "priority" | "history" | "journal";
 /** A card keeps five open tasks in view — fewer than four hid the work that was left. */
 const CARD_OPEN_PREVIEW = 5;
-/** A19: 기본 보기의 '최근 기록'은 최근 완료한 할 일 두 개까지. */
+/** A19: 기본 보기의 '최근 기록'은 최근 완료·취소한 할 일 두 개까지. */
 const RECENT_LOG_MAX = 2;
-
-const WEEKDAY_LETTERS = ["월", "화", "수", "목", "금", "토", "일"];
-/** A27: 루틴 카드 한 장에 들어가는 루틴 수. */
+/** A40: 카드 순서(일정·프로젝트·루틴)와 줄바꿈은 이 브라우저에 남깁니다. */
+const CARD_ORDER_KEY = "my-diary:project-card-order:v1";
+const CARD_BREAK = "__break__";
+/** 카드 한 장에 들어가는 루틴 수. */
 const ROUTINES_PER_CARD = 3;
 
 function dateLabel(date: string | null): string {
@@ -55,6 +56,46 @@ function taskDateLabel(task: ProjectTask): string {
   const day = dateLabel(shown);
   const time = shown === task.date ? timeRangeLabel(task.startTime, task.endTime) : "";
   return time ? `${day} ${time}` : day;
+}
+
+/** A40: 카드의 '기록' 순서 — 완료한 날, 취소한 날, 마지막으로 고친 때 순. */
+function finishedAt(task: ProjectTask): string | null {
+  return task.doneAt ?? task.cancelAt ?? task.updatedAt ?? null;
+}
+
+/** A40: 분류 필터·NOW 와 상관없이, 카드 순서는 이 브라우저에 남깁니다. */
+function readCardOrder(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(CARD_ORDER_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as unknown;
+    return Array.isArray(parsed) ? parsed.filter((key): key is string => typeof key === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * 저장된 순서를 지금 있는 카드에 맞춥니다 — 사라진 카드는 빼고, 새로 생긴 카드는 뒤에 붙입니다.
+ * index 카드는 이 목록에 없습니다(늘 맨 앞 고정).
+ */
+function reconcileCardOrder(saved: string[], keys: string[]): string[] {
+  const allowed = new Set(keys);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const key of saved) {
+    if (key === CARD_BREAK) {
+      if (out.length > 0 && out[out.length - 1] !== CARD_BREAK) out.push(key);
+      continue;
+    }
+    if (!allowed.has(key) || seen.has(key)) continue;
+    seen.add(key);
+    out.push(key);
+  }
+  for (const key of keys) if (!seen.has(key)) out.push(key);
+  while (out.length > 0 && out[out.length - 1] === CARD_BREAK) out.pop();
+  return out;
 }
 
 export function ProjectsTab() {
@@ -94,6 +135,17 @@ export function ProjectsTab() {
   const [quickTitle, setQuickTitle] = useState("");
   const [quickCategory, setQuickCategory] = useState<TaskCategory>("개인");
   const [busy, setBusy] = useState(false);
+  /** A40: 카드 순서 — 일정·프로젝트·루틴 카드를 서로 원하는 자리로 옮깁니다. */
+  const [cardOrder, setCardOrder] = useState<string[]>(() => readCardOrder());
+  const [cardDragging, setCardDragging] = useState<string | null>(null);
+  const saveCardOrder = (next: string[]) => {
+    setCardOrder(next);
+    try {
+      window.localStorage.setItem(CARD_ORDER_KEY, JSON.stringify(next));
+    } catch {
+      /* 저장 공간이 없으면 이번 화면에서만 유지됩니다. */
+    }
+  };
   /**
    * A4: the open detail registers its save-and-validate step here, so tapping another
    * task in the right list stores what changed before the centre swaps.
@@ -207,6 +259,22 @@ export function ProjectsTab() {
     return chunks;
   }, [orderedRoutines]);
 
+  /** A40: 지금 있는 카드의 키 — 일정 하나, 프로젝트마다 하나, 루틴 묶음마다 하나. */
+  const cardKeys = useMemo(
+    () => [
+      "schedule",
+      ...projects.map((project) => `p:${project.id}`),
+      ...routineChunks.map((_, index) => `r:${index}`),
+    ],
+    [projects, routineChunks],
+  );
+  /** 저장된 순서를 지금 카드에 맞춘 목록 — 줄바꿈 표시(__break__)도 그대로 둡니다. */
+  const orderedCards = useMemo(() => reconcileCardOrder(cardOrder, cardKeys), [cardOrder, cardKeys]);
+  useEffect(() => {
+    if (orderedCards.join("|") !== cardOrder.join("|")) saveCardOrder(orderedCards);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderedCards]);
+
   const openTasks = tasks.filter((task) => !task.trash && task.status !== "완료" && task.status !== "취소" && !task.history);
   /**
    * A36: index 카드도 프로젝트 카드와 같은 규격으로 — 같은 정렬(남은 일은 날짜순, 기록은 최근 것부터)을
@@ -217,9 +285,10 @@ export function ProjectsTab() {
     settings.projectTaskOrder,
   );
   const indexOpen = indexChildren.filter((task) => task.status !== "완료" && task.status !== "취소");
+  /** A40: 완료와 취소는 함께 '기록' 영역에 — 끝낸 날(없으면 취소한 날·최근 수정) 순서. */
   const indexCompleted = indexChildren
-    .filter((task) => task.status === "완료")
-    .sort((a, b) => (b.doneAt ?? "").localeCompare(a.doneAt ?? ""));
+    .filter((task) => task.status === "완료" || task.status === "취소")
+    .sort((a, b) => (finishedAt(b) ?? "").localeCompare(finishedAt(a) ?? ""));
   /** A36: '완료 보기'를 켜면 index 카드도 완료한 할 일만 보여 줍니다(프로젝트 카드와 같게). */
   const indexDoneOnly = settings.showCompletedTasks;
   const indexPreview = indexDoneOnly ? indexCompleted : indexOpen;
@@ -237,15 +306,23 @@ export function ProjectsTab() {
     setProjectId(INDEX_DRAWER_ID);
   };
 
-  const toggleTask = (task: ProjectTask) =>
+  /**
+   * A40: 취소한 항목은 완료로 바꾸지 않습니다 — 누르면 그대로 두고, 되돌리기는 상세에서 합니다.
+   * (완료 ↔ 미완료 토글은 예전 그대로.)
+   */
+  const toggleTask = (task: ProjectTask) => {
+    if (task.status === "취소") return;
     void update("projects", task.id, {
       status: task.status === "완료" ? "미완료" : "완료",
       doneAt: task.status === "완료" ? null : todayISO(),
     });
+  };
 
-  /** A39: 일정 카드·서랍에서 한 번 눌러 완료/해제. */
-  const toggleEventDone = (event: CalendarEvent) =>
+  /** A39/A40: 일정 카드·서랍에서 한 번 눌러 완료/해제. 취소한 일정은 그대로 둡니다. */
+  const toggleEventDone = (event: CalendarEvent) => {
+    if (event.canceled) return;
     void update("calendar", event.id, { done: !event.done });
+  };
 
   /** A39: `+ 일정` 빠른 입력 — 오늘 종일 일정으로 담고, 분류는 기본 '개인'. */
   const createEventQuick = async (title: string) => {
@@ -257,22 +334,86 @@ export function ProjectsTab() {
     await create("calendar", { title, kind: "일정", category, date: todayISO(), allDay: true });
   };
 
-  /** A7/B7: dragging a card or a routine row rewrites `sort`, so the order survives a reload. */
-  const reorder = (list: ProjectTask[], dragId: string, targetId: string) => {
-    if (!dragId || !targetId || dragId === targetId) return;
-    const ids = list.map((item) => item.id);
-    const from = ids.indexOf(dragId);
-    const to = ids.indexOf(targetId);
-    if (from < 0 || to < 0) return;
-    const next = [...ids];
-    next.splice(from, 1);
-    next.splice(to, 0, dragId);
-    next.forEach((id, index) => {
-      const item = list.find((entry) => entry.id === id);
-      if (item && item.sort !== (index + 1) * 10) {
-        void update("projects", id, { sort: (index + 1) * 10 });
-      }
-    });
+  /**
+   * A40: 카드 자체를 끌어 순서를 바꿉니다. 카드는 dnd 의 포인터 시스템을 함께 써서
+   * 마우스·손가락 모두 같은 방식으로 옮깁니다(HTML5 드래그는 손가락에서 동작하지 않습니다).
+   * index 카드는 늘 맨 앞이므로 끌지 않습니다.
+   */
+  const moveCard = (dragKey: string, targetKey: string | null, after: boolean) => {
+    if (targetKey && dragKey === targetKey) return;
+    const rest = orderedCards.filter((key) => key !== dragKey);
+    let next: string[];
+    if (!targetKey) {
+      next = [...rest, CARD_BREAK, dragKey];
+    } else {
+      const index = rest.indexOf(targetKey);
+      if (index < 0) return;
+      next = [...rest];
+      next.splice(index + (after ? 1 : 0), 0, dragKey);
+    }
+    // 줄바꿈이 겹치거나 맨 끝에 홀로 남지 않게 정리합니다.
+    const cleaned: string[] = [];
+    for (const key of next) {
+      if (key === CARD_BREAK && (cleaned.length === 0 || cleaned[cleaned.length - 1] === CARD_BREAK)) continue;
+      cleaned.push(key);
+    }
+    while (cleaned.length > 0 && cleaned[cleaned.length - 1] === CARD_BREAK) cleaned.pop();
+    saveCardOrder(cleaned);
+  };
+
+  const cardLabelOf = (key: string) => {
+    if (key === "schedule") return "일정";
+    if (key.startsWith("p:")) return projects.find((project) => project.id === key.slice(2))?.title ?? "프로젝트";
+    if (key.startsWith("r:")) return "루틴";
+    return "카드";
+  };
+
+  /** 카드 안의 버튼·체크박스·할 일 줄은 각자 할 일을 하도록 카드 끌기에서 뺍니다. */
+  const startCardDrag = (key: string) => (event: React.PointerEvent<HTMLElement>) => {
+    const target = event.target as HTMLElement | null;
+    if (target?.closest("input, textarea, select, label, form, a, [data-task-id], [data-schedule-event], [data-routine-day], [data-routine-now], [data-nodrag]")) return;
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    /** 끌기 시작한 카드의 자리 — 같은 줄인지(가로) 아래줄인지(세로)를 가릅니다. */
+    const sourceRect = event.currentTarget.getBoundingClientRect();
+    dnd.start(
+      event,
+      { kind: "card", id: key, label: cardLabelOf(key) },
+      (dropTarget, point) => {
+        setCardDragging(null);
+        if (!dropTarget) return;
+        if (dropTarget.zone === "card-row-break") {
+          moveCard(key, null, false);
+          return;
+        }
+        let targetKey: string | null = null;
+        if (dropTarget.zone === "schedule-card") targetKey = "schedule";
+        else if (dropTarget.zone === "routine-card") targetKey = `r:${dropTarget.data.routineCard ?? ""}`;
+        else if (dropTarget.zone === "project-card" && dropTarget.data.project) targetKey = `p:${dropTarget.data.project}`;
+        if (!targetKey) return;
+        const rect = dropTarget.rect;
+        // A40: PC 는 카드가 옆으로, 폰은 위아래로 놓이므로 같은 줄이면 가로, 줄이 다르면 세로로 봅니다.
+        const overlap = Math.min(sourceRect.bottom, rect.bottom) - Math.max(sourceRect.top, rect.top);
+        const sameRow = overlap > Math.min(sourceRect.height, rect.height) * 0.5;
+        const after = sameRow ? point.x > rect.left + rect.width / 2 : point.y > rect.top + rect.height / 2;
+        moveCard(key, targetKey, after);
+      },
+      {
+        onStart: () => setCardDragging(key),
+        onEnd: () => setCardDragging(null),
+        getHint: (dropTarget) => {
+          if (dropTarget.zone === "card-row-break") return "새 줄로 내리기";
+          if (dropTarget.zone === "schedule-card") return "일정 카드 앞으로 옮기기";
+          if (dropTarget.zone === "routine-card") {
+            const index = Number(dropTarget.data.routineCard ?? "0");
+            return `루틴 카드 ${index + 1} 앞으로 옮기기`;
+          }
+          if (dropTarget.zone === "project-card" && dropTarget.data.project) {
+            return `${projectTitleOf(dropTarget.data.project)} 앞으로 옮기기`;
+          }
+          return null;
+        },
+      },
+    );
   };
 
   /**
@@ -486,7 +627,7 @@ export function ProjectsTab() {
   };
 
   return (
-    <div>
+    <div className="pb-24">
       <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
         <div className="min-w-0">
           <p className="text-[calc(13.5px*var(--fs))] text-ink-400">
@@ -644,7 +785,7 @@ export function ProjectsTab() {
                 </button>
               </header>
               <p className="mt-1.5 text-[calc(14px*var(--fs))] text-ink-500">
-                {indexDoneOnly ? `완료한 할 일 ${indexCompleted.length}` : `남은 할 일 ${indexOpen.length}`}
+                {indexDoneOnly ? `완료·취소한 할 일 ${indexCompleted.length}` : `남은 할 일 ${indexOpen.length}`}
               </p>
               <ul className="mt-1 space-y-1.5">
                 {indexPreview.slice(0, CARD_OPEN_PREVIEW).map((task) => (
@@ -691,137 +832,109 @@ export function ProjectsTab() {
               </form>
             </article>
 
-            {/* A39: index 바로 옆 `일정` 카드 — 분류와 상관없이 모든 일정을 모아 보여 줍니다. */}
-            <ScheduleCard
-              events={data.calendar}
-              nowOnly={settings.nowOnly}
-              showCompleted={settings.showCompletedTasks}
-              highlight={dropCard === "schedule"}
-              open={scheduleOpen}
-              dropProps={scheduleDropProps}
-              onOpenDrawer={() => setScheduleOpen(true)}
-              onOpenEvent={(id) => setEventId(id)}
-              onToggleDone={toggleEventDone}
-              onCreate={(title) => void createEventQuick(title)}
-              onPointerDragStart={startEventPointerDrag}
-              onDragStartEvent={(dragEvent, item) => {
-                dragEvent.dataTransfer.setData("text/diary-event", item.id);
-                dragEvent.dataTransfer.effectAllowed = "move";
-              }}
-            />
-
-            {projects.map((project) => (
-                <ProjectCard
-                  key={project.id}
-                  project={project}
-                  tasks={tasks}
-                  onOpenProject={setProjectId}
-                  onOpenTask={(id) => void openTask(id)}
-                  onToggleTask={toggleTask}
-                  onCreateTask={(target) =>
-                    openTaskDraft({ kind: "할 일", category: target.category, projectId: target.id })
-                  }
-                  onPointerDragStart={startTaskPointerDrag}
-                  drag={{
-                    draggable: true,
-                    highlight: dropCard === project.id,
-                    ...dropProps(
-                      project.id,
-                      (taskId) => moveTaskToCard(taskId, project),
-                      (event) => {
-                        const projectDrag = event.dataTransfer.getData("text/diary-project");
-                        if (!projectDrag) return;
-                        event.preventDefault();
-                        reorder(projects, projectDrag, project.id);
-                      },
-                      (droppedId) => dropEventOnCard(droppedId, project.id),
-                    ),
-                    onDragStart: (event) => {
-                      if (event.dataTransfer.types.includes("text/diary-task")) return;
-                      event.dataTransfer.setData("text/diary-project", project.id);
-                      event.dataTransfer.effectAllowed = "move";
-                    },
-                  }}
-                />
-            ))}
-          </div>
-
-          {routines.length > 0 ? (
-            <div className="cards-grid" style={{ "--proj-cols": cols } as React.CSSProperties}>
-              {routineChunks.map((chunk, chunkIndex) => {
+            {/* A40: 일정·프로젝트·루틴 카드를 한 줄에서 자유롭게 옮깁니다(index 는 늘 맨 앞). */}
+            {orderedCards.map((key, position) => {
+              if (key === CARD_BREAK) {
+                return <div key={`${CARD_BREAK}-${position}`} data-card-break="true" aria-hidden className="col-span-full h-0" />;
+              }
+              if (key === "schedule") {
+                return (
+                  <ScheduleCard
+                    key="schedule"
+                    events={data.calendar}
+                    nowOnly={settings.nowOnly}
+                    showCompleted={settings.showCompletedTasks}
+                    previewCount={settings.projectTaskPreview}
+                    highlight={dropCard === "schedule"}
+                    open={scheduleOpen}
+                    dropProps={scheduleDropProps}
+                    onOpenDrawer={() => setScheduleOpen(true)}
+                    onOpenEvent={(id) => setEventId(id)}
+                    onToggleDone={toggleEventDone}
+                    onCreate={(title) => void createEventQuick(title)}
+                    onPointerDragStart={startEventPointerDrag}
+                    onCardPointerDown={startCardDrag("schedule")}
+                    onDragStartEvent={(dragEvent, item) => {
+                      dragEvent.dataTransfer.setData("text/diary-event", item.id);
+                      dragEvent.dataTransfer.effectAllowed = "move";
+                    }}
+                  />
+                );
+              }
+              if (key.startsWith("p:")) {
+                const project = projects.find((item) => item.id === key.slice(2));
+                if (!project) return null;
+                return (
+                  <ProjectCard
+                    key={key}
+                    project={project}
+                    tasks={tasks}
+                    onOpenProject={setProjectId}
+                    onOpenTask={(id) => void openTask(id)}
+                    onToggleTask={toggleTask}
+                    onCreateTask={(target) =>
+                      openTaskDraft({ kind: "할 일", category: target.category, projectId: target.id })
+                    }
+                    onPointerDragStart={startTaskPointerDrag}
+                    onCardPointerDown={startCardDrag(key)}
+                    drag={{
+                      highlight: dropCard === project.id,
+                      ...dropProps(
+                        project.id,
+                        (taskId) => moveTaskToCard(taskId, project),
+                        undefined,
+                        (droppedId) => dropEventOnCard(droppedId, project.id),
+                      ),
+                    }}
+                  />
+                );
+              }
+              if (key.startsWith("r:")) {
+                const chunkIndex = Number(key.slice(2));
+                const chunk = routineChunks[chunkIndex];
+                if (!chunk || chunk.length === 0) return null;
                 const first = chunkIndex * ROUTINES_PER_CARD + 1;
                 const last = first + chunk.length - 1;
                 return (
-                  <article
-                    key={`routines-${chunkIndex}`}
-                    data-routine-card={chunkIndex}
-                    className="rounded-2xl border border-paper-300 px-3 py-3"
-                  >
-                    <header className="flex items-start gap-2">
-                      <span className="flex h-7 w-7 flex-none items-center justify-center rounded-full bg-paper-200 text-[calc(15px*var(--fs))]">
-                        <RepeatIcon size={14} className="text-ink-500" />
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[calc(17px*var(--fs))] font-semibold tracking-tight text-ink-900">루틴</p>
-                        {/* A27: 분류별로 나누지 않고 전체 목록을 순서대로 세 개씩 — 어디까지 보이는지 적습니다. */}
-                        <p data-routine-card-range={chunkIndex} className="truncate text-[calc(14px*var(--fs))] text-ink-500">
-                          {routineChunks.length === 1
-                            ? `전체 · ${orderedRoutines.length}개`
-                            : `${first}~${last} · ${orderedRoutines.length}개`}
-                        </p>
-                      </div>
-                    </header>
-
-                    <div className="mt-2 space-y-2">
-                      {chunk.map((routine, index) => (
-                        <div
-                          key={routine.id}
-                          data-routine-row={routine.id}
-                          draggable
-                          onDragStart={(event) => {
-                            event.dataTransfer.setData("text/diary-routine", routine.id);
-                            event.dataTransfer.effectAllowed = "move";
-                          }}
-                          onDragOver={(event) => {
-                            if (event.dataTransfer.types.includes("text/diary-routine")) event.preventDefault();
-                          }}
-                          onDrop={(event) => {
-                            const id = event.dataTransfer.getData("text/diary-routine");
-                            if (!id || id === routine.id) return;
-                            event.preventDefault();
-                            // A27: 카드가 갈라져 있어도 전체 루틴 목록 기준으로 순서를 다시 적습니다.
-                            reorderRoutines(id, routine.id);
-                          }}
-                        >
-                          <RoutineWeekRow
-                            routine={routine}
-                            toneIndex={index}
-                            routines={data.routines}
-                            showCategory
-                            onOpen={() => setRoutineId(routine.id)}
-                            onCount={(date, count) => void setRoutineCount(routine, date, count)}
-                            onToggleNow={() => {
-                              // A18: 프로젝트 카드와 같은 방식 — 루틴도 카드에서 바로 NOW 숨김을 켜고 끕니다.
-                              writeRoutineNow(routine.id, !routine.hidden);
-                              void update("routines", routine.id, { hidden: !routine.hidden });
-                            }}
-                          />
-                        </div>
-                      ))}
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => setRoutineId("new")}
-                      className="mt-2 text-[calc(14px*var(--fs))] text-ink-400 transition hover:text-ink-700"
-                    >
-                      + 루틴
-                    </button>
-                  </article>
+                  <RoutineCard
+                    key={key}
+                    chunkIndex={chunkIndex}
+                    chunk={chunk}
+                    first={first}
+                    last={last}
+                    total={orderedRoutines.length}
+                    totalChunks={routineChunks.length}
+                    routines={data.routines}
+                    weekStartsOn={settings.weekStartsOn}
+                    onCardPointerDown={startCardDrag(key)}
+                    onOpenRoutine={setRoutineId}
+                    onCount={(routine, date, count) => void setRoutineCount(routine, date, count)}
+                    onReorderRoutine={reorderRoutines}
+                    onToggleNow={(routine) => {
+                      writeRoutineNow(routine.id, !routine.hidden);
+                      void update("routines", routine.id, { hidden: !routine.hidden });
+                    }}
+                    onCreate={() => setRoutineId("new")}
+                  />
                 );
-              })}
+              }
+              return null;
+            })}
+
+            {/* A40: 마지막 줄에 빈칸이 있어도 다음 줄 첫 칸에서 시작하고 싶을 때 놓는 자리. */}
+            <div
+              data-drop-zone="card-row-break"
+              data-card-row-break="true"
+              className={cn(
+                "col-span-full flex items-center justify-center rounded-xl border border-dashed text-[calc(13.5px*var(--fs))] transition",
+                cardDragging
+                  ? "border-ink-300 bg-paper-200/60 py-2.5 text-ink-600"
+                  : "border-paper-300/50 py-1 text-transparent",
+              )}
+            >
+              {cardDragging ? "새 줄로 내리기 · 여기에 놓으면 다음 줄 첫 칸에서 시작합니다" : "새 줄"}
             </div>
-          ) : null}
+          </div>
         </div>
       ) : null}
 
@@ -846,9 +959,11 @@ export function ProjectsTab() {
         <HistoryView
           projects={data.projects.filter((task) => task.kind === "프로젝트")}
           tasks={data.projects.filter((task) => task.kind === "할 일")}
+          events={data.calendar}
           routines={data.routines.filter((routine) => routine.kind === "루틴")}
           onOpenTask={(id) => void openTask(id)}
           onOpenProject={setProjectId}
+          onOpenEvent={(id) => setEventId(id)}
           onOpenRoutine={setRoutineId}
           onRestoreTask={(task) => void update("projects", task.id, { status: "미완료", doneAt: null })}
           onRestoreRoutine={(routine) => void update("routines", routine.id, { history: false })}
@@ -941,6 +1056,7 @@ function ProjectCard({
   restoreLabel = "되살리기",
   drag,
   onPointerDragStart,
+  onCardPointerDown,
 }: {
   project: ProjectTask;
   tasks: ProjectTask[];
@@ -951,6 +1067,8 @@ function ProjectCard({
   onCreateTask?: (project: ProjectTask) => void;
   /** A39: 손가락으로 할 일을 끌기 시작할 때(카드·index·일정 사이 이동). */
   onPointerDragStart?: (event: React.PointerEvent<HTMLElement>, task: ProjectTask) => void;
+  /** A40: 카드 자체를 끌어 순서 바꾸기(웹·모바일 공통). */
+  onCardPointerDown?: (event: React.PointerEvent<HTMLElement>) => void;
   onRestore?: (project: ProjectTask) => void;
   /** 되살리기 / 보이기 — 히스토리에서 어떤 동작인지 */
   restoreLabel?: string;
@@ -979,10 +1097,10 @@ function ProjectCard({
   );
   const open = children.filter((task) => task.status !== "완료" && task.status !== "취소");
   const orderedOpen = open;
-  /** A19: 완료한 할 일 — 최근에 끝낸 순서. */
+  /** A40: 완료·취소한 할 일 — 끝낸 날(없으면 취소한 날·최근 수정) 순서로 최근 것부터. */
   const completed = children
-    .filter((task) => task.status === "완료")
-    .sort((a, b) => (b.doneAt ?? "").localeCompare(a.doneAt ?? ""));
+    .filter((task) => task.status === "완료" || task.status === "취소")
+    .sort((a, b) => (finishedAt(b) ?? "").localeCompare(finishedAt(a) ?? ""));
   /** A19: '완료 보기'를 켜면 카드가 완료한 할 일만 보여 줍니다(히스토리 카드도 같은 규격). */
   const doneOnly = mode === "history" || (mode === "track" && settings.showCompletedTasks);
   /** 카드 한 장에 보여 줄 개수 — 설정(3~8)을 따릅니다. */
@@ -999,6 +1117,7 @@ function ProjectCard({
       data-drop-zone={mode === "track" ? "project-card" : undefined}
       data-drop-project={mode === "track" ? project.id : undefined}
       {...dragProps}
+      onPointerDown={mode === "track" ? onCardPointerDown : undefined}
       className={cn(
         "flex min-h-[10rem] flex-col rounded-2xl border px-3.5 py-3 transition",
         pastel.bg,
@@ -1055,7 +1174,7 @@ function ProjectCard({
       </header>
 
       <p className="mt-1.5 text-[calc(14px*var(--fs))] text-ink-500">
-        {doneOnly ? `완료한 할 일 ${completed.length}` : `남은 할 일 ${open.length}`}
+        {doneOnly ? `완료·취소한 할 일 ${completed.length}` : `남은 할 일 ${open.length}`}
       </p>
       <ul className="mt-1 space-y-1.5">
         {previewList.slice(0, previewCount).map((task) => (
@@ -1133,15 +1252,34 @@ function RecentLog({
             <button
               type="button"
               onClick={() => onOpenTask(task.id)}
-              className="min-w-0 flex-1 truncate text-left text-[calc(14px*var(--fs))] text-ink-500"
+              className={cn(
+                "min-w-0 flex-1 truncate text-left text-[calc(14px*var(--fs))]",
+                task.status === "취소" ? "text-ink-600 line-through" : "text-ink-500",
+              )}
             >
               {task.title}
             </button>
+            {task.status === "취소" ? <CancelBadge /> : null}
             <span className="flex-none whitespace-nowrap text-[calc(13px*var(--fs))] tabular-nums text-ink-400">{recordDateLabel(task)}</span>
           </li>
         ))}
       </ul>
     </div>
+  );
+}
+
+/** A40: 취소 배지 — 예전 연한 회색보다 진하게, 목록 오른쪽에서도 바로 보이게. */
+function CancelBadge({ className }: { className?: string }) {
+  return (
+    <span
+      data-cancel-badge="true"
+      className={cn(
+        "flex-none rounded bg-ink-900/[0.12] px-1 text-[calc(11.5px*var(--fs))] font-semibold leading-[1.6] tracking-tight text-ink-800",
+        className,
+      )}
+    >
+      취소
+    </span>
   );
 }
 
@@ -1159,6 +1297,7 @@ function TaskLine({
   const { update } = useData();
   const categoryColor = useCategoryColors();
   const done = task.status === "완료";
+  const canceled = task.status === "취소";
   const priority = priorityOf(task);
   const tone = categoryColor.toneOf(task.category, taskTone(task.category));
   return (
@@ -1192,7 +1331,15 @@ function TaskLine({
         className="min-w-0 flex-1 touch-manipulation select-none text-left"
       >
         <span className="flex items-center gap-1">
-          <span className={cn("truncate text-[calc(15.5px*var(--fs))] leading-[1.35] text-ink-900", done && "text-ink-400 line-through")}>{task.title}</span>
+          {canceled ? <CancelBadge /> : null}
+          <span
+            className={cn(
+              "truncate text-[calc(15.5px*var(--fs))] leading-[1.35] text-ink-900",
+              (done || canceled) && "text-ink-400 line-through",
+            )}
+          >
+            {task.title}
+          </span>
           {priority !== "기타" ? (
             <span className={cn("flex-none rounded px-1 text-[calc(12.5px*var(--fs))] font-medium leading-4", PRIORITY_TONES[priority].badge)}>
               {PRIORITY_TONES[priority].label}
@@ -1209,6 +1356,7 @@ function RoutineWeekRow({
   routine,
   routines,
   toneIndex,
+  weekStartsOn,
   showCategory = false,
   onOpen,
   onCount,
@@ -1217,6 +1365,8 @@ function RoutineWeekRow({
   routine: Routine;
   routines: Routine[];
   toneIndex: number;
+  /** A40: 설정의 주 시작(일요일/월요일)을 루틴 요일 칸도 그대로 따릅니다. */
+  weekStartsOn: 0 | 1;
   /** A27: 전체 루틴을 한 카드에 모아 보여 줄 때 어느 분류인지 작은 배지로 알려 줍니다. */
   showCategory?: boolean;
   onOpen: () => void;
@@ -1224,7 +1374,10 @@ function RoutineWeekRow({
   onToggleNow: () => void;
 }) {
   const categoryColor = useCategoryColors();
-  const weekStart = startOfWeekISO(todayISO());
+  const weekStart = startOfWeekISO(todayISO(), weekStartsOn);
+  /** A40: 요일 글자도 주 시작에 맞춰 돌립니다 — 일요일 시작이면 일·월·화 … */
+  const weekdayLetters =
+    weekStartsOn === 1 ? ["월", "화", "수", "목", "금", "토", "일"] : ["일", "월", "화", "수", "목", "금", "토"];
   const days = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(`${weekStart}T12:00:00`);
     d.setDate(d.getDate() + i);
@@ -1275,7 +1428,7 @@ function RoutineWeekRow({
       </div>
       <div className="mt-1.5 flex items-center gap-1">
         {days.map((day, index) => {
-          const label = WEEKDAY_LETTERS[index]!;
+          const label = weekdayLetters[index]!;
           const scheduled = routine.repeatDays.length === 0 || routine.repeatDays.includes(weekdayKo(day));
           const count = routineCountForDay(routines, routine, day);
           const done = count >= target;
@@ -1307,6 +1460,104 @@ function RoutineWeekRow({
         })}
       </div>
     </div>
+  );
+}
+
+/**
+ * A40: 루틴 카드 — 프로젝트 카드와 같은 줄에서 끌어 옮길 수 있게 한 장으로 묶었습니다.
+ * 카드 안의 루틴 줄은 예전처럼 끌어 전체 루틴 순서를 바꿉니다.
+ */
+function RoutineCard({
+  chunk,
+  chunkIndex,
+  first,
+  last,
+  total,
+  totalChunks,
+  routines,
+  weekStartsOn,
+  onCardPointerDown,
+  onOpenRoutine,
+  onCount,
+  onReorderRoutine,
+  onToggleNow,
+  onCreate,
+}: {
+  chunk: Routine[];
+  chunkIndex: number;
+  first: number;
+  last: number;
+  total: number;
+  totalChunks: number;
+  routines: Routine[];
+  weekStartsOn: 0 | 1;
+  onCardPointerDown: (event: React.PointerEvent<HTMLElement>) => void;
+  onOpenRoutine: (id: string) => void;
+  onCount: (routine: Routine, date: string, count: number) => void;
+  onReorderRoutine: (dragId: string, targetId: string) => void;
+  onToggleNow: (routine: Routine) => void;
+  onCreate: () => void;
+}) {
+  return (
+    <article
+      data-routine-card={chunkIndex}
+      data-drop-zone="routine-card"
+      data-routine-card-index={chunkIndex}
+      onPointerDown={onCardPointerDown}
+      className="rounded-2xl border border-paper-300 px-3 py-3"
+    >
+      <header className="flex items-start gap-2">
+        <span className="flex h-7 w-7 flex-none items-center justify-center rounded-full bg-paper-200 text-[calc(15px*var(--fs))]">
+          <RepeatIcon size={14} className="text-ink-500" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="text-[calc(17px*var(--fs))] font-semibold tracking-tight text-ink-900">루틴</p>
+          {/* A27: 분류별로 나누지 않고 전체 목록을 순서대로 세 개씩 — 어디까지 보이는지 적습니다. */}
+          <p data-routine-card-range={chunkIndex} className="truncate text-[calc(14px*var(--fs))] text-ink-500">
+            {totalChunks === 1 ? `전체 · ${total}개` : `${first}~${last} · ${total}개`}
+          </p>
+        </div>
+      </header>
+
+      <div className="mt-2 space-y-2">
+        {chunk.map((routine, index) => (
+          <div
+            key={routine.id}
+            data-routine-row={routine.id}
+            draggable
+            onDragStart={(event) => {
+              event.dataTransfer.setData("text/diary-routine", routine.id);
+              event.dataTransfer.effectAllowed = "move";
+            }}
+            onDragOver={(event) => {
+              if (event.dataTransfer.types.includes("text/diary-routine")) event.preventDefault();
+            }}
+            onDrop={(event) => {
+              const id = event.dataTransfer.getData("text/diary-routine");
+              if (!id || id === routine.id) return;
+              event.preventDefault();
+              // A27: 카드가 갈라져 있어도 전체 루틴 목록 기준으로 순서를 다시 적습니다.
+              onReorderRoutine(id, routine.id);
+            }}
+          >
+            <RoutineWeekRow
+              routine={routine}
+              toneIndex={index}
+              weekStartsOn={weekStartsOn}
+              routines={routines}
+              showCategory
+              onOpen={() => onOpenRoutine(routine.id)}
+              onCount={(date, count) => onCount(routine, date, count)}
+              onToggleNow={() => onToggleNow(routine)}
+            />
+          </div>
+        ))}
+      </div>
+
+      <button type="button" onClick={onCreate} className="mt-2 text-[calc(14px*var(--fs))] text-ink-400 transition hover:text-ink-700">
+        + 루틴
+      </button>
+    </article>
   );
 }
 
@@ -1347,6 +1598,8 @@ function PriorityView({
   const { update } = useData();
   const { settings } = useSettings();
   const categoryColor = useCategoryColors();
+  /** A40: 프로젝트 배지는 `진행` 탭 카드와 같은 프로젝트 색을 그대로 씁니다. */
+  const { pastelOf } = useProjectColors();
   // A28: 사분면 안에서도 남은 할 일이 같은 날짜 방향을 따릅니다.
   const open = sortTasksByDate(
     tasks.filter((task) => task.status !== "완료" && task.status !== "취소"),
@@ -1446,9 +1699,20 @@ function PriorityView({
                     {unclassified ? (
                       <span className="flex-none text-[calc(12px*var(--fs))] font-normal leading-4 tracking-tight text-ink-300">분류 전</span>
                     ) : null}
-                    {project ? (
-                      <span className={cn("flex-none text-[calc(13.5px*var(--fs))]", tone.text)}>{project.title}</span>
-                    ) : null}
+                    {project ? (() => {
+                      // A40: `진행` 탭 카드의 프로젝트 색(파스텔)과 똑같은 색의 배지.
+                      const pastel = pastelOf(project.id);
+                      return (
+                        <span
+                          data-priority-project={project.id}
+                          className="flex flex-none items-center gap-1 rounded-full px-1.5 py-[1px] text-[calc(12.5px*var(--fs))] font-medium leading-[1.5] text-ink-700"
+                          style={{ backgroundColor: `${pastel.line}26` }}
+                        >
+                          <span className="h-[6px] w-[6px] flex-none rounded-full" style={{ backgroundColor: pastel.line }} />
+                          <span className="max-w-[8rem] truncate">{project.title}</span>
+                        </span>
+                      );
+                    })() : null}
                   </span>
                 </button>
                 <span className="flex-none text-[calc(13.5px*var(--fs))] tabular-nums text-ink-400">{taskDateLabel(task)}</span>
@@ -1615,12 +1879,80 @@ function PriorityView({
   );
 }
 
+/**
+ * A40: `기록` 탭의 목록 — 처음 다섯 개만 보여 주고, 더 있으면 `펼치기`로 전부 봅니다.
+ * 모든 줄에 날짜(와 시간)를 함께 적습니다.
+ */
+function ShowMoreList<T>({
+  items,
+  initial = 5,
+  empty,
+  render,
+  listKey,
+}: {
+  items: T[];
+  initial?: number;
+  empty: string;
+  render: (item: T, index: number) => React.ReactNode;
+  listKey: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  if (items.length === 0) return <p className="text-[calc(14.5px*var(--fs))] text-ink-400">{empty}</p>;
+  const shown = expanded ? items : items.slice(0, initial);
+  return (
+    <>
+      <ul data-history-list={listKey} className="divide-y divide-paper-300/60">
+        {shown.map((item, index) => render(item, index))}
+      </ul>
+      {items.length > initial ? (
+        <button
+          type="button"
+          data-history-more={listKey}
+          aria-expanded={expanded}
+          onClick={() => setExpanded((current) => !current)}
+          className="mt-1.5 rounded-full bg-paper-200 px-2.5 py-1 text-[calc(13.5px*var(--fs))] font-medium text-ink-500 transition hover:bg-paper-300/70 hover:text-ink-900"
+        >
+          {expanded ? "접기" : `${items.length - initial}개 더 보기 · 펼치기`}
+        </button>
+      ) : null}
+    </>
+  );
+}
+
+/** A40: 완료·취소한 일정 한 줄 — 날짜와 시간을 늘 함께 적습니다. */
+function HistoryEventRow({
+  event,
+  onOpen,
+}: {
+  event: CalendarEvent;
+  onOpen: () => void;
+}) {
+  const canceled = event.canceled;
+  return (
+    <li data-history-event={event.id} className="flex items-center gap-2 py-1.5">
+      <CheckIcon size={11} className={cn("flex-none", canceled ? "text-ink-400" : "text-sage-500")} />
+      <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-left">
+        <span className={cn("block truncate text-[calc(15px*var(--fs))]", canceled ? "text-ink-600 line-through" : "text-ink-700")}>
+          {event.title}
+        </span>
+        {canceled && event.cancelReason ? (
+          <span className="block truncate text-[calc(13px*var(--fs))] text-ink-400">{event.cancelReason}</span>
+        ) : null}
+      </button>
+      {canceled ? <CancelBadge /> : null}
+      <span className="flex-none whitespace-nowrap text-[calc(13px*var(--fs))] tabular-nums text-ink-400">{scheduleDateLabel(event)}</span>
+    </li>
+  );
+}
+
 function HistoryView({
   projects,
   tasks,
+  events,
   routines,
   onOpenTask,
   onOpenProject,
+  onOpenEvent,
   onOpenRoutine,
   onRestoreTask,
   onRestoreRoutine,
@@ -1628,9 +1960,11 @@ function HistoryView({
 }: {
   projects: ProjectTask[];
   tasks: ProjectTask[];
+  events: CalendarEvent[];
   routines: Routine[];
   onOpenTask: (id: string) => void;
   onOpenProject: (id: string) => void;
+  onOpenEvent: (id: string) => void;
   onOpenRoutine: (id: string) => void;
   onRestoreTask: (task: ProjectTask) => void;
   onRestoreRoutine: (routine: Routine) => void;
@@ -1641,8 +1975,16 @@ function HistoryView({
     (project) => !project.trash && (project.status === "완료" || project.status === "취소" || project.history || project.hidden),
   );
   const pastRoutines = routines.filter((routine) => routine.history || routine.trash);
-  const doneTasks = tasks.filter((task) => task.status === "완료").slice(0, 40);
-  const canceled = tasks.filter((task) => task.status === "취소").slice(0, 20);
+  /** A40: 기록 탭에도 일정 — 완료하거나 취소한 일정을 최근 날짜부터 모읍니다. */
+  const finishedEvents = events
+    .filter((event) => event.kind === "일정" && !event.trash && (event.done || event.canceled))
+    .sort((a, b) => (b.endDate ?? b.date ?? "").localeCompare(a.endDate ?? a.date ?? ""));
+  const doneTasks = tasks
+    .filter((task) => task.status === "완료")
+    .sort((a, b) => (finishedAt(b) ?? "").localeCompare(finishedAt(a) ?? ""));
+  const canceled = tasks
+    .filter((task) => task.status === "취소")
+    .sort((a, b) => (finishedAt(b) ?? "").localeCompare(finishedAt(a) ?? ""));
 
   return (
     <div className="mt-4 space-y-4">
@@ -1668,9 +2010,78 @@ function HistoryView({
         )}
       </section>
 
+      <section className="rounded-2xl border border-paper-300 px-3.5 py-3" data-history-events="true">
+        <h3 className="mb-2 flex items-baseline gap-1.5 text-[calc(15px*var(--fs))] font-semibold text-ink-900">
+          완료·취소한 일정
+          <span className="text-[calc(13.5px*var(--fs))] font-normal text-ink-400">{finishedEvents.length}</span>
+        </h3>
+        <ShowMoreList
+          listKey="events"
+          items={finishedEvents}
+          empty="완료하거나 취소한 일정이 아직 없습니다."
+          render={(event) => <HistoryEventRow event={event} onOpen={() => onOpenEvent(event.id)} />}
+        />
+      </section>
+
       <div className="grid gap-4 lg:grid-cols-2">
+      <section className="rounded-2xl border border-paper-300 px-3.5 py-3">
+        <h3 className="mb-2 flex items-baseline gap-1.5 text-[calc(15px*var(--fs))] font-semibold text-ink-900">
+          최근 완료한 할 일
+          <span className="text-[calc(13.5px*var(--fs))] font-normal text-ink-400">{doneTasks.length}</span>
+        </h3>
+        <ShowMoreList
+          listKey="tasks"
+          items={doneTasks}
+          empty="완료한 할 일이 아직 없습니다."
+          render={(task) => (
+            <li data-history-task={task.id} className="flex items-center gap-1.5 py-1.5">
+              <CheckIcon size={11} className="flex-none text-sage-500" />
+              <button type="button" onClick={() => onOpenTask(task.id)} className="min-w-0 flex-1 text-left">
+                <span className="block truncate text-[calc(15px*var(--fs))] text-ink-600">{task.title}</span>
+                <span className="block truncate text-[calc(13px*var(--fs))] text-ink-400">{recordDateLabel(task)}</span>
+              </button>
+              <button type="button" onClick={() => onRestoreTask(task)} className="flex-none text-[calc(13px*var(--fs))] text-ink-400 hover:text-ink-700">
+                되살리기
+              </button>
+            </li>
+          )}
+        />
+      </section>
 
       <section className="rounded-2xl border border-paper-300 px-3.5 py-3">
+        <h3 className="mb-2 flex items-baseline gap-1.5 text-[calc(15px*var(--fs))] font-semibold text-ink-900">
+          취소한 할 일
+          <span className="text-[calc(13.5px*var(--fs))] font-normal text-ink-400">{canceled.length}</span>
+        </h3>
+        <ShowMoreList
+          listKey="canceled"
+          items={canceled}
+          empty="취소한 할 일이 없습니다."
+          render={(task) => (
+            <li data-history-canceled={task.id} className="flex items-center gap-2 py-1.5">
+              <button type="button" onClick={() => onOpenTask(task.id)} className="min-w-0 flex-1 text-left">
+                <span className="flex items-center gap-1">
+                  <CancelBadge />
+                  <span className="truncate text-[calc(15px*var(--fs))] text-ink-600 line-through">{task.title}</span>
+                </span>
+                <span className="block truncate text-[calc(13px*var(--fs))] text-ink-400">
+                  {recordDateLabel(task)}
+                  {task.cancelReason ? ` · ${task.cancelReason}` : ""}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => onRestoreTask(task)}
+                className="flex-none rounded px-1.5 py-0.5 text-[calc(13px*var(--fs))] text-ink-400 hover:bg-paper-200 hover:text-ink-700"
+              >
+                되살리기
+              </button>
+            </li>
+          )}
+        />
+      </section>
+
+      <section className="rounded-2xl border border-paper-300 px-3.5 py-3 lg:col-span-2">
         <h3 className="mb-2 text-[calc(15px*var(--fs))] font-semibold text-ink-900">지난 루틴</h3>
         {pastRoutines.length === 0 ? (
           <p className="text-[calc(14.5px*var(--fs))] text-ink-400">기록으로 보낸 루틴이 여기에 모입니다.</p>
@@ -1687,52 +2098,6 @@ function HistoryView({
                 <button
                   type="button"
                   onClick={() => onRestoreRoutine(routine)}
-                  className="rounded px-1.5 py-0.5 text-[calc(13px*var(--fs))] text-ink-400 hover:bg-paper-200 hover:text-ink-700"
-                >
-                  되살리기
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <section className="rounded-2xl border border-paper-300 px-3.5 py-3">
-        <h3 className="mb-2 text-[calc(15px*var(--fs))] font-semibold text-ink-900">최근 완료한 할 일</h3>
-        {doneTasks.length === 0 ? (
-          <p className="text-[calc(14.5px*var(--fs))] text-ink-400">완료한 할 일이 아직 없습니다.</p>
-        ) : (
-          <ul className="space-y-1">
-            {doneTasks.map((task) => (
-              <li key={task.id} className="flex items-center gap-1.5">
-                <CheckIcon size={11} className="flex-none text-sage-500" />
-                <button type="button" onClick={() => onOpenTask(task.id)} className="min-w-0 flex-1 truncate text-left text-[calc(15px*var(--fs))] text-ink-600">
-                  {task.title}
-                </button>
-                <button type="button" onClick={() => onRestoreTask(task)} className="text-[calc(13px*var(--fs))] text-ink-400 hover:text-ink-700">
-                  되살리기
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <section className="rounded-2xl border border-paper-300 px-3.5 py-3">
-        <h3 className="mb-2 text-[calc(15px*var(--fs))] font-semibold text-ink-900">접어 둔 할 일</h3>
-        {canceled.length === 0 ? (
-          <p className="text-[calc(14.5px*var(--fs))] text-ink-400">취소한 할 일이 없습니다.</p>
-        ) : (
-          <ul className="divide-y divide-paper-300/60">
-            {canceled.map((task) => (
-              <li key={task.id} className="flex items-center gap-2 py-1.5">
-                <button type="button" onClick={() => onOpenTask(task.id)} className="min-w-0 flex-1 text-left">
-                  <span className="block truncate text-[calc(15px*var(--fs))] text-ink-500 line-through">{task.title}</span>
-                  {task.cancelReason ? <span className="text-[calc(13px*var(--fs))] text-ink-400">{task.cancelReason}</span> : null}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onRestoreTask(task)}
                   className="rounded px-1.5 py-0.5 text-[calc(13px*var(--fs))] text-ink-400 hover:bg-paper-200 hover:text-ink-700"
                 >
                   되살리기

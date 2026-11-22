@@ -40,6 +40,18 @@ function byDoneOrder(a: CalendarEvent, b: CalendarEvent): number {
   return right.localeCompare(left);
 }
 
+/** A40: `취소` 배지 — 예전 연한 회색보다 진하게(목록 오른쪽에서도 바로 읽히도록). */
+function CancelPill() {
+  return (
+    <span
+      data-cancel-badge="true"
+      className="flex-none rounded bg-ink-900/[0.12] px-1 text-[calc(11.5px*var(--fs))] font-semibold leading-[1.6] tracking-tight text-ink-800"
+    >
+      취소
+    </span>
+  );
+}
+
 function CategoryBadge({ category }: { category: string }) {
   const categoryColor = useCategoryColors();
   const tone = categoryColor.toneOf(category, taskTone(category));
@@ -62,6 +74,7 @@ export function ScheduleCard({
   events,
   nowOnly,
   showCompleted,
+  previewCount = SCHEDULE_PREVIEW,
   highlight,
   open,
   dropProps,
@@ -71,11 +84,14 @@ export function ScheduleCard({
   onCreate,
   onPointerDragStart,
   onDragStartEvent,
+  onCardPointerDown,
 }: {
   events: CalendarEvent[];
   nowOnly: boolean;
   /** 완료 보기 — 켜져 있으면 완료한 일정만 보여 줍니다. */
   showCompleted: boolean;
+  /** A40: 프로젝트 카드와 같은 표시 개수(3~8)를 `일정` 카드도 따릅니다. */
+  previewCount?: number;
   highlight: boolean;
   open: boolean;
   dropProps: React.HTMLAttributes<HTMLElement>;
@@ -87,13 +103,20 @@ export function ScheduleCard({
   onPointerDragStart: (event: ReactPointerEvent<HTMLElement>, item: CalendarEvent) => void;
   /** 마우스 끌기(PC) — HTML5 drag 로 id 를 실어 보냅니다. */
   onDragStartEvent: (event: ReactDragEvent<HTMLElement>, item: CalendarEvent) => void;
+  /** A40: 카드 자체를 끌어 순서 바꾸기. */
+  onCardPointerDown?: (event: ReactPointerEvent<HTMLElement>) => void;
 }) {
   const [draft, setDraft] = useState("");
   const visible = useMemo(() => events.filter((event) => event.kind === "일정" && !event.trash), [events]);
   /** NOW 모드에서만 NOW 숨김을 가립니다 — 분류는 걸지 않습니다. */
   const scoped = useMemo(() => (nowOnly ? visible.filter((event) => !event.hidden) : visible), [visible, nowOnly]);
   const openList = useMemo(() => scoped.filter(isOpenEvent).sort(byOpenOrder), [scoped]);
-  const doneList = useMemo(() => scoped.filter((event) => event.done).sort(byDoneOrder), [scoped]);
+  /** A40: 완료·취소한 일정을 함께 하단 `최근 기록`에 모읍니다. */
+  const doneList = useMemo(
+    () => scoped.filter((event) => event.done || event.canceled).sort(byDoneOrder),
+    [scoped],
+  );
+  const count = Math.max(1, previewCount);
   const preview = showCompleted ? doneList : openList;
   const recent = showCompleted ? [] : doneList.slice(0, SCHEDULE_RECENT);
 
@@ -111,6 +134,7 @@ export function ScheduleCard({
       data-drop-zone="schedule-card"
       data-drop-id="schedule"
       {...dropProps}
+      onPointerDown={onCardPointerDown}
       onClick={(event) => {
         const target = event.target as HTMLElement | null;
         if (target?.closest("button, a, input, textarea, select, label, form")) return;
@@ -142,10 +166,10 @@ export function ScheduleCard({
         </button>
       </header>
       <p className="mt-1.5 text-[calc(14px*var(--fs))] text-ink-500">
-        {showCompleted ? `완료한 일정 ${doneList.length}` : `남은 일정 ${openList.length}`}
+        {showCompleted ? `완료·취소한 일정 ${doneList.length}` : `남은 일정 ${openList.length}`}
       </p>
       <ul className="mt-1 space-y-1.5">
-        {preview.slice(0, SCHEDULE_PREVIEW).map((event) => {
+        {preview.slice(0, count).map((event) => {
           const done = event.done;
           return (
             <li
@@ -159,14 +183,19 @@ export function ScheduleCard({
               <button
                 type="button"
                 onClick={() => onToggleDone(event)}
-                aria-label={done ? `${event.title} 완료 해제` : `${event.title} 완료`}
+                aria-label={event.canceled ? `${event.title} 취소됨` : done ? `${event.title} 완료 해제` : `${event.title} 완료`}
                 aria-pressed={done}
+                disabled={event.canceled}
                 className={cn(
                   "mt-[3px] flex h-[16px] w-[16px] flex-none items-center justify-center rounded-[4px] border transition",
-                  done ? "border-sage-400 bg-sage-400 text-white" : "border-paper-400 hover:border-ink-500",
+                  done && !event.canceled
+                    ? "border-sage-400 bg-sage-400 text-white"
+                    : event.canceled
+                      ? "border-ink-300 bg-ink-900/[0.12] text-ink-700"
+                      : "border-paper-400 hover:border-ink-500",
                 )}
               >
-                {done ? <CheckIcon size={9} /> : null}
+                {event.canceled ? <span className="text-[calc(9px*var(--fs))] font-bold leading-none">×</span> : done ? <CheckIcon size={9} /> : null}
               </button>
               <button
                 type="button"
@@ -177,9 +206,15 @@ export function ScheduleCard({
               >
                 <span className="flex items-center gap-1">
                   <CategoryBadge category={event.category} />
-                  <span className={cn("truncate text-[calc(15.5px*var(--fs))] leading-[1.35] text-ink-900", done && "text-ink-400 line-through")}>
+                  <span
+                    className={cn(
+                      "truncate text-[calc(15.5px*var(--fs))] leading-[1.35] text-ink-900",
+                      (done || event.canceled) && "text-ink-400 line-through",
+                    )}
+                  >
                     {event.title}
                   </span>
+                  {event.canceled ? <CancelPill /> : null}
                 </span>
                 <span className="mt-0.5 block truncate text-[calc(13px*var(--fs))] text-ink-400">{scheduleDateLabel(event)}</span>
               </button>
@@ -191,14 +226,14 @@ export function ScheduleCard({
             {showCompleted ? "완료한 일정이 없습니다." : "남은 일정이 없습니다."}
           </li>
         ) : null}
-        {preview.length > SCHEDULE_PREVIEW ? (
+        {preview.length > count ? (
           <li>
             <button
               type="button"
               onClick={onOpenDrawer}
               className="pl-[1.375rem] text-[calc(13.5px*var(--fs))] text-ink-500 transition hover:text-ink-700"
             >
-              +{preview.length - SCHEDULE_PREVIEW}개 더 보기
+              +{preview.length - count}개 더 보기
             </button>
           </li>
         ) : null}
@@ -217,6 +252,7 @@ export function ScheduleCard({
                 >
                   {event.title}
                 </button>
+                {event.canceled ? <CancelPill /> : null}
                 <span className="flex-none whitespace-nowrap text-[calc(13px*var(--fs))] tabular-nums text-ink-400">
                   {scheduleDateLabel(event)}
                 </span>
@@ -288,15 +324,17 @@ export function ScheduleDrawer({
     return list;
   }, [scoped]);
   const categoryFiltered = category === "전체" ? scoped : scoped.filter((event) => event.category === category);
-  const doneCount = categoryFiltered.filter((event) => event.done).length;
+  /** A40: 완료와 취소는 함께 `완료` 영역에 — 취소는 완료로 세지 않고 그대로 표시합니다. */
+  const completedCount = categoryFiltered.filter((event) => event.done && !event.canceled).length;
+  const doneCount = categoryFiltered.filter((event) => event.done || event.canceled).length;
   const openCount = categoryFiltered.filter(isOpenEvent).length;
   const filtered = categoryFiltered.filter((event) => {
     if (filter === "ing") return isOpenEvent(event);
-    if (filter === "done") return event.done;
+    if (filter === "done") return event.done || event.canceled;
     return true;
   });
   const total = categoryFiltered.length;
-  const progress = total > 0 ? Math.round((doneCount / total) * 100) : 0;
+  const progress = total > 0 ? Math.round((completedCount / total) * 100) : 0;
 
   const submit = () => {
     const title = draft.trim();
@@ -347,7 +385,7 @@ export function ScheduleDrawer({
           options={[
             { value: "all", label: `전체 ${categoryFiltered.length}` },
             { value: "ing", label: `진행 ${openCount}` },
-            { value: "done", label: `완료 ${doneCount}` },
+            { value: "done", label: `완료·취소 ${doneCount}` },
           ]}
         />
 
@@ -408,9 +446,7 @@ export function ScheduleDrawer({
                     </span>
                     <span className="mt-0.5 block truncate text-[calc(13px*var(--fs))] text-ink-400">{scheduleDateLabel(event)}</span>
                   </button>
-                  {event.canceled ? (
-                    <span className="mt-[2px] flex-none rounded bg-paper-200 px-1 text-[calc(11.5px*var(--fs))] font-medium text-ink-500">취소</span>
-                  ) : null}
+                  {event.canceled ? <CancelPill /> : null}
                 </li>
               );
             })}

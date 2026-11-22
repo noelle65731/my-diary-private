@@ -79,7 +79,7 @@ export function TaskRow({
         {done ? <CheckIcon size={10} /> : null}
       </button>
       <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-left">
-        <span className={cn("flex items-center gap-1 truncate text-[calc(15px*var(--fs))] text-ink-800", done && "text-ink-400 line-through")}>
+        <span className={cn("flex items-center gap-1 truncate text-[calc(15px*var(--fs))] text-ink-800", (done || task.status === "취소") && "text-ink-400 line-through")}>
           {task.urgent ? <FlagIcon size={11} className="flex-none text-rose-400" /> : null}
           <span className="truncate">{task.title}</span>
         </span>
@@ -110,7 +110,11 @@ export function TaskRow({
             {task.status === "대기 중" ? (
               <span className="chip bg-amber-100 text-amber-700">{task.waitFor ? `${task.waitFor} 대기` : "대기 중"}</span>
             ) : null}
-            {task.status === "취소" ? <span className="text-ink-300">취소됨</span> : null}
+            {task.status === "취소" ? (
+              <span data-cancel-badge="true" className="rounded bg-ink-900/[0.12] px-1 text-[calc(11.5px*var(--fs))] font-semibold leading-[1.6] tracking-tight text-ink-800">
+                취소
+              </span>
+            ) : null}
           </span>
         ) : null}
       </button>

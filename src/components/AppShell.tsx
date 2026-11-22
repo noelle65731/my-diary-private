@@ -11,6 +11,7 @@ import {
   CalendarIcon,
   CheckIcon,
   LayersIcon,
+  ListIcon,
   PlusIcon,
   RepeatIcon,
   SearchIcon,
@@ -23,6 +24,7 @@ import { SaveIndicator } from "@/components/SaveIndicator";
 import { ConflictDialog } from "@/components/ConflictDialog";
 import { LoginScreen } from "@/components/LoginScreen";
 import { SearchDialog } from "@/components/SearchDialog";
+import { BulkManageDialog } from "@/components/BulkManageDialog";
 import { TrashDialog } from "@/components/TrashDialog";
 import { SettingsDialog } from "@/components/SettingsDialog";
 import { CalendarTab } from "@/components/calendar/CalendarTab";
@@ -65,7 +67,7 @@ function Splash() {
 
 export function AppShell() {
   const { status, loading, fatalError, demo, resourceErrors, refresh, data } = useData();
-  const { tab, setTab, requestReset, setSearchOpen, openTrash, setSettingsOpen, toasts, dismissToast, taskDraft, openTaskDraft, closeTaskDraft } = useUi();
+  const { tab, setTab, requestReset, setSearchOpen, setBulkOpen, openTrash, setSettingsOpen, toasts, dismissToast, taskDraft, openTaskDraft, closeTaskDraft } = useUi();
   const [today, setToday] = useState(todayISO());
   const [quickOpen, setQuickOpen] = useState(false);
   const [quick, setQuick] = useState<QuickKind | null>(null);
@@ -192,7 +194,7 @@ export function AppShell() {
   if (status?.authRequired && !status.authenticated) return <LoginScreen />;
 
   return (
-    <div className="flex min-h-dvh flex-col bg-white">
+    <div className="flex h-dvh flex-col overflow-hidden bg-white">
       {/* Chrome (나의 다이어리 · 검색 · 휴지통 · 설정) is an overlay: the page uses the full
           height, and the bar slides down when the pointer reaches the top edge. */}
       <div className="pointer-events-none fixed inset-x-0 top-0 z-40 print:hidden" ref={chromeRef}>
@@ -240,6 +242,16 @@ export function AppShell() {
               <ConflictDialog />
               <button type="button" className="icon-btn" onClick={() => setSearchOpen(true)} aria-label="검색">
                 <SearchIcon size={16} />
+              </button>
+              <button
+                type="button"
+                data-bulk-open="chrome"
+                onClick={() => setBulkOpen(true)}
+                className="inline-flex h-7 items-center gap-1 rounded-full bg-paper-200 px-2.5 text-[calc(13.5px*var(--fs))] font-medium text-ink-600 transition hover:bg-paper-300/70 hover:text-ink-900"
+                aria-label="일괄 관리"
+                title="여러 일정·할 일을 한 번에 고치기"
+              >
+                <ListIcon size={14} /> 일괄 관리
               </button>
               <button type="button" className="icon-btn" onClick={() => openTrash("all")} aria-label="휴지통">
                 <TrashIcon size={16} />
@@ -308,8 +320,8 @@ export function AppShell() {
       ) : null}
 
 
-      <main className="min-w-0 flex-1 px-4 pb-[calc(4.6rem+env(safe-area-inset-bottom))] pt-3 md:px-6 md:pt-3 lg:px-8">
-        <div className="mx-auto w-full max-w-[1680px]">
+      <main className="flex min-w-0 flex-1 flex-col overflow-y-auto px-4 pb-[calc(3.4rem+env(safe-area-inset-bottom))] pt-2 md:px-6 md:pt-2 lg:px-8">
+        <div className="mx-auto flex min-h-0 w-full max-w-[1680px] flex-1 flex-col">
           {tab === "calendar" ? <CalendarTab /> : null}
           {tab === "projects" ? <ProjectsTab /> : null}
           {tab === "binder" ? <BinderTab /> : null}
@@ -379,6 +391,7 @@ export function AppShell() {
       </nav>
 
       <SearchDialog />
+      <BulkManageDialog />
       <TrashDialog />
       <SettingsDialog />
 
