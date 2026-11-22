@@ -248,8 +248,8 @@ export function DndProvider({ children }: { children: ReactNode }) {
         current.hoverEl = zoneEl;
         if (zoneEl) zoneEl.dataset.dropHover = "true";
       }
-      if (zoneEl) current.scrollBox = scrollableBox(zoneEl) ?? current.scrollBox;
       if (zoneEl) {
+        current.scrollBox = scrollableBox(zoneEl) ?? current.scrollBox;
         const target = readDropTarget(zoneEl);
         const hint = current.options.getHint?.(target, { x: current.x, y: current.y });
         setHint(hint ?? (zoneEl.dataset.dropHint ?? null));
@@ -290,7 +290,7 @@ export function DndProvider({ children }: { children: ReactNode }) {
           const top = box.scrollTop;
           box.scrollBy(dx, dy);
           if (box.scrollLeft !== left || box.scrollTop !== top) {
-            if (current.scrollBox) current.scrollBox = box;
+            current.scrollBox = box;
             updateHover();
             return;
           }
