@@ -346,6 +346,14 @@ body.dnd-locked {
   pointer-events: none;
 }
 
+/* A35: 꾹 눌러 끄는 항목에서 iOS 의 '복사·선택·미리보기' 메뉴가 끌기를 가로채지 않게. */
+[data-week-cell-drag],
+[data-day-list-task],
+[data-day-list-event],
+[data-week-task] {
+  -webkit-touch-callout: none;
+}
+
 @layer utilities {
   .scroll-shadow-y {
     background:
