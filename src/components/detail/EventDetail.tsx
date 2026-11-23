@@ -143,27 +143,27 @@ export function EventDetail({
   open,
   eventId,
   onBack,
-  onCloseAll,
+  onCloseDetail,
 }: {
   open: boolean;
   eventId: string | null;
   onBack: () => void;
-  onCloseAll: () => void;
+  onCloseDetail: () => void;
 }) {
   const { data } = useData();
   const event = eventId ? data.calendar.find((item) => item.id === eventId) ?? null : null;
   if (!open || !event) return null;
-  return <EventDetailInner key={event.id} event={event} onBack={onBack} onCloseAll={onCloseAll} />;
+  return <EventDetailInner key={event.id} event={event} onBack={onBack} onCloseDetail={onCloseDetail} />;
 }
 
 function EventDetailInner({
   event,
   onBack,
-  onCloseAll,
+  onCloseDetail,
 }: {
   event: CalendarEvent;
   onBack: () => void;
-  onCloseAll: () => void;
+  onCloseDetail: () => void;
 }) {
   const { data, update, remove } = useData();
   /** A40: 저장할 때 주간 키를 설정의 주 시작에 맞춥니다. */
@@ -220,7 +220,7 @@ function EventDetailInner({
     <DetailShell
       open
       onBack={() => leave(onBack)}
-      onClose={() => leave(onCloseAll)}
+      onClose={() => leave(onCloseDetail)}
       label={`일정`}
       ariaLabel={`${draft.kind} · ${draft.category}`}
       notionUrl={notionPageUrl(event)}
@@ -229,7 +229,7 @@ function EventDetailInner({
       onRestore={() => void update("calendar", event.id, { trash: false })}
       onTrash={() => {
         void remove("calendar", event.id);
-        onCloseAll();
+        onCloseDetail();
       }}
     >
       <div className="pt-1">

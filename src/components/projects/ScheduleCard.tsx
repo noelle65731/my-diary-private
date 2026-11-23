@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo, useState, type DragEvent as ReactDragEvent, type PointerEvent as ReactPointerEvent } from "react";
-import { Drawer, EmptyState, Segmented } from "@/components/common/primitives";
-import { CalendarIcon, CheckIcon, ChevronRightIcon, PlusIcon } from "@/components/icons";
+import { Drawer, EmptyState, Segmented, Switch } from "@/components/common/primitives";
+import { CalendarIcon, CheckIcon, ChevronRightIcon, PencilIcon, PlusIcon } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { formatShort, timeRangeLabel, weekdayKo } from "@/lib/date";
 import type { CalendarEvent } from "@/lib/types";
@@ -202,7 +202,7 @@ export function ScheduleCard({
                 type="button"
                 data-schedule-drag={event.id}
                 onPointerDown={(pointerEvent) => onPointerDragStart(pointerEvent, event)}
-                onClick={() => onOpenEvent(event.id)}
+                onClick={onOpenDrawer}
                 className="min-w-0 flex-1 touch-manipulation select-none text-left"
               >
                 {/* A41: 날짜·시간은 아래 줄로 내리지 않고 제목 오른쪽 한 줄에 — 프로젝트 카드와 같은 규격. */}
@@ -224,6 +224,17 @@ export function ScheduleCard({
                     {scheduleDateLabel(event)}
                   </span>
                 </span>
+              </button>
+              {/* A42: 연필을 누를 때만 바로 수정 창으로 — 제목·빈칸은 서랍을 먼저 엽니다. */}
+              <button
+                type="button"
+                data-schedule-edit={event.id}
+                onClick={() => onOpenEvent(event.id)}
+                aria-label={`${event.title} 바로 수정`}
+                title="바로 수정"
+                className="mt-[2px] flex h-5 w-5 flex-none items-center justify-center rounded-full text-ink-300 transition hover:bg-paper-200 hover:text-ink-700"
+              >
+                <PencilIcon size={12} />
               </button>
             </li>
           );
@@ -254,7 +265,7 @@ export function ScheduleCard({
               <li key={event.id} className="flex items-center gap-1.5">
                 <button
                   type="button"
-                  onClick={() => onOpenEvent(event.id)}
+                  onClick={onOpenDrawer}
                   className="min-w-0 flex-1 truncate text-left text-[calc(14px*var(--fs))] text-ink-500"
                 >
                   {event.title}
@@ -263,6 +274,16 @@ export function ScheduleCard({
                 <span className="flex-none whitespace-nowrap text-[calc(13px*var(--fs))] tabular-nums text-ink-400">
                   {scheduleDateLabel(event)}
                 </span>
+                <button
+                  type="button"
+                  data-schedule-edit={event.id}
+                  onClick={() => onOpenEvent(event.id)}
+                  aria-label={`${event.title} 바로 수정`}
+                  title="바로 수정"
+                  className="flex h-5 w-5 flex-none items-center justify-center rounded-full text-ink-300 transition hover:bg-paper-200 hover:text-ink-700"
+                >
+                  <PencilIcon size={11} />
+                </button>
               </li>
             ))}
           </ul>
@@ -317,10 +338,17 @@ export function ScheduleDrawer({
   const [draft, setDraft] = useState("");
 
   const visible = useMemo(() => events.filter((event) => event.kind === "일정" && !event.trash), [events]);
-  const scoped = useMemo(
-    () => (nowOnly ? visible.filter((event) => !event.hidden) : visible).sort(byOpenOrder),
-    [visible, nowOnly],
-  );
+  /**
+   * A42: 프로젝트 서랍과 같은 순서 — 위에는 아직 해야 할 일정만(가까운 날짜부터),
+   * 아래에는 완료·취소한 일정을 최근 날짜부터. 예전에는 날짜 하나로만 정렬해
+   * 지난주에 끝낸 일정이 맨 위에 섞여 나왔습니다.
+   */
+  const scoped = useMemo(() => {
+    const shown = nowOnly ? visible.filter((event) => !event.hidden) : visible;
+    const open = shown.filter(isOpenEvent).sort(byOpenOrder);
+    const closed = shown.filter((event) => event.done || event.canceled).sort(byDoneOrder);
+    return [...open, ...closed];
+  }, [visible, nowOnly]);
   const categories = useMemo(() => {
     const seen = new Set<string>();
     const list: string[] = [];
@@ -383,24 +411,11 @@ export function ScheduleDrawer({
             <span className="block text-[calc(14.5px*var(--fs))] font-medium text-ink-800">일정 카드 표시</span>
             <span className="block text-[calc(13px*var(--fs))] text-ink-400">프로젝트 탭 맨 앞의 `일정` 카드를 켜고 끕니다</span>
           </span>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={settings.showScheduleCard}
-            aria-label="일정 카드 표시"
-            onClick={() => setSetting("showScheduleCard", !settings.showScheduleCard)}
-            className={cn(
-              "relative h-[18px] w-8 flex-none rounded-full transition",
-              settings.showScheduleCard ? "bg-ink-900" : "bg-paper-300",
-            )}
-          >
-            <span
-              className={cn(
-                "absolute top-[2px] h-[14px] w-[14px] rounded-full bg-white transition-all",
-                settings.showScheduleCard ? "left-[16px]" : "left-[2px]",
-              )}
-            />
-          </button>
+          <Switch
+            checked={settings.showScheduleCard}
+            onChange={(next) => setSetting("showScheduleCard", next)}
+            label="일정 카드 표시"
+          />
         </div>
 
         <div>

@@ -9,7 +9,8 @@ import { ArrowUpRightIcon, ChevronDownIcon, ChevronLeftIcon, TrashIcon, XIcon } 
 
 /**
  * Reads as a page first: a back arrow steps one layer back (detail → list/drawer),
- * the X closes every layer that came with it. The backdrop counts as a step back.
+ * and the X closes this detail layer too — the drawer it was opened from stays,
+ * so the sequential return (detail → drawer → list) is the same for every drawer.
  *
  * 개편: 머리말은 얇게(무엇을 보고 있는지만), 아래 액션 줄에 `노션에서 열기`와 위험한
  * 삭제를 나눠 둡니다. 저장 상태는 바뀐 값이 있을 때만 작게 나타납니다.
@@ -142,7 +143,7 @@ export function DetailShell({
               <p className="truncate text-[calc(13px*var(--fs))] text-ink-400">{label}</p>
               {subtitle ? <p className="truncate text-[calc(12.5px*var(--fs))] text-ink-300">{subtitle}</p> : null}
             </div>
-            <button type="button" onClick={onClose} className="icon-btn" aria-label="전체 닫기" title="전체 닫기">
+            <button type="button" onClick={onClose} data-detail-close="true" className="icon-btn" aria-label="닫기" title="닫기">
               <XIcon size={18} />
             </button>
           </header>

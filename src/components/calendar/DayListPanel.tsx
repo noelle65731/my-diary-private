@@ -316,32 +316,34 @@ export function DayListPanel({
           ) : null}
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-paper-300/80 bg-paper-50/60 px-4 py-2.5">
-          <button type="button" onClick={onClose} className="btn-ghost btn-xs">
+        <div className="flex items-center justify-between gap-2 border-t border-paper-300/80 bg-paper-50/60 px-3 py-2.5 sm:px-4">
+          <button type="button" onClick={onClose} className="btn-ghost btn-xs flex-none whitespace-nowrap">
             닫기
           </button>
-          <div className="flex items-center gap-1.5">
+          {/* A42: 버튼 이름을 `일간 보기`·`주간 보기`로 줄이고, 좁은 화면에서도 두 줄로
+              줄바꿈되지 않게 한 줄에 붙여 둡니다(넘치면 이 줄 안에서만 가로로 스크롤). */}
+          <div className="flex min-w-0 flex-nowrap items-center justify-end gap-1 overflow-x-auto">
             {onCreateEvent ? (
               <button
                 type="button"
                 data-day-list-add-event="true"
                 onClick={() => onCreateEvent(startTime ?? null)}
-                className="btn-outline btn-xs"
+                className="btn-outline btn-xs flex-none whitespace-nowrap px-2"
               >
                 + 일정{startTime ? ` ${startTime}` : ""}
               </button>
             ) : null}
             {onCreateTask ? (
-              <button type="button" data-day-list-add-task="true" onClick={onCreateTask} className="btn-outline btn-xs">
+              <button type="button" data-day-list-add-task="true" onClick={onCreateTask} className="btn-outline btn-xs flex-none whitespace-nowrap px-2">
                 + 할 일
               </button>
             ) : null}
-            <button type="button" onClick={onGoDay} className="btn-primary btn-xs">
-              이 날짜로 이동
+            <button type="button" onClick={onGoDay} className="btn-primary btn-xs flex-none whitespace-nowrap">
+              일간 보기
             </button>
             {onGoWeek ? (
-              <button type="button" data-day-list-go-week="true" onClick={onGoWeek} className="btn-outline btn-xs">
-                이 주간으로 이동
+              <button type="button" data-day-list-go-week="true" onClick={onGoWeek} className="btn-outline btn-xs flex-none whitespace-nowrap">
+                주간 보기
               </button>
             ) : null}
           </div>

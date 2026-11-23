@@ -360,6 +360,67 @@ export function Toggle({
   );
 }
 
+/**
+ * A42: 켜고 끄는 스위치 한 가지 모양.
+ *
+ * 예전에는 트랙 폭을 `w-8`(rem)로, 높이와 손잡이는 px 로 적어 두어서 글자 크기 설정
+ * (9단계)에 따라 트랙 폭만 늘고 줄었습니다. 폭이 손잡이보다 좁아지는 단계에서는 흰 손잡이가
+ * 트랙을 덮어 반달처럼 보였습니다. 이제 트랙·손잡이·자리 모두 px 로 고정해 어느 글자
+ * 크기에서든 같은 알약 모양입니다.
+ */
+export function Switch({
+  checked,
+  onChange,
+  label,
+  disabled,
+  className,
+  children,
+}: {
+  checked: boolean;
+  onChange: (next: boolean) => void;
+  /** 화면 낭독기용 이름 — 라벨을 따로 그리지 않는 곳에서도 읽힙니다. */
+  label: string;
+  disabled?: boolean;
+  className?: string;
+  /** 스위치 옥에 함께 두는 글자(예: `완료 보기`) — 버튼 안에 또 버튼을 넣지 않도록 여기로 받습니다. */
+  children?: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={cn(
+        "inline-flex items-center gap-2 disabled:opacity-40",
+        children ? "text-[calc(14.5px*var(--fs))] text-ink-500" : "relative h-[20px] w-[36px] flex-none rounded-full",
+        !children && "transition-colors duration-150",
+        !children && (checked ? "bg-ink-900" : "bg-paper-300"),
+        className,
+      )}
+    >
+      {children ? <span className="min-w-0">{children}</span> : null}
+      <span
+        className={cn(
+          "relative block flex-none rounded-full transition-colors duration-150",
+          children ? "h-[20px] w-[36px]" : "h-full w-full",
+          checked ? "bg-ink-900" : "bg-paper-300",
+        )}
+      >
+        <span
+          data-switch-knob="true"
+          className={cn(
+            "absolute top-[3px] h-[14px] w-[14px] rounded-full bg-white shadow-[0_1px_2px_rgba(17,24,39,0.25)] transition-[left] duration-150",
+            checked ? "left-[19px]" : "left-[3px]",
+          )}
+        />
+      </span>
+    </button>
+  );
+}
+
 export function Segmented<T extends string>({
   value,
   options,

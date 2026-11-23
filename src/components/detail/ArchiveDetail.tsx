@@ -81,27 +81,27 @@ export function ArchiveDetail({
   open,
   archiveId,
   onBack,
-  onCloseAll,
+  onCloseDetail,
 }: {
   open: boolean;
   archiveId: string | null;
   onBack: () => void;
-  onCloseAll: () => void;
+  onCloseDetail: () => void;
 }) {
   const { data } = useData();
   const entry = archiveId ? data.archive.find((item) => item.id === archiveId) ?? null : null;
   if (!open || !entry) return null;
-  return <ArchiveDetailInner key={entry.id} entry={entry} onBack={onBack} onCloseAll={onCloseAll} />;
+  return <ArchiveDetailInner key={entry.id} entry={entry} onBack={onBack} onCloseDetail={onCloseDetail} />;
 }
 
 function ArchiveDetailInner({
   entry,
   onBack,
-  onCloseAll,
+  onCloseDetail,
 }: {
   entry: ArchiveEntry;
   onBack: () => void;
-  onCloseAll: () => void;
+  onCloseDetail: () => void;
 }) {
   const { update, remove } = useData();
   const { draft, set, markSaved, changedKeys, isDirty } = useDetailDraft(formFromEntry(entry));
@@ -134,7 +134,7 @@ function ArchiveDetailInner({
     <DetailShell
       open
       onBack={() => leave(onBack)}
-      onClose={() => leave(onCloseAll)}
+      onClose={() => leave(onCloseDetail)}
       label={`${draft.kind} · ${draft.date ? formatShort(draft.date) : "날짜 없음"}`}
       subtitle={draft.date ? formatFullKo(draft.date) : undefined}
       notionUrl={notionPageUrl(entry)}
@@ -149,7 +149,7 @@ function ArchiveDetailInner({
       onRestore={() => void update("archive", entry.id, { trash: false })}
       onTrash={() => {
         void remove("archive", entry.id);
-        onCloseAll();
+        onCloseDetail();
       }}
     >
       <div className="space-y-1">

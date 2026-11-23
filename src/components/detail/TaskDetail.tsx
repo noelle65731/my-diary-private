@@ -166,14 +166,14 @@ export function TaskDetail({
   taskId,
   sideBySide,
   onBack,
-  onCloseAll,
+  onCloseDetail,
   registerFlush,
 }: {
   open: boolean;
   taskId: string | null;
   sideBySide?: boolean;
   onBack: () => void;
-  onCloseAll: () => void;
+  onCloseDetail: () => void;
   registerFlush?: (flush: (() => Promise<boolean>) | null) => void;
 }) {
   const { data } = useData();
@@ -184,7 +184,7 @@ export function TaskDetail({
       task={task}
       sideBySide={sideBySide}
       onBack={onBack}
-      onCloseAll={onCloseAll}
+      onCloseDetail={onCloseDetail}
       registerFlush={registerFlush}
     />
   );
@@ -194,13 +194,13 @@ function TaskDetailInner({
   task,
   sideBySide,
   onBack,
-  onCloseAll,
+  onCloseDetail,
   registerFlush,
 }: {
   task: ProjectTask;
   sideBySide?: boolean;
   onBack: () => void;
-  onCloseAll: () => void;
+  onCloseDetail: () => void;
   registerFlush?: (flush: (() => Promise<boolean>) | null) => void;
 }) {
   const { data, update, remove, fetchBody, saveBody, fetchSchema, demo, create } = useData();
@@ -322,7 +322,7 @@ function TaskDetailInner({
     <DetailShell
       open
       onBack={() => leave(onBack)}
-      onClose={() => leave(onCloseAll)}
+      onClose={() => leave(onCloseDetail)}
       label={isProject ? "프로젝트" : "할 일"}
       ariaLabel={`${task.kind} · ${draft.category}`}
       subtitle={project ? project.title : undefined}
@@ -340,7 +340,7 @@ function TaskDetailInner({
       onRestore={() => void update("projects", task.id, { trash: false })}
       onTrash={() => {
         void remove("projects", task.id);
-        onCloseAll();
+        onCloseDetail();
       }}
     >
       <div className="pt-1">

@@ -22,7 +22,7 @@ import { holidayName } from "@/lib/holidays";
 import { cn, matchesMode } from "@/lib/utils";
 import type { CalendarEvent, ModeFilter, ProjectTask, Routine } from "@/lib/types";
 import { currentCalendarCategory, isLegacyCalendarCategory } from "@/lib/types";
-import { ChevronLeftIcon, ChevronRightIcon, ListIcon, PlusIcon, SearchIcon, TrashIcon } from "@/components/icons";
+import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ChevronUpIcon, ListIcon, PlusIcon, SearchIcon, TrashIcon } from "@/components/icons";
 import { ModeChips } from "@/components/common/ModeChips";
 import { WeekBoard } from "@/components/calendar/WeekBoard";
 import { useAutoHideScrollbar } from "@/lib/use-auto-hide-scroll";
@@ -106,15 +106,30 @@ export function CalendarTab() {
   const [weekPanelOpen, setWeekPanelOpen] = useState(false);
   /** A41: PC 주간·3일의 오른쪽 패널 접기 — 접힌 상태는 이 브라우저에 남습니다. */
   const [panelCollapsed, setPanelCollapsed] = useState(false);
+  /** A42: 윗부분 헤더(날짜·보기 전환·분류 줄) 접기 — 접힌 상태도 이 브라우저에 남습니다. */
+  const [headerCollapsed, setHeaderCollapsed] = useState(false);
   /** A41: 주간 칸의 프로젝트·index 이름을 누르면 프로젝트 탭과 같은 서랍이 열립니다. */
   const [projectDrawerId, setProjectDrawerId] = useState<string | null>(null);
   useEffect(() => {
     try {
       setPanelCollapsed(window.localStorage.getItem("my-diary:week-panel-collapsed:v1") === "1");
+      setHeaderCollapsed(window.localStorage.getItem("my-diary:calendar-header-collapsed:v1") === "1");
     } catch {
       /* private mode */
     }
   }, []);
+  const toggleHeader = () => {
+    setHeaderCollapsed((current) => {
+      const next = !current;
+      try {
+        window.localStorage.setItem("my-diary:calendar-header-collapsed:v1", next ? "1" : "0");
+      } catch {
+        /* ignore */
+      }
+      pushToast(next ? "윗부분 헤더를 접었습니다" : "윗부분 헤더를 펼쳤습니다");
+      return next;
+    });
+  };
   const togglePanel = () => {
     setPanelCollapsed((current) => {
       const next = !current;
@@ -127,21 +142,18 @@ export function CalendarTab() {
       return next;
     });
   };
-  /** A4: X closes every layer that came with the detail, including the month day list. */
+  /**
+   * A4 → A42: 상세·수정 창의 X는 그 창 한 겹만 닫습니다.
+   * 밑에 서랍(프로젝트·index·하루 목록)이 열려 있었으면 그대로 돌아가고, 그 서랍의 X를
+   * 눌러야 다음 겹이 닫힙니다. 연필로 바로 들어온 창은 밑에 아무것도 없으니 목록으로 돌아갑니다.
+   * 그래서 모든 닫기는 각 창의 자기 상태만 되돌립니다.
+   */
   const [dayListSignal, setDayListSignal] = useState(0);
   /**
    * A32: 주간 보기의 요일 머리글(예: `토 21`)이나 일정 칸을 누르면 열리는 그 날의 정리 목록.
    * 월간 보기의 하루 목록과 같은 화면(DayListPanel)을 씁니다.
    */
   const [daySummary, setDaySummary] = useState<{ day: string; startTime?: string | null } | null>(null);
-
-  const closeEveryLayer = () => {
-    setEventEditor({ open: false });
-    setTaskId(null);
-    setRoutineId(null);
-    setDayListSignal((current) => current + 1);
-    setDaySummary(null);
-  };
 
   const firstViewPass = useRef(true);
   useEffect(() => {
@@ -536,8 +548,9 @@ export function CalendarTab() {
     /* A41: 툴바는 사이드 패널과 같은 줄 밖에 — 월간(루틴 패널)↔일간(패널 없음)을 오가도
        뷰 전환 스위치가 같은 자리에 있습니다. */
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* toolbar — A40: 위로 바짝 올려 캘린더가 화면을 더 씁니다. */}
-      <div className="flex flex-none flex-col gap-1.5">
+      {/* toolbar — A40: 위로 바짝 올려 캘린더가 화면을 더 씁니다. A42: `^`/`v` 로 접고 펼칩니다. */}
+      <div data-calendar-header="true" data-header-collapsed={headerCollapsed ? "true" : "false"} className="flex flex-none flex-col gap-1.5">
+        <div id="calendar-header-rows" data-calendar-header-rows="true" className={cn("flex flex-col gap-1.5", headerCollapsed && "hidden")}>
         {/* A41: 날짜 제목 길이가 달라져도 연간·월간·주간·3일·일간 스위치는 늘 같은 자리에 —
             넓은 화면은 3열(제목 | 스위치 | 도구), 폰은 스위치가 제 줄을 씁니다. */}
         <div className="grid items-center gap-x-3 gap-y-1.5 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
@@ -575,20 +588,7 @@ export function CalendarTab() {
               </button>
             </div>
 
-            {/* A41: PC 주간·3일의 오른쪽 패널 접기·펼치기 — 달력이 그 폭까지 넓어집니다. */}
-            {view === "week" || view === "three" ? (
-              <button
-                type="button"
-                data-week-panel-toggle="true"
-                onClick={togglePanel}
-                aria-pressed={panelCollapsed}
-                title={panelCollapsed ? "오른쪽 패널(미니 달력·이번 주 꼭·목표·메모) 펼치기" : "오른쪽 패널 접기"}
-                className="hidden h-7 items-center gap-1 rounded-full bg-paper-200 px-2 text-[calc(13.5px*var(--fs))] font-medium text-ink-600 transition hover:bg-paper-300/70 hover:text-ink-900 xl:inline-flex"
-              >
-                <ChevronRightIcon size={13} className={cn("transition", panelCollapsed ? "rotate-0" : "rotate-180")} />
-                {panelCollapsed ? "패널 펼치기" : "패널 접기"}
-              </button>
-            ) : null}
+            {/* A41 → A42: 글자 버튼은 없앴습니다 — 오른쪽 패널 왼쪽 경계에 붙은 `>`/`<` 손잡이가 맡습니다. */}
 
             <div className="flex items-center gap-0.5 rounded-full bg-paper-200 p-0.5">
               <button type="button" onClick={() => step(-1)} className="icon-btn h-7 w-7" aria-label="이전">
@@ -676,12 +676,46 @@ export function CalendarTab() {
             </button>
           ) : null}
 
-          <div className={cn("ml-auto hidden items-center gap-1.5 md:flex", (view === "habit" || view === "year") && "md:hidden")}>
-            <button type="button" onClick={() => createEvent(cursor, view === "day" ? "09:00" : null)} className="btn-primary btn-xs">
-              <PlusIcon size={12} /> 새 일정
+          <div className="ml-auto flex items-center gap-1.5">
+            {/* A42: 윗부분 헤더 접기 — 기호만 있는 작은 버튼. */}
+            <button
+              type="button"
+              data-calendar-header-toggle="collapse"
+              onClick={toggleHeader}
+              aria-expanded
+              aria-controls="calendar-header-rows"
+              aria-label="윗부분 헤더 접기"
+              title="날짜·보기 전환·도구 줄 접기"
+              className="flex h-6 w-9 flex-none items-center justify-center rounded-full bg-white/70 text-ink-500 ring-1 ring-paper-300 transition hover:bg-paper-200 hover:text-ink-900"
+            >
+              <ChevronUpIcon size={13} />
             </button>
+            <div className={cn("hidden items-center gap-1.5 md:flex", (view === "habit" || view === "year") && "md:hidden")}>
+              <button type="button" onClick={() => createEvent(cursor, view === "day" ? "09:00" : null)} className="btn-primary btn-xs">
+                <PlusIcon size={12} /> 새 일정
+              </button>
+            </div>
           </div>
         </div>
+        </div>
+
+        {/* A42: 접었을 때는 기호(`v`) 하나만 — 누르면 다시 펼쳐집니다. 접은 상태는 이 브라우저에 남습니다. */}
+        {headerCollapsed ? (
+          <div className="flex items-center justify-end" data-header-toggle-row="true">
+            <button
+              type="button"
+              data-calendar-header-toggle="expand"
+              onClick={toggleHeader}
+              aria-expanded={false}
+              aria-controls="calendar-header-rows"
+              aria-label="윗부분 헤더 펼치기"
+              title="날짜·보기 전환·도구 줄 펼치기"
+              className="flex h-5 w-9 items-center justify-center rounded-full bg-paper-200 text-ink-500 transition hover:bg-paper-300/70 hover:text-ink-900"
+            >
+              <ChevronDownIcon size={13} />
+            </button>
+          </div>
+        ) : null}
       </div>
 
       <div className="flex min-h-0 flex-1 items-stretch gap-6 xl:gap-8">
@@ -909,15 +943,40 @@ export function CalendarTab() {
       </div>
 
       {(view === "week" || view === "three") && !panelCollapsed ? (
-        <aside
-          onScroll={weekPanelBar.onScroll}
-          className={cn(
-            "side-panel sticky top-12 hidden h-[calc(100dvh-8rem)] w-[19rem] flex-none overflow-y-auto pb-2 pl-5 xl:block",
-            weekPanelBar.className,
-          )}
+        /* A42: 오른쪽 패널 왼쪽 경계에 `>` 손잡이를 붙입니다 — 누르면 접히고, 접히면 화면 오른쪽 끝에 `<` 만 남습니다. */
+        <div className="relative sticky top-12 hidden h-[calc(100dvh-8rem)] w-[19rem] flex-none xl:block" data-week-panel="true">
+          <aside
+            onScroll={weekPanelBar.onScroll}
+            className={cn("side-panel h-full w-full overflow-y-auto pb-2 pl-5", weekPanelBar.className)}
+          >
+            {renderWeekPanel()}
+          </aside>
+          <button
+            type="button"
+            data-week-panel-toggle="true"
+            onClick={togglePanel}
+            aria-pressed={false}
+            aria-label="오른쪽 패널 접기"
+            title="오른쪽 패널 접기"
+            className="absolute -left-[13px] top-24 z-20 flex h-16 w-[13px] items-center justify-center rounded-l-lg border border-r-0 border-paper-400 bg-white text-ink-500 shadow-soft transition-[width,background-color,color] hover:w-[17px] hover:bg-paper-200 hover:text-ink-900"
+          >
+            <ChevronRightIcon size={12} />
+          </button>
+        </div>
+      ) : null}
+
+      {(view === "week" || view === "three") && panelCollapsed ? (
+        <button
+          type="button"
+          data-week-panel-toggle="true"
+          onClick={togglePanel}
+          aria-pressed
+          aria-label="오른쪽 패널 펼치기"
+          title="오른쪽 패널(미니 달력·이번 주 꼭·목표·메모) 펼치기"
+          className="fixed right-0 top-40 z-30 hidden h-16 w-[13px] items-center justify-center rounded-l-lg border border-r-0 border-paper-400 bg-white text-ink-500 shadow-soft transition-[width,background-color,color] hover:w-[17px] hover:bg-paper-200 hover:text-ink-900 xl:flex"
         >
-          {renderWeekPanel()}
-        </aside>
+          <ChevronLeftIcon size={12} />
+        </button>
       ) : null}
 
       {view === "month" ? (
@@ -991,17 +1050,16 @@ export function CalendarTab() {
         mode={mode}
         onClose={() => setProjectDrawerId(null)}
         onOpenTask={(id) => setTaskId(id)}
-        onEditProject={(id) => {
-          setProjectDrawerId(null);
-          setTaskId(id);
-        }}
+        /* A42: 서랍에서 연 수정 창은 X로 닫으면 서랍으로 돌아갑니다. */
+        onEditProject={(id) => setTaskId(id)}
       />
 
       <EventDetail
         open={eventEditor.open && !!eventEditor.id}
         eventId={eventEditor.id ?? null}
         onBack={() => setEventEditor({ open: false })}
-        onCloseAll={closeEveryLayer}
+        /* A42: X는 이 상세만 — 하루 목록·서랍이 밑에 있으면 그대로 돌아갑니다. */
+        onCloseDetail={() => setEventEditor({ open: false })}
       />
       <EventEditor
         open={eventEditor.open && !eventEditor.id}
@@ -1012,7 +1070,7 @@ export function CalendarTab() {
         open={taskId !== null}
         taskId={taskId}
         onBack={() => setTaskId(null)}
-        onCloseAll={closeEveryLayer}
+        onCloseDetail={() => setTaskId(null)}
       />
       <RoutineEditor
         open={routineId !== null}

@@ -319,7 +319,7 @@ export function BinderTab() {
         open={editorId !== null}
         entryId={editorId}
         onBack={() => setEditorId(null)}
-        onCloseAll={() => {
+        onCloseDetail={() => {
           setEditorId(null);
           setEditorDraft(null);
         }}
@@ -478,9 +478,13 @@ function DiaryRow({
       data-drop-zone="binder-day"
       data-drop-day={day}
       data-binder-day={day}
+      data-binder-weekend={dow === 6 ? "sat" : dow === 0 ? "sun" : undefined}
+      /* A42: 토·일 칸은 요일 글자색보다 훨씬 연한 파랑·빨강 틴트로 칠해 주말이 한눈에 보이게. */
       className={cn(
         "group grid border-b border-paper-300 transition-colors",
-        isToday && "bg-paper-200/40",
+        dow === 6 && "bg-sky-50/70",
+        dow === 0 && "bg-rose-50/70",
+        isToday && (dow === 6 ? "bg-sky-100/70" : dow === 0 ? "bg-rose-100/70" : "bg-paper-200/40"),
         writing && "bg-white shadow-[inset_0_0_0_1px_#94a3b8]",
       )}
       style={{ gridTemplateColumns: "3.6rem minmax(0,1fr)" }}
@@ -504,7 +508,7 @@ function DiaryRow({
         <span
           className={cn(
             "mt-0.5 text-[calc(15px*var(--fs))] font-medium",
-            holiday ? "text-binder-sun" : dow === 6 ? "text-binder-sat" : dow === 0 ? "text-binder-sun/80" : "text-ink-500",
+            holiday ? "text-binder-sun" : dow === 6 ? "text-binder-sat" : dow === 0 ? "text-binder-sun" : "text-ink-500",
           )}
         >
           {weekdayKo(day)}

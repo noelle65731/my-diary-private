@@ -103,6 +103,14 @@ export function ChevronDownIcon(props: IconProps) {
   );
 }
 
+export function ChevronUpIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="m5.5 15 6.5-6.5L18.5 15" />
+    </svg>
+  );
+}
+
 export function XIcon(props: IconProps) {
   return (
     <svg {...base(props)}>

@@ -13,8 +13,9 @@ import { type CalendarEvent, type ModeFilter, type ProjectTask, type Routine, ty
 import { PRIORITY_TONES, priorityOf, routineTone, taskTone } from "@/components/common/tone";
 import { useCategoryColors } from "@/state/category-colors";
 import { ProjectIcon } from "@/components/common/ProjectIcon";
-import { CheckIcon, ChevronRightIcon, EyeIcon, InboxIcon, PlusIcon, RepeatIcon, TrashIcon } from "@/components/icons";
+import { CheckIcon, ChevronRightIcon, EyeIcon, InboxIcon, PencilIcon, PlusIcon, RepeatIcon, TrashIcon } from "@/components/icons";
 import { ModeChips } from "@/components/common/ModeChips";
+import { Switch } from "@/components/common/primitives";
 import { INDEX_DRAWER_ID, ProjectDrawer } from "@/components/projects/ProjectDrawer";
 import { ScheduleCard, ScheduleDrawer, scheduleDateLabel } from "@/components/projects/ScheduleCard";
 import { TaskDetail } from "@/components/detail/TaskDetail";
@@ -820,51 +821,23 @@ export function ProjectsTab() {
             ))}
           </div>
 
-          <button
-            type="button"
-            onClick={() => setSetting("showCompletedTasks", !settings.showCompletedTasks)}
-            className="inline-flex items-center gap-2 text-[calc(14.5px*var(--fs))] text-ink-500"
+          <Switch
+            checked={settings.showCompletedTasks}
+            onChange={(next) => setSetting("showCompletedTasks", next)}
+            label="완료한 일도 함께 보기"
           >
             완료 보기
-            <span
-              className={cn(
-                "relative h-[18px] w-8 rounded-full transition",
-                settings.showCompletedTasks ? "bg-ink-900" : "bg-paper-300",
-              )}
-            >
-              <span
-                className={cn(
-                  "absolute top-[2px] h-[14px] w-[14px] rounded-full bg-white transition-all",
-                  settings.showCompletedTasks ? "left-[16px]" : "left-[2px]",
-                )}
-              />
-            </span>
-          </button>
+          </Switch>
 
           {/* A16: NOW 전용 토글 — 켜면 NOW 숨김 항목만 가립니다. */}
-          <button
-            type="button"
-            onClick={() => setSetting("nowOnly", !settings.nowOnly)}
-            aria-pressed={settings.nowOnly}
-            aria-label="NOW 숨김만 보기"
-            title="켜면 NOW 숨김으로 표시한 프로젝트·할 일·일정만 가립니다"
+          <Switch
+            checked={settings.nowOnly}
+            onChange={(next) => setSetting("nowOnly", next)}
+            label="NOW 숨김만 보기"
             className="inline-flex items-center gap-2 text-[calc(14.5px*var(--fs))] text-ink-500"
           >
             NOW
-            <span
-              className={cn(
-                "relative h-[18px] w-8 rounded-full transition",
-                settings.nowOnly ? "bg-ink-900" : "bg-paper-300",
-              )}
-            >
-              <span
-                className={cn(
-                  "absolute top-[2px] h-[14px] w-[14px] rounded-full bg-white transition-all",
-                  settings.nowOnly ? "left-[16px]" : "left-[2px]",
-                )}
-              />
-            </span>
-          </button>
+          </Switch>
         </div>
       </div>
 
@@ -939,7 +912,8 @@ export function ProjectsTab() {
                     key={task.id}
                     task={task}
                     onToggle={() => toggleTask(task)}
-                    onOpen={() => void openTask(task.id)}
+                    onOpenDrawer={() => setProjectId(INDEX_DRAWER_ID)}
+                    onEdit={() => void openTask(task.id)}
                     onPointerDragStart={startTaskPointerDrag}
                   />
                 ))}
@@ -961,7 +935,7 @@ export function ProjectsTab() {
                 ) : null}
               </ul>
 
-              <RecentLog logKey="index" tasks={indexRecent} onOpenTask={(id) => void openTask(id)} />
+              <RecentLog logKey="index" tasks={indexRecent} onOpenDrawer={() => setProjectId(INDEX_DRAWER_ID)} onEdit={(id) => void openTask(id)} />
               <form
                 onSubmit={(event) => {
                   event.preventDefault();
@@ -1084,10 +1058,8 @@ export function ProjectsTab() {
         showBackdrop={taskId === null}
         onClose={() => setProjectId(null)}
         onOpenTask={(id) => void openTask(id)}
-        onEditProject={(id) => {
-          setProjectId(null);
-          void openTask(id);
-        }}
+        /* A42: 서랍에서 연 프로젝트 수정 창을 닫으면 서랍으로 돌아옵니다 — 서랍은 열어 둡니다. */
+        onEditProject={(id) => void openTask(id)}
       />
 
       {/* A39: `일정` 카드를 누르면 열리는 서랍 — 전체/진행/완료 + 분류 필터. */}
@@ -1105,10 +1077,8 @@ export function ProjectsTab() {
         open={eventId !== null}
         eventId={eventId}
         onBack={() => setEventId(null)}
-        onCloseAll={() => {
-          setEventId(null);
-          setScheduleOpen(false);
-        }}
+        /* A42: X는 이 상세만 닫습니다 — 일정 서랍에서 들어왔으면 서랍으로 돌아갑니다. */
+        onCloseDetail={() => setEventId(null)}
       />
 
       <TaskDetail
@@ -1116,10 +1086,8 @@ export function ProjectsTab() {
         taskId={taskId}
         sideBySide={projectId !== null}
         onBack={() => setTaskId(null)}
-        onCloseAll={() => {
-          setTaskId(null);
-          setProjectId(null);
-        }}
+        /* A42: X는 이 상세만 닫습니다 — 서랍은 서랍의 X로만 닫힙니다. */
+        onCloseDetail={() => setTaskId(null)}
         registerFlush={registerFlush}
       />
 
@@ -1210,11 +1178,18 @@ function ProjectCard({
       data-drop-project={mode === "track" ? project.id : undefined}
       {...dragProps}
       onPointerDown={mode === "track" ? onCardPointerDown : undefined}
+      /* A42: 카드 안의 제목·빈칸 어디를 눌러도 이 프로젝트 서랍이 먼저 열립니다.
+         체크박스·연필·끌기는 각자 하던 일을 그대로 합니다. */
+      onClick={(event) => {
+        const target = event.target as HTMLElement | null;
+        if (target?.closest("button, a, input, textarea, select, label, form")) return;
+        onOpenProject(project.id);
+      }}
       className={cn(
         "flex min-h-[10rem] flex-col rounded-2xl border px-3.5 py-3 transition",
         pastel.bg,
         pastel.border,
-        mode === "track" ? "hover:border-paper-400" : "opacity-95",
+        mode === "track" ? "cursor-pointer hover:border-paper-400" : "cursor-pointer opacity-95",
         highlight && "border-ink-400 ring-2 ring-ink-200 ring-offset-1",
       )}
     >
@@ -1274,7 +1249,8 @@ function ProjectCard({
             key={task.id}
             task={task}
             onToggle={() => onToggleTask(task)}
-            onOpen={() => onOpenTask(task.id)}
+            onOpenDrawer={() => onOpenProject(project.id)}
+            onEdit={() => onOpenTask(task.id)}
             onPointerDragStart={onPointerDragStart}
           />
         ))}
@@ -1296,7 +1272,7 @@ function ProjectCard({
         ) : null}
       </ul>
 
-      <RecentLog logKey={project.id} tasks={recent} onOpenTask={onOpenTask} />
+      <RecentLog logKey={project.id} tasks={recent} onOpenDrawer={() => onOpenProject(project.id)} onEdit={onOpenTask} />
 
       {mode === "history" ? (
         <button
@@ -1328,11 +1304,14 @@ function ProjectCard({
 function RecentLog({
   logKey,
   tasks,
-  onOpenTask,
+  onOpenDrawer,
+  onEdit,
 }: {
   logKey: string;
   tasks: ProjectTask[];
-  onOpenTask: (id: string) => void;
+  /** A42: 기록 줄도 카드와 같게 — 누르면 서랍, 연필이면 바로 수정. */
+  onOpenDrawer: () => void;
+  onEdit: (id: string) => void;
 }) {
   if (tasks.length === 0) return null;
   return (
@@ -1343,7 +1322,7 @@ function RecentLog({
           <li key={task.id} className="flex items-center gap-1.5">
             <button
               type="button"
-              onClick={() => onOpenTask(task.id)}
+              onClick={onOpenDrawer}
               className={cn(
                 "min-w-0 flex-1 truncate text-left text-[calc(14px*var(--fs))]",
                 task.status === "취소" ? "text-ink-600 line-through" : "text-ink-500",
@@ -1353,6 +1332,16 @@ function RecentLog({
             </button>
             {task.status === "취소" ? <CancelBadge /> : null}
             <span className="flex-none whitespace-nowrap text-[calc(13px*var(--fs))] tabular-nums text-ink-400">{recordDateLabel(task)}</span>
+            <button
+              type="button"
+              data-task-edit={task.id}
+              onClick={() => onEdit(task.id)}
+              aria-label={`${task.title} 바로 수정`}
+              title="바로 수정"
+              className="flex h-5 w-5 flex-none items-center justify-center rounded-full text-ink-300 transition hover:bg-white hover:text-ink-700"
+            >
+              <PencilIcon size={11} />
+            </button>
           </li>
         ))}
       </ul>
@@ -1378,12 +1367,16 @@ function CancelBadge({ className }: { className?: string }) {
 function TaskLine({
   task,
   onToggle,
-  onOpen,
+  onOpenDrawer,
+  onEdit,
   onPointerDragStart,
 }: {
   task: ProjectTask;
   onToggle: () => void;
-  onOpen: () => void;
+  /** A42: 제목·빈칸을 누르면 이 카드의 서랍이 먼저 열립니다. */
+  onOpenDrawer: () => void;
+  /** A42: 연필을 눌렀을 때만 바로 수정(세부내역)으로. */
+  onEdit?: () => void;
   onPointerDragStart?: (event: React.PointerEvent<HTMLElement>, task: ProjectTask) => void;
 }) {
   const { update } = useData();
@@ -1418,7 +1411,7 @@ function TaskLine({
       <button
         type="button"
         data-task-drag={task.id}
-        onClick={onOpen}
+        onClick={onOpenDrawer}
         onPointerDown={(pointerEvent) => onPointerDragStart?.(pointerEvent, task)}
         className="min-w-0 flex-1 touch-manipulation select-none text-left"
       >
@@ -1440,6 +1433,19 @@ function TaskLine({
         </span>
       </button>
       <span className="flex-none text-[calc(13px*var(--fs))] tabular-nums text-ink-400">{taskDateLabel(task)}</span>
+      {/* A42: 연필 — 이 항목만 바로 수정 창으로 직행합니다. */}
+      {onEdit ? (
+        <button
+          type="button"
+          data-task-edit={task.id}
+          onClick={onEdit}
+          aria-label={`${task.title} 바로 수정`}
+          title="바로 수정"
+          className="mt-[1px] flex h-5 w-5 flex-none items-center justify-center rounded-full text-ink-300 transition hover:bg-white hover:text-ink-700"
+        >
+          <PencilIcon size={11} />
+        </button>
+      ) : null}
     </li>
   );
 }
@@ -1495,6 +1501,17 @@ function RoutineWeekRow({
         ) : null}
         <button type="button" onClick={onOpen} className="min-w-0 flex-1 truncate text-left text-[calc(14.5px*var(--fs))] text-ink-700 hover:text-ink-900">
           {routine.title}
+        </button>
+        {/* A42: 루틴은 따로 서랍이 없어 연필도 이 루틴의 수정 창으로 갑니다. */}
+        <button
+          type="button"
+          data-routine-edit={routine.id}
+          onClick={onOpen}
+          aria-label={`${routine.title} 바로 수정`}
+          title="바로 수정"
+          className="flex h-5 w-5 flex-none items-center justify-center rounded-full text-ink-300 transition hover:bg-white hover:text-ink-700"
+        >
+          <PencilIcon size={11} />
         </button>
         <span className="flex-none text-[calc(13.5px*var(--fs))] font-medium tabular-nums text-ink-700">
           {doneCount}/{days.length}

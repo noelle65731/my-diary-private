@@ -398,7 +398,7 @@ export function ArchiveTab() {
         open={editorId !== null}
         archiveId={editorId}
         onBack={() => setEditorId(null)}
-        onCloseAll={() => {
+        onCloseDetail={() => {
           setEditorId(null);
           setDraft(null);
         }}

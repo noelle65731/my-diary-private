@@ -62,27 +62,27 @@ export function BinderDetail({
   open,
   entryId,
   onBack,
-  onCloseAll,
+  onCloseDetail,
 }: {
   open: boolean;
   entryId: string | null;
   onBack: () => void;
-  onCloseAll: () => void;
+  onCloseDetail: () => void;
 }) {
   const { data } = useData();
   const entry = entryId ? data.binder.find((item) => item.id === entryId) ?? null : null;
   if (!open || !entry) return null;
-  return <BinderDetailInner key={entry.id} entry={entry} onBack={onBack} onCloseAll={onCloseAll} />;
+  return <BinderDetailInner key={entry.id} entry={entry} onBack={onBack} onCloseDetail={onCloseDetail} />;
 }
 
 function BinderDetailInner({
   entry,
   onBack,
-  onCloseAll,
+  onCloseDetail,
 }: {
   entry: BinderEntry;
   onBack: () => void;
-  onCloseAll: () => void;
+  onCloseDetail: () => void;
 }) {
   const { update, remove } = useData();
   const { draft, set, markSaved, changedKeys, isDirty } = useDetailDraft(formFromEntry(entry));
@@ -115,7 +115,7 @@ function BinderDetailInner({
     <DetailShell
       open
       onBack={() => leave(onBack)}
-      onClose={() => leave(onCloseAll)}
+      onClose={() => leave(onCloseDetail)}
       label={`${draft.kind} · ${formatShort(draft.date)}`}
       subtitle={formatFullKo(draft.date)}
       notionUrl={notionPageUrl(entry)}
@@ -130,7 +130,7 @@ function BinderDetailInner({
       onRestore={() => void update("binder", entry.id, { trash: false })}
       onTrash={() => {
         void remove("binder", entry.id);
-        onCloseAll();
+        onCloseDetail();
       }}
     >
       <div className="space-y-1">
