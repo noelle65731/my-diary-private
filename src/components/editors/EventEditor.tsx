@@ -351,7 +351,15 @@ function EventEditorInner({
               type="date"
               aria-label="날짜"
               value={form.date}
-              onChange={(event) => patch("date", event.target.value)}
+              onChange={(event) => {
+                const value = event.target.value;
+                setForm((current) => ({
+                  ...current,
+                  date: value,
+                  /* A44: 시작일을 미룬 뒤에도 `여러 날`이 접히지 않게 종료 날짜를 같이 밀어 줍니다. */
+                  endDate: current.endDate && value && current.endDate <= value ? addDaysISO(value, 1) : current.endDate,
+                }));
+              }}
               className="input h-9 w-[10.5rem] py-1"
             />
           </FieldRow>

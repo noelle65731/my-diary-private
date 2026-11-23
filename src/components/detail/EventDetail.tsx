@@ -202,6 +202,12 @@ function EventDetailInner({
     });
   };
 
+  /** A44: 시작일을 미룬 뒤에도 `여러 날`이 접히지 않게 종료 날짜를 같이 밀어 줍니다. */
+  const setDate = (value: string) => {
+    set("date", value);
+    if (draft.endDate && value && draft.endDate <= value) set("endDate", addDaysISO(value, 1));
+  };
+
   const setStatus = (next: EventStatus) => {
     set("done", next === "완료");
     set("canceled", next === "취소");
@@ -318,7 +324,7 @@ function EventDetailInner({
             required
             invalid={invalidField === "date"}
             value={draft.date}
-            onChange={(value) => set("date", value)}
+            onChange={setDate}
             active={field === "date"}
             onActivate={() => setField("date")}
             onDone={() => setField(null)}
