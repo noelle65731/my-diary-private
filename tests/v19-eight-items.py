@@ -245,6 +245,13 @@ with sync_playwright() as p:
       return {go: !!go, week: !!wk, goBox: box(go), weekBox: box(wk), texts: btns.map(b => b.innerText.trim()).filter(Boolean)};
     }""")
     check("8 하루 목록 버튼 이름", bool(sheet) and sheet["go"], json.dumps(sheet, ensure_ascii=False)[:220])
+    fit = page.evaluate("""() => {
+      const s = document.querySelector('[data-day-list]');
+      if (!s) return null;
+      const row = s.querySelector('.flex-nowrap');
+      return row ? {scroll: row.scrollWidth, client: row.clientWidth} : null;
+    }""")
+    check("8 하루 목록 버튼 줄 넘칩 없음", bool(fit) and fit["scroll"] <= fit["client"] + 1, json.dumps(fit))
     if sheet:
         page.screenshot(path=f"{OUT}/v19-check-daylsheet.png")
         page.click('[data-day-list] button:has-text("닫기") >> nth=0')
