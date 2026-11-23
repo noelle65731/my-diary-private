@@ -27,8 +27,8 @@ import {
   type StatusPayload,
 } from "@/lib/types";
 import { coerceSpans } from "@/lib/richtext";
-import { differingKeys } from "@/lib/diff";
-import { applyRoutineNow } from "@/lib/routine-now";
+import { cloneDoc, docFromMarkdown, docToMarkdown, trimDoc, type Doc } from "@/lib/doc";
+import { differingKeys } from "@/lib/diff";import { applyRoutineNow } from "@/lib/routine-now";
 
 type Patch = Record<string, unknown>;
 
@@ -52,7 +52,7 @@ interface DataContextValue {
   login: (password: string) => Promise<{ ok: boolean; message?: string }>;
   logout: () => Promise<void>;
   create: (resource: Resource, patch: Patch) => Promise<AnyItem | null>;
-  update: (resource: Resource, id: string, patch: Patch) => Promise<boolean>;
+  update: (resource: Resource, id: string, patch: Patch, options?: { silent?: boolean }) => Promise<boolean>;
   remove: (resource: Resource, id: string) => Promise<void>;
   destroy: (resource: Resource, id: string) => Promise<void>;
   setRoutineCount: (routine: Routine, date: string, count: number) => Promise<void>;
@@ -61,7 +61,7 @@ interface DataContextValue {
   fetchSchema: (resource: Resource) => Promise<Record<string, { type: string; options?: string[] }>>;
   /** A5: the Notion page body of one record ('내용'). */
   fetchBody: (resource: Resource, id: string) => Promise<PageBodyPayload | null>;
-  saveBody: (resource: Resource, id: string, text: string) => Promise<boolean>;
+  saveBody: (resource: Resource, id: string, payload: string | Doc) => Promise<boolean>;
 }
 
 export interface ConflictState {
@@ -100,6 +100,8 @@ class RequestError extends Error {
 export interface PageBodyPayload {
   text: string;
   preserved: string[];
+  /** A45: 서식 있는 본문 문서 — 없으면 `text`(마크다운)에서 만들어 씁니다. */
+  doc?: Doc | null;
 }
 
 const DataContext = createContext<DataContextValue | null>(null);
@@ -137,8 +139,8 @@ function describeUpdate(previous: AnyItem, patch: Patch): string {
   if (changed("hidden")) return patch["hidden"] ? "NOW 숨김을 켰습니다" : "NOW 숨김을 껐습니다";
   if (changed("favorite")) return patch["favorite"] ? "이번 주 꼭에 담았습니다" : "이번 주 꼭에서 뺐습니다";
   if (changed("color")) return "색을 바꿨습니다";
-  if (changed("category")) return "분류를 바꿨습니다";
   if (changed("projectIds")) return "프로젝트를 옮겼습니다";
+  if (changed("category")) return "분류를 바꿨습니다";
   if (changed("urgent") || changed("important")) return "긴급·중요를 바꿨습니다";
   if (changed("startTime") || changed("endTime")) return "시간을 변경했습니다";
   if (changed("endDate")) return "기간을 변경했습니다";
@@ -342,6 +344,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const flushing = useRef(false);
   /** Demo mode keeps page bodies in memory; a connected Notion is read and written for real. */
   const bodyCache = useRef<Record<string, string>>({});
+  /** A45: 같은 방식으로 서식 문서도 기억해 둘니다(미리보기 모드). */
+  const docCache = useRef<Record<string, Doc>>({});
 
   const reportError = useCallback((message: string) => {
     setSaveError(message);
@@ -597,7 +601,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
   );
 
   const update = useCallback<DataContextValue["update"]>(
-    async (resource, id, patch) => {
+    async (resource, id, patch, options = {}) => {
       const blocked = blockReason(resource);
       if (blocked) {
         notify(blocked, "error");
@@ -612,7 +616,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
         ...current,
         [resource]: replaceIn(current[resource] as AnyItem[], optimistic),
       }) as AllData);
-      notify(describeUpdate(previous, patch));
+      // A46: 여러 개를 한 번에 옮기는 일괄 작업은 스스로 한 줄로 알리므로, 항목마다 뜨는
+      // 알림을 끕니다(`silent`).
+      if (!options.silent) notify(describeUpdate(previous, patch));
 
       if (demo) {
         setLastSavedAt(Date.now());
@@ -813,10 +819,17 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const fetchBody = useCallback<DataContextValue["fetchBody"]>(
     async (resource, id) => {
       const key = `${resource}:${id}`;
-      if (demo) return { text: bodyCache.current[key] ?? "", preserved: [] };
+      if (demo) {
+        const text = bodyCache.current[key] ?? "";
+        return { text, preserved: [], doc: docCache.current[key] ?? null };
+      }
       try {
         const result = await requestJson<{ data: PageBodyPayload }>(`/api/notion/${resource}/${id}/blocks`);
-        return { text: result.data?.text ?? "", preserved: result.data?.preserved ?? [] };
+        return {
+          text: result.data?.text ?? "",
+          preserved: result.data?.preserved ?? [],
+          doc: (result.data?.doc as Doc | null) ?? null,
+        };
       } catch (error) {
         reportError(error instanceof Error ? error.message : "내용을 불러오지 못했습니다.");
         return null;
@@ -826,10 +839,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
   );
 
   const saveBody = useCallback<DataContextValue["saveBody"]>(
-    async (resource, id, text) => {
+    async (resource, id, payload) => {
       const key = `${resource}:${id}`;
+      const asDoc = typeof payload === "string" ? null : trimDoc(cloneDoc(payload));
+      const text = asDoc ? docToMarkdown(asDoc) : (payload as string);
       if (demo) {
         bodyCache.current[key] = text;
+        if (asDoc) docCache.current[key] = asDoc;
+        else docCache.current[key] = docFromMarkdown(text);
         notify("내용을 저장했습니다");
         setLastSavedAt(Date.now());
         return true;
@@ -838,9 +855,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
       try {
         await requestJson(`/api/notion/${resource}/${id}/blocks`, {
           method: "PUT",
-          body: JSON.stringify({ text }),
+          body: JSON.stringify(asDoc ? { doc: asDoc, text } : { text }),
         });
         bodyCache.current[key] = text;
+        docCache.current[key] = asDoc ?? docFromMarkdown(text);
         notify("내용을 저장했습니다");
         setLastSavedAt(Date.now());
         return true;

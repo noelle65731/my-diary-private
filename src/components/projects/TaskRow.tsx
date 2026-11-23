@@ -18,6 +18,10 @@ export function TaskRow({
   onDragStart,
   onDragOver,
   onDrop,
+  onPointerDragStart,
+  trailing,
+  className,
+  dropAttrs,
 }: {
   task: ProjectTask;
   onOpen: () => void;
@@ -29,6 +33,13 @@ export function TaskRow({
   onDragStart?: () => void;
   onDragOver?: () => void;
   onDrop?: () => void;
+  /** A45: 서래에서 손끝·마우스로 꾸울어 다른 프로젝트로 보내는 끌기. */
+  onPointerDragStart?: (event: React.PointerEvent<HTMLElement>) => void;
+  /** A45: 줄 오른쪽에 붙는 버튼(빠른 `이동`). */
+  trailing?: React.ReactNode;
+  className?: string;
+  /** A45: 드롭 자리 표시(`data-drop-*`)를 줄 자체에 붙입니다. */
+  dropAttrs?: Record<string, string>;
 }) {
   const categoryColor = useCategoryColors();
   const done = task.status === "완료";
@@ -36,7 +47,8 @@ export function TaskRow({
   return (
     <li
       data-task-row={task.id}
-      className={cn("group flex items-start gap-2", compact ? "py-1" : "py-1.5")}
+      {...dropAttrs}
+      className={cn("group relative flex items-start gap-2", compact ? "py-1" : "py-1.5", className)}
       draggable={draggable}
       onDragStart={
         draggable
@@ -71,14 +83,15 @@ export function TaskRow({
         type="button"
         onClick={onToggle}
         aria-label={done ? "완료 취소" : "완료"}
+        data-on={done ? "true" : undefined}
         className={cn(
-          "mt-0.5 flex h-4 w-4 flex-none items-center justify-center rounded-[4px] border transition",
+          "chk mt-0.5 flex h-4 w-4 flex-none items-center justify-center rounded-[4px] border",
           done ? "border-sage-400 bg-sage-400 text-white" : "border-paper-400 hover:border-ink-600",
         )}
       >
         {done ? <CheckIcon size={10} /> : null}
       </button>
-      <button type="button" onClick={onOpen} className="min-w-0 flex-1 text-left">
+      <button type="button" onClick={onOpen} onPointerDown={onPointerDragStart} className="min-w-0 flex-1 text-left">
         <span className={cn("flex items-center gap-1 truncate text-[calc(15px*var(--fs))] text-ink-800", (done || task.status === "취소") && "text-ink-400 line-through")}>
           {task.urgent ? <FlagIcon size={11} className="flex-none text-rose-400" /> : null}
           <span className="truncate">{task.title}</span>
@@ -118,6 +131,7 @@ export function TaskRow({
           </span>
         ) : null}
       </button>
+      {trailing}
     </li>
   );
 }

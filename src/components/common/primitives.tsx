@@ -203,18 +203,26 @@ export interface DrawerProps {
   width?: "md" | "lg";
   /** A4: a detail open beside the list keeps the list clickable, so its dim layer goes away. */
   showBackdrop?: boolean;
+  /** A45: 드래그하는 동안 서랍을 통째로 감추기 위해 바깥에서 잡는 참조. */
+  rootRef?: React.Ref<HTMLDivElement>;
+  /** A45: 감춘 상태(React 쪽 거울) — 실제 감추기는 인라인 스타일로 즉시 합니다. */
+  hidden?: boolean;
 }
 
-export function Drawer({ open, onClose, title, subtitle, children, footer, width = "md", showBackdrop = true }: DrawerProps) {
+export function Drawer({ open, onClose, title, subtitle, children, footer, width = "md", showBackdrop = true, rootRef, hidden }: DrawerProps) {
   useOverlay(open, onClose);
   if (!open) return null;
 
   return (
     <Portal>
       <div
+        ref={rootRef}
+        data-drawer-root
+        data-drawer-hidden={hidden ? "true" : undefined}
         className={cn(
           "fixed inset-0 z-40 flex items-end justify-end sm:items-stretch",
           !showBackdrop && "pointer-events-none",
+          hidden && "pointer-events-none opacity-0",
         )}
       >
         {showBackdrop ? (
@@ -232,6 +240,7 @@ export function Drawer({ open, onClose, title, subtitle, children, footer, width
           className={cn(
             "pointer-events-auto relative z-10 flex max-h-[calc(100dvh-0.5rem)] w-full animate-slide-up flex-col overflow-hidden rounded-t-3xl border border-paper-300 bg-white shadow-lift sm:my-0 sm:max-h-none sm:animate-slide-in-right sm:rounded-none sm:rounded-l-3xl sm:border-y-0 sm:border-r-0",
             width === "lg" ? "sm:w-[520px]" : "sm:w-[420px]",
+            hidden && "pointer-events-none",
           )}
         >
           <div className="flex items-start gap-3 border-b border-paper-300/80 px-5 py-3.5">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useData } from "@/state/store";
 import {
   DetailSection,
@@ -15,12 +15,13 @@ import {
 import { InlineMemo } from "@/components/editors/MemoField";
 import { TagInput } from "@/components/editors/shared";
 import { StarRating } from "@/components/common/primitives";
-import { renderMarkdown } from "@/lib/markdown";
+import { DocView, RichDocEditor } from "@/components/editors/RichDocEditor";
 import { editableMemo, plainOfSpans, spansFromMarkdown } from "@/lib/richtext";
 import { formatFullKo, formatShort, todayISO, weekdayKo } from "@/lib/date";
 import { ARCHIVE_KINDS, type ArchiveEntry, type ArchiveKind } from "@/lib/types";
 import { notionPageUrl } from "@/lib/utils";
 import { PhotoEditor, PhotoGallery } from "@/components/common/PhotoField";
+import { docFromMarkdown, docToMarkdown, type Doc } from "@/lib/doc";
 
 interface ArchiveForm {
   title: string;
@@ -29,7 +30,6 @@ interface ArchiveForm {
   rating: number | null;
   link: string;
   tags: string[];
-  body: string;
   favorite: boolean;
   memo: string;
   photos: string[];
@@ -45,7 +45,6 @@ function formFromEntry(entry: ArchiveEntry): ArchiveForm {
     rating: entry.rating,
     link: entry.link,
     tags: entry.tags,
-    body: entry.body,
     favorite: entry.favorite,
     memo: editableMemo(entry),
     photos: entry.photos ?? [],
@@ -63,7 +62,6 @@ function buildPatch(draft: ArchiveForm, changed: string[]): Record<string, unkno
   if (has("rating")) patch.rating = draft.rating;
   if (has("link")) patch.link = draft.link;
   if (has("tags")) patch.tags = draft.tags;
-  if (has("body")) patch.body = draft.body;
   if (has("favorite")) patch.favorite = draft.favorite;
   if (has("photos")) patch.photos = draft.photos;
   if (has("endDate")) patch.endDate = draft.endDate || null;
@@ -103,22 +101,47 @@ function ArchiveDetailInner({
   onBack: () => void;
   onCloseDetail: () => void;
 }) {
-  const { update, remove } = useData();
+  const { update, remove, fetchBody, saveBody } = useData();
   const { draft, set, markSaved, changedKeys, isDirty } = useDetailDraft(formFromEntry(entry));
   const [field, setField] = useState<string | null>(null);
+  /** A45: 메모의 서식 문서 — 저장된 블록이 있으면 그것을, 없으면 `기록 데이터` 에서 만듭니다. */
+  const [doc, setDoc] = useState<Doc>(() => docFromMarkdown(entry.body));
+  const docSaved = useRef(docToMarkdown(doc));
+
+  useEffect(() => {
+    let alive = true;
+    void fetchBody("archive", entry.id).then((payload) => {
+      if (!alive || !payload?.doc) return;
+      if ((entry.body ?? "").trim() && docToMarkdown(payload.doc) !== (entry.body ?? "").trim()) return;
+      setDoc(payload.doc);
+      docSaved.current = docToMarkdown(payload.doc);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [entry.id, entry.body, fetchBody]);
 
   const invalidField = draft.title.trim() ? null : "title";
+  const bodyDirty = docToMarkdown(doc) !== docSaved.current;
 
   const commit = async (): Promise<boolean> => {
     const patch = buildPatch(draft, changedKeys as string[]);
-    if (Object.keys(patch).length === 0) return true;
-    const ok = await update("archive", entry.id, patch);
-    if (ok) markSaved();
-    return ok;
+    if (bodyDirty) patch.body = docToMarkdown(doc);
+    if (Object.keys(patch).length > 0) {
+      const ok = await update("archive", entry.id, patch);
+      if (!ok) return false;
+      markSaved();
+    }
+    if (bodyDirty) {
+      const ok = await saveBody("archive", entry.id, doc);
+      if (!ok) return false;
+      docSaved.current = docToMarkdown(doc);
+    }
+    return true;
   };
 
   const run = useCommitOnLeave({
-    isDirty,
+    isDirty: isDirty || bodyDirty,
     invalid: invalidField,
     onInvalid: () => setField("title"),
     commit,
@@ -142,7 +165,7 @@ function ArchiveDetailInner({
         invalidField ? (
           <span className="text-rose-500">필수값을 입력해 주세요</span>
         ) : (
-          <SaveState dirty={isDirty} />
+          <SaveState dirty={isDirty || bodyDirty} />
         )
       }
       trashed={entry.trash}
@@ -254,15 +277,9 @@ function ArchiveDetailInner({
           }
         >
           {field === "body" ? (
-            <textarea
-              autoFocus
-              rows={6}
-              value={draft.body}
-              onChange={(event) => set("body", event.target.value)}
-              aria-label="메모 입력"
-              placeholder="인상 깊었던 점, 다시 볼 이유"
-              className="input min-h-[130px] resize-y leading-relaxed"
-            />
+            <div data-archive-body-editor>
+              <RichDocEditor doc={doc} onChange={setDoc} paper="plain" minHeight={140} compact placeholder="인상 깊었던 점, 다시 볼 이유" />
+            </div>
           ) : (
             <button
               type="button"
@@ -270,8 +287,10 @@ function ArchiveDetailInner({
               aria-label="메모 수정"
               className="w-full rounded-lg border-b border-dashed border-paper-300 px-1 py-1.5 text-left transition hover:border-ink-400 hover:bg-paper-100/50"
             >
-              {draft.body.trim() ? (
-                <span className="doc-body block text-[calc(15.5px*var(--fs))] text-ink-700">{renderMarkdown(draft.body)}</span>
+              {docToMarkdown(doc).trim() ? (
+                <span className="block text-[calc(15.5px*var(--fs))] text-ink-700">
+                  <DocView doc={doc} />
+                </span>
               ) : (
                 <span className="text-[calc(15px*var(--fs))] text-ink-300">눌러서 메모 쓰기</span>
               )}

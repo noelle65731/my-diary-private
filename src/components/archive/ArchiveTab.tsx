@@ -1,41 +1,59 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useData } from "@/state/store";
 import { useSettings } from "@/state/settings";
 import { useTabReset, useUi } from "@/state/ui";
 import { cn, truncate } from "@/lib/utils";
 import { formatShort, todayISO, weekdayKo } from "@/lib/date";
-import { ARCHIVE_KINDS, type ArchiveKind } from "@/lib/types";
+import { ARCHIVE_KINDS, type ArchiveEntry, type ArchiveKind as ArchiveKindType } from "@/lib/types";
 import { archiveTone } from "@/components/common/tone";
-import { ArchiveIcon, ArrowUpRightIcon, PlusIcon, SearchIcon, StarIcon, TrashIcon } from "@/components/icons";
+import { ArchiveIcon, ArrowUpRightIcon, CheckIcon, PinIcon, PlusIcon, SearchIcon, TrashIcon, XIcon } from "@/components/icons";
 import { EmptyState, StarRating } from "@/components/common/primitives";
 import { ArchiveEditor } from "@/components/editors/ArchiveEditor";
 import { FolderChips } from "@/components/common/PhotoField";
 import { useArchiveFolders } from "@/lib/folders";
 import { ArchiveDetail } from "@/components/detail/ArchiveDetail";
 import { RichText } from "@/components/common/rich";
+import { useDnd } from "@/components/common/dnd";
 
 type SortKey = "recent" | "rating" | "title";
+
+interface MarqueeRect {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
 
 export function ArchiveTab() {
   const { data, create, update, destroy } = useData();
   const { settings } = useSettings();
   const { focus, clearFocus, notify } = useUi();
+  const dnd = useDnd();
 
-  const [category, setCategory] = useState<"전체" | ArchiveKind>(settings.archiveDefaultCategory);
+  const [category, setCategory] = useState<"전체" | ArchiveKindType>(settings.archiveDefaultCategory);
   const [folder, setFolder] = useState<string | null>(null);
   const { folders, add: addFolder } = useArchiveFolders();
   const [tag, setTag] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [sort, setSort] = useState<SortKey>("recent");
-  const [favoritesOnly, setFavoritesOnly] = useState(false);
+  const [pinnedOnly, setPinnedOnly] = useState(false);
   const [trashMode, setTrashMode] = useState(false);
   const [editorId, setEditorId] = useState<string | null>(null);
-  const [draft, setDraft] = useState<{ kind?: ArchiveKind; date?: string } | null>(null);
+  const [draft, setDraft] = useState<{ kind?: ArchiveKindType; date?: string } | null>(null);
   const [quickTitle, setQuickTitle] = useState("");
   const [busy, setBusy] = useState(false);
+
+  /* A46: 여러 개 고르기 — PC 는 여백에서 끌어 상자 선택, 모바일은 `선택` 버튼. */
+  const [selectMode, setSelectMode] = useState(false);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [marquee, setMarquee] = useState<MarqueeRect | null>(null);
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
+  const gridRef = useRef<HTMLDivElement | null>(null);
+  const marqueeStart = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     setCategory(settings.archiveDefaultCategory);
@@ -47,10 +65,12 @@ export function ArchiveTab() {
     setQuery("");
     setSearchOpen(false);
     setSort("recent");
-    setFavoritesOnly(false);
+    setPinnedOnly(false);
     setTrashMode(false);
     setEditorId(null);
     setDraft(null);
+    setSelectMode(false);
+    setSelected([]);
   });
 
   useEffect(() => {
@@ -67,16 +87,25 @@ export function ArchiveTab() {
       // A9: a folder collects the records tagged with its name.
       .filter((item) => (folder ? item.tags.includes(folder) : true))
       .filter((item) => (tag ? item.tags.includes(tag) : true))
-      .filter((item) => (favoritesOnly ? item.favorite : true))
+      .filter((item) => (pinnedOnly ? item.favorite : true))
       .filter((item) =>
         query.trim() ? `${item.title} ${item.body} ${item.tags.join(" ")}`.toLowerCase().includes(query.trim().toLowerCase()) : true,
       );
     return filtered.sort((a, b) => {
+      // A46: 상단 고정핀을 켠 기록이 늘 맨 위에 옵니다.
+      const pinned = Number(!!b.favorite) - Number(!!a.favorite);
+      if (pinned !== 0) return pinned;
       if (sort === "rating") return (b.rating ?? 0) - (a.rating ?? 0);
       if (sort === "title") return a.title.localeCompare(b.title, "ko");
       return (b.date ?? "").localeCompare(a.date ?? "");
     });
-  }, [base, category, folder, tag, favoritesOnly, query, sort]);
+  }, [base, category, folder, tag, pinnedOnly, query, sort]);
+
+  /** 걸러진 목록이 바뀌면 사라진 항목은 선택에서 뺍니다. */
+  useEffect(() => {
+    const ids = new Set(items.map((item) => item.id));
+    setSelected((current) => current.filter((id) => ids.has(id)));
+  }, [items]);
 
   const counts = useMemo(() => {
     const map: Record<string, number> = { 전체: base.length };
@@ -112,6 +141,124 @@ export function ArchiveTab() {
     if (created) setEditorId(created.id);
   };
 
+  /* ── 선택 helpers ── */
+  const selectedItems = items.filter((item) => selected.includes(item.id));
+  const toggleSelected = (id: string) =>
+    setSelected((current) => (current.includes(id) ? current.filter((value) => value !== id) : [...current, id]));
+  const clearSelection = () => {
+    setSelected([]);
+    setSelectMode(false);
+    setMoveOpen(false);
+  };
+
+  const bulkTrash = async () => {
+    const targets = selectedItems;
+    if (targets.length === 0) return;
+    for (const item of targets) {
+      if (trashMode) await destroy("archive", item.id);
+      else await update("archive", item.id, { trash: true }, { silent: true });
+    }
+    notify(
+      trashMode ? `${targets.length}개를 완전히 삭제했습니다` : `${targets.length}개를 휴지통으로 옮겼습니다`,
+      "success",
+    );
+    clearSelection();
+  };
+
+  const bulkRestore = async () => {
+    const targets = selectedItems;
+    for (const item of targets) await update("archive", item.id, { trash: false }, { silent: true });
+    notify(`${targets.length}개를 복원했습니다`, "success");
+    clearSelection();
+  };
+
+  /** A46: 여러 개를 한 번에 다른 분류(또는 폴더)로 옮깁니다. */
+  const moveItems = async (targets: ArchiveEntry[], to: { kind?: ArchiveKindType; folderName?: string }) => {
+    if (targets.length === 0) return;
+    for (const item of targets) {
+      const patch: Record<string, unknown> = {};
+      if (to.kind) patch.kind = to.kind;
+      if (to.folderName && !item.tags.includes(to.folderName)) patch.tags = [...item.tags, to.folderName];
+      if (Object.keys(patch).length > 0) await update("archive", item.id, patch, { silent: true });
+    }
+    const label = to.kind ?? to.folderName ?? "";
+    notify(targets.length > 1 ? `${targets.length}개를 ${label}(으)로 옮겼습니다` : `${label}(으)로 옮겼습니다`, "success");
+    clearSelection();
+  };
+
+  /* ── 드래그: 카드(들)를 분류 칩 위로 ── */
+  const startCardDrag = (event: React.PointerEvent<HTMLElement>, item: ArchiveEntry) => {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    const targets = selected.includes(item.id) && selected.length > 1 ? selectedItems : [item];
+    dnd.start(
+      event,
+      { kind: "archive", id: item.id, label: targets.length > 1 ? `${targets.length}개` : item.title },
+      (target) => {
+        setDropTarget(null);
+        if (!target) return;
+        if (target.zone === "archive-kind" && target.data.kind) {
+          void moveItems(targets, { kind: target.data.kind as ArchiveKindType });
+        }
+      },
+      {
+        getHint: (target) => {
+          if (target.zone === "archive-kind" && target.data.kind) {
+            const name = target.data.kind;
+            setDropTarget(name);
+            return `${targets.length > 1 ? `${targets.length}개를 ` : ""}${name}(으)로 옮기기`;
+          }
+          setDropTarget(null);
+          return null;
+        },
+        onEnd: () => setDropTarget(null),
+      },
+    );
+  };
+
+  /* ── 여백에서 끌어 상자 선택 (PC) ── */
+  const onGridPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType === "touch") return;
+    if (event.target !== event.currentTarget) return;
+    if (event.button !== 0) return;
+    event.preventDefault();
+    marqueeStart.current = { x: event.clientX, y: event.clientY };
+    setSelectMode(true);
+    try {
+      (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+    } catch {
+      /* pointer capture is a nicety — the drag still works without it */
+    }
+  };
+
+  const onGridPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const start = marqueeStart.current;
+    if (!start) return;
+    const x = Math.min(start.x, event.clientX);
+    const y = Math.min(start.y, event.clientY);
+    const w = Math.abs(event.clientX - start.x);
+    const h = Math.abs(event.clientY - start.y);
+    setMarquee({ x, y, w, h });
+    const box = { left: x, top: y, right: x + w, bottom: y + h };
+    const next: string[] = [];
+    gridRef.current?.querySelectorAll<HTMLElement>("[data-archive-card]").forEach((node) => {
+      const rect = node.getBoundingClientRect();
+      const hit = rect.left < box.right && rect.right > box.left && rect.top < box.bottom && rect.bottom > box.top;
+      if (hit && node.dataset.archiveCard) next.push(node.dataset.archiveCard);
+    });
+    setSelected(next);
+  };
+
+  const endMarquee = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!marqueeStart.current) return;
+    marqueeStart.current = null;
+    setMarquee(null);
+    try {
+      (event.currentTarget as HTMLElement).releasePointerCapture(event.pointerId);
+    } catch {
+      /* capture may already be gone */
+    }
+  };
+
   return (
     <div className="pb-16">
       <div className="flex items-end justify-between gap-3">
@@ -129,6 +276,22 @@ export function ArchiveTab() {
         </div>
 
         <div className="flex flex-none items-center gap-1.5">
+          <button
+            type="button"
+            data-archive-select-toggle
+            aria-pressed={selectMode}
+            onClick={() => {
+              if (selectMode) clearSelection();
+              else setSelectMode(true);
+            }}
+            className={cn(
+              "flex h-9 items-center gap-1 rounded-full px-3 text-[calc(14px*var(--fs))] font-medium transition",
+              selectMode ? "bg-ink-900 text-white" : "bg-paper-200 text-ink-600 hover:bg-paper-300/70",
+            )}
+          >
+            {selectMode ? <XIcon size={13} /> : <CheckIcon size={13} />}
+            {selectMode ? "취소" : "선택"}
+          </button>
           <button
             type="button"
             onClick={() => setSearchOpen((current) => !current)}
@@ -158,10 +321,14 @@ export function ArchiveTab() {
       <div className="mt-3 flex flex-wrap items-center gap-1.5">
         {(["전체", ...ARCHIVE_KINDS] as const).map((kind) => {
           const active = category === kind;
+          const drop = dropTarget === kind;
           return (
             <button
               key={kind}
               type="button"
+              data-archive-kind={kind}
+              data-drop-zone={kind === "전체" ? undefined : "archive-kind"}
+              data-drop-kind={kind === "전체" ? undefined : kind}
               onClick={() => {
                 setCategory(kind);
                 setTag(null);
@@ -169,6 +336,7 @@ export function ArchiveTab() {
               className={cn(
                 "inline-flex items-center gap-1 rounded-full px-3 py-1 text-[calc(15px*var(--fs))] font-medium transition",
                 active ? "bg-ink-900 text-white" : "bg-paper-200 text-ink-500 hover:bg-paper-300/70 hover:text-ink-800",
+                drop && "ring-2 ring-ink-300 ring-offset-1",
               )}
             >
               {kind}
@@ -217,10 +385,11 @@ export function ArchiveTab() {
         </select>
         <button
           type="button"
-          onClick={() => setFavoritesOnly((current) => !current)}
-          className={cn("inline-flex items-center gap-1 rounded-full px-1.5 py-0.5", favoritesOnly && "bg-amber-50 text-amber-700")}
+          data-archive-pinned-filter
+          onClick={() => setPinnedOnly((current) => !current)}
+          className={cn("inline-flex items-center gap-1 rounded-full px-1.5 py-0.5", pinnedOnly && "bg-amber-50 text-amber-700")}
         >
-          <StarIcon size={11} filled={favoritesOnly} /> 즐겨찾기
+          <PinIcon size={11} filled={pinnedOnly} /> 고정
         </button>
         <button
           type="button"
@@ -245,7 +414,7 @@ export function ArchiveTab() {
                   setFolder(null);
                   setTag(null);
                   setQuery("");
-                  setFavoritesOnly(false);
+                  setPinnedOnly(false);
                 }}
                 className="btn-outline btn-xs"
               >
@@ -275,14 +444,72 @@ export function ArchiveTab() {
           )}
         </div>
       ) : (
-        <div className="mt-3 grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+        <div
+          ref={gridRef}
+          data-archive-grid
+          onPointerDown={onGridPointerDown}
+          onPointerMove={onGridPointerMove}
+          onPointerUp={endMarquee}
+          onPointerCancel={endMarquee}
+          className={cn(
+            "mt-3 grid select-none grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6",
+            selectMode && "pb-24",
+          )}
+        >
           {items.map((item) => {
             const tone = archiveTone(item.kind);
+            const isSelected = selected.includes(item.id);
             return (
-              <article key={item.id} className="group relative flex flex-col rounded-2xl border border-paper-300 px-4 py-3.5 pb-3 transition hover:border-paper-400">
+              <article
+                key={item.id}
+                data-archive-card={item.id}
+                data-archive-selected={isSelected ? "true" : undefined}
+                onPointerDown={(event) => {
+                  const target = event.target as HTMLElement | null;
+                  if (target?.closest("button, a, input, textarea, select")) return;
+                  if (selectMode) {
+                    event.preventDefault();
+                    toggleSelected(item.id);
+                    return;
+                  }
+                  startCardDrag(event, item);
+                }}
+                onClick={(event) => {
+                  if (selectMode) {
+                    const target = event.target as HTMLElement | null;
+                    if (target?.closest("button, a, input, textarea, select")) return;
+                    event.preventDefault();
+                    return;
+                  }
+                }}
+                className={cn(
+                  "group relative flex flex-col rounded-2xl border px-4 py-3.5 pb-3 transition",
+                  isSelected
+                    ? "border-ink-900 bg-paper-200/70 ring-1 ring-ink-900"
+                    : item.favorite
+                      ? "border-ink-900/25 bg-paper-100/60 hover:border-paper-400"
+                      : "border-paper-300 bg-white hover:border-paper-400",
+                )}
+              >
+                {selectMode ? (
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "absolute right-2 top-2 flex h-[18px] w-[18px] items-center justify-center rounded-full border text-[calc(11px*var(--fs))] transition",
+                      isSelected ? "border-ink-900 bg-ink-900 text-white" : "border-paper-400 bg-white/90 text-transparent",
+                    )}
+                  >
+                    ✓
+                  </span>
+                ) : null}
+
                 <p className={cn("text-[calc(14px*var(--fs))] font-medium", tone.text)}>{item.kind}</p>
                 <div className="mt-1 flex items-start justify-between gap-2">
-                  <button type="button" onClick={() => setEditorId(item.id)} className="min-w-0 flex-1 text-left">
+                  <button
+                    type="button"
+                    onClick={() => (selectMode ? toggleSelected(item.id) : setEditorId(item.id))}
+                    className="min-w-0 flex-1 text-left"
+                  >
                     <p className="line-clamp-2 text-[calc(16.5px*var(--fs))] font-semibold leading-snug tracking-tight text-ink-900">{item.title}</p>
                     {item.memo ? (
                       <p className="mt-0.5 line-clamp-1 text-[calc(14.5px*var(--fs))] text-ink-400">
@@ -292,16 +519,29 @@ export function ArchiveTab() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => void update("archive", item.id, { favorite: !item.favorite })}
-                    className={cn("flex-none rounded p-0.5 transition", item.favorite ? "text-amber-400" : "text-ink-300 hover:text-ink-500")}
-                    aria-label="즐겨찾기"
+                    onClick={() =>
+                      void update("archive", item.id, { favorite: !item.favorite }, { silent: true }).then((ok) => {
+                        if (ok) notify(item.favorite ? "상단 고정을 해제했습니다" : "맨 위에 고정했습니다", "success");
+                      })
+                    }
+                    className={cn(
+                      "flex h-6 w-6 flex-none items-center justify-center rounded-full transition",
+                      item.favorite ? "bg-ink-900 text-white" : "text-ink-300 hover:bg-paper-200 hover:text-ink-700",
+                    )}
+                    aria-pressed={item.favorite}
+                    aria-label={item.favorite ? `${item.title} 상단 고정 해제` : `${item.title} 상단 고정`}
+                    title={item.favorite ? "상단 고정 해제" : "상단 고정"}
                   >
-                    <StarIcon size={14} filled={item.favorite} />
+                    <PinIcon size={12} filled={item.favorite} />
                   </button>
                 </div>
 
                 {item.body && item.body.trim() !== item.title.trim() ? (
-                  <button type="button" onClick={() => setEditorId(item.id)} className="mt-1.5 line-clamp-2 text-left text-[calc(15px*var(--fs))] leading-relaxed text-ink-500">
+                  <button
+                    type="button"
+                    onClick={() => (selectMode ? toggleSelected(item.id) : setEditorId(item.id))}
+                    className="mt-1.5 line-clamp-2 text-left text-[calc(15px*var(--fs))] leading-relaxed text-ink-500"
+                  >
                     {truncate(item.body.replace(/\n/g, " "), 120)}
                   </button>
                 ) : null}
@@ -361,9 +601,9 @@ export function ArchiveTab() {
                     <button
                       type="button"
                       onClick={() => void update("archive", item.id, { trash: true })}
-                      className="rounded px-1.5 py-0.5 text-[calc(13px*var(--fs))] text-ink-300 hover:bg-paper-200 hover:text-red-500"
+                      className="trash-btn flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[calc(13px*var(--fs))] text-ink-300 hover:bg-paper-200 hover:text-red-500"
                     >
-                      휴지통
+                      <TrashIcon size={11} /> 휴지통
                     </button>
                   )}
                 </div>
@@ -373,20 +613,125 @@ export function ArchiveTab() {
         </div>
       )}
 
-      <div className="pointer-events-none fixed inset-x-0 bottom-[calc(3.4rem+env(safe-area-inset-bottom))] z-20 px-4 md:px-8 lg:px-10">
+      {/* A46: 상자 선택 — 마우스로 여백에서 그린 사각형 */}
+      {marquee ? (
+        <div
+          aria-hidden
+          data-archive-marquee
+          className="pointer-events-none fixed z-30 rounded-md border border-ink-700/60 bg-ink-900/[0.06]"
+          style={{ left: marquee.x, top: marquee.y, width: marquee.w, height: marquee.h }}
+        />
+      ) : null}
+
+      {/* A46: 선택한 항목이 있을 때만 뜨는 일괄 작업 줄 */}
+      {selected.length > 0 ? (
+        <div className="pointer-events-none fixed inset-x-0 bottom-[calc(8.9rem+env(safe-area-inset-bottom))] z-20 px-4 md:px-8 lg:px-10">
+          <div className="pointer-events-auto mx-auto flex w-full max-w-[46rem] items-center gap-2 rounded-2xl border border-ink-900/15 bg-white/95 px-3 py-2 shadow-lift backdrop-blur">
+            <span className="flex-none text-[calc(14px*var(--fs))] font-medium text-ink-800">{selected.length}개 선택</span>
+            <button
+              type="button"
+              data-archive-bulk-move
+              onClick={() => setMoveOpen((current) => !current)}
+              className="ml-auto rounded-full bg-paper-200 px-2.5 py-1 text-[calc(13.5px*var(--fs))] text-ink-700 transition hover:bg-paper-300"
+            >
+              이동
+            </button>
+            {trashMode ? (
+              <button
+                type="button"
+                data-archive-bulk-restore
+                onClick={() => void bulkRestore()}
+                className="rounded-full bg-paper-200 px-2.5 py-1 text-[calc(13.5px*var(--fs))] text-ink-700 transition hover:bg-paper-300"
+              >
+                복원
+              </button>
+            ) : null}
+            <button
+              type="button"
+              data-archive-bulk-trash
+              onClick={() => void bulkTrash()}
+              className="trash-btn flex items-center gap-1 rounded-full bg-rose-50 px-2.5 py-1 text-[calc(13.5px*var(--fs))] text-rose-600 hover:bg-rose-100"
+            >
+              <TrashIcon size={11} /> {trashMode ? "완전 삭제" : "삭제"}
+            </button>
+            <button
+              type="button"
+              onClick={clearSelection}
+              className="rounded-full px-2 py-1 text-[calc(13.5px*var(--fs))] text-ink-400 transition hover:text-ink-800"
+            >
+              해제
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {/* A46: 일괄 이동 — 분류·폴더 고르기 */}
+      {moveOpen && selected.length > 0 ? (
+        <div
+          data-archive-move-menu
+          role="dialog"
+          aria-label="옮길 분류 고르기"
+          className="fixed inset-x-3 bottom-[calc(4.6rem+env(safe-area-inset-bottom))] z-50 max-h-[60vh] overflow-y-auto rounded-2xl border border-paper-300 bg-white p-2 shadow-lift"
+        >
+          <p className="px-2 py-1 text-[calc(13px*var(--fs))] text-ink-400">분류로 옮기기</p>
+          <div className="flex flex-wrap gap-1.5 px-1 pb-2">
+            {ARCHIVE_KINDS.map((kind) => (
+              <button
+                key={kind}
+                type="button"
+                data-archive-move-kind={kind}
+                onClick={() => void moveItems(selectedItems, { kind })}
+                className="rounded-full bg-paper-200 px-2.5 py-1 text-[calc(14px*var(--fs))] text-ink-700 transition hover:bg-paper-300"
+              >
+                {kind}
+              </button>
+            ))}
+          </div>
+          {folders.length > 0 ? (
+            <>
+              <p className="px-2 py-1 text-[calc(13px*var(--fs))] text-ink-400">폴더에 담기</p>
+              <div className="flex flex-wrap gap-1.5 px-1 pb-2">
+                {folders.map((entry) => (
+                  <button
+                    key={entry.name}
+                    type="button"
+                    data-archive-move-folder={entry.name}
+                    onClick={() => void moveItems(selectedItems, { folderName: entry.name })}
+                    className="rounded-full bg-paper-200 px-2.5 py-1 text-[calc(14px*var(--fs))] text-ink-700 transition hover:bg-paper-300"
+                  >
+                    {entry.emoji ? `${entry.emoji} ` : ""}
+                    {entry.name}
+                  </button>
+                ))}
+              </div>
+            </>
+          ) : null}
+          <button
+            type="button"
+            onClick={() => setMoveOpen(false)}
+            className="mt-1 w-full rounded-lg px-2 py-1.5 text-center text-[calc(13.5px*var(--fs))] text-ink-400 hover:bg-paper-100"
+          >
+            닫기
+          </button>
+        </div>
+      ) : null}
+
+      {/* A46: 하단 플로팅 빠른 입력 — 카드와 구분되도록 따뜻한 크림 바탕·뚜렷한 테두리·그림자. */}
+      <div className="pointer-events-none fixed inset-x-0 bottom-[calc(4.9rem+env(safe-area-inset-bottom))] z-20 px-4 md:px-8 lg:px-10">
         <form
           onSubmit={(event) => {
             event.preventDefault();
             void addQuick();
           }}
-          className="pointer-events-auto mx-auto flex w-full max-w-[46rem] items-center gap-2 rounded-full border border-paper-300 bg-white/95 px-4 py-2 shadow-lift backdrop-blur"
+          data-archive-quick-add
+          className="pointer-events-auto mx-auto flex w-full max-w-[46rem] items-center gap-2 rounded-full border border-[#d8cbb8] bg-[#fbf6ec] px-4 py-2 shadow-[0_10px_30px_-12px_rgba(90,70,40,0.35),0_2px_6px_rgba(90,70,40,0.10)] backdrop-blur"
         >
-          <ArchiveIcon size={15} className="flex-none text-ink-400" />
+          <ArchiveIcon size={15} className="flex-none text-[#a08a6a]" />
           <input
             value={quickTitle}
             onChange={(event) => setQuickTitle(event.target.value)}
             placeholder="링크 붙여넣기 또는 메모 입력 후 Enter"
-            className="min-w-0 flex-1 border-none bg-transparent text-[calc(15px*var(--fs))] text-ink-900 outline-none placeholder:text-ink-400"
+            className="min-w-0 flex-1 border-none bg-transparent text-[calc(15px*var(--fs))] text-ink-900 outline-none placeholder:text-[#a89a80]"
           />
           <button type="submit" disabled={!quickTitle.trim() || busy} className="btn-primary btn-xs flex-none">
             담기

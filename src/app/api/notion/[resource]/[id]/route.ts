@@ -1,7 +1,17 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { isAuthorized } from "@/lib/auth";
-import { archivePage, hasNotionToken, NotionError, retrievePage, updatePage, isNotionPageId, type NotionIcon } from "@/lib/notion";
+import {
+  archivePage,
+  clearSchemaCache,
+  hasNotionToken,
+  NotionError,
+  prunedProperties,
+  retrievePage,
+  updatePage,
+  isNotionPageId,
+  type NotionIcon,
+} from "@/lib/notion";
 import type { NotionPage } from "@/lib/notion";
 import { buildProperties, mappers } from "@/lib/notion-map";
 import { DB_ENV_KEYS, DB_IDS, DB_LABELS, dbSetupMessage, isResourceKey, type ResourceKey } from "@/lib/db-config";
@@ -107,7 +117,19 @@ export async function PATCH(
       }
     }
 
-    const page = await updatePage(id, buildProperties(resource, patch, currentPage ?? undefined), icon);
+    // A45: 노션에서 지운 열은 빼고 보냅니다 — 열이 없어도 저장이 실패하지 않습니다.
+    const databaseId = DB_IDS[resource]!;
+    const properties = await prunedProperties(databaseId, buildProperties(resource, patch, currentPage ?? undefined));
+    let page: NotionPage;
+    try {
+      page = await updatePage(id, properties, icon);
+    } catch (error) {
+      // 열을 지운 직후처럼 스키마 기억이 낡았으면, 다시 읽고 한 번만 더 보냅니다.
+      if (!(error instanceof NotionError) || error.status !== 400) throw error;
+      clearSchemaCache(databaseId);
+      const fresh = await prunedProperties(databaseId, buildProperties(resource, patch, currentPage ?? undefined));
+      page = await updatePage(id, fresh, icon);
+    }
     const map = mappers[resource] as (page: NotionPage) => unknown;
     return NextResponse.json({ ok: true, data: map(page) });
   } catch (error) {
@@ -141,7 +163,8 @@ export async function DELETE(
       await archivePage(id);
       return NextResponse.json({ ok: true, deleted: true });
     }
-    const page = await updatePage(id, buildProperties(resource, { trash: true }));
+    const trashed = await prunedProperties(DB_IDS[resource]!, buildProperties(resource, { trash: true }));
+    const page = await updatePage(id, trashed);
     const map = mappers[resource] as (page: NotionPage) => unknown;
     return NextResponse.json({ ok: true, data: map(page) });
   } catch (error) {

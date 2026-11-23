@@ -1,15 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useData } from "@/state/store";
 import { useSettings } from "@/state/settings";
+import { useUi } from "@/state/ui";
 import { useCategoryOptions } from "@/state/categories";
 import { Drawer, EmptyState, Segmented } from "@/components/common/primitives";
 import { taskTone } from "@/components/common/tone";
 import { useCategoryColors } from "@/state/category-colors";
 import { PASTELS } from "@/components/common/pastels";
 import { useProjectColors } from "@/state/project-colors";
-import { CheckIcon, InboxIcon, PlusIcon } from "@/components/icons";
+import { CheckIcon, InboxIcon, MoveIcon, PlusIcon, TrashIcon } from "@/components/icons";
 import { cn, matchesMode } from "@/lib/utils";
 import { todayISO } from "@/lib/date";
 import type { ModeFilter, ProjectTask, TaskCategory } from "@/lib/types";
@@ -17,6 +18,7 @@ import { TaskRow } from "@/components/projects/TaskRow";
 import { ProjectIcon, ProjectIconPicker } from "@/components/common/ProjectIcon";
 import { RichText } from "@/components/common/rich";
 import { reorderSameDate, sortProjectTaskList, taskSortDate } from "@/lib/order";
+import { useDnd } from "@/components/common/dnd";
 
 type Filter = "all" | "ing" | "done";
 
@@ -35,6 +37,7 @@ export function ProjectDrawer({
   onOpenTask,
   onEditProject,
   showBackdrop = true,
+  onDragHiddenChange,
 }: {
   projectId: string | null;
   /** A38: index 서랍은 카드와 같은 목록을 보여 줘야 해서 지금 화면의 분류 필터를 그대로 받습니다. */
@@ -43,9 +46,12 @@ export function ProjectDrawer({
   onOpenTask: (id: string) => void;
   onEditProject: (id: string) => void;
   showBackdrop?: boolean;
+  /** A45: 서랍 안에서 끌기가 시작되면 서랍·어두운 배경을 감춥니다(바깥 배경도 같이). */
+  onDragHiddenChange?: (hidden: boolean) => void;
 }) {
   const { data, create, update, remove } = useData();
   const { settings, addCategory } = useSettings();
+  const { notify } = useUi();
   const { pastelOf, chosenOf, setColor } = useProjectColors();
   const categoryColor = useCategoryColors();
   /** A16: 이 화면에서 바로 분류를 바꾸거나 새로 만듭니다. */
@@ -55,7 +61,12 @@ export function ProjectDrawer({
   const [filter, setFilter] = useState<Filter>("all");
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
-  const [dragId, setDragId] = useState<string | null>(null);
+  /** A45: 끄는 동안 서랍과 배경을 감춥니다 — 뒤의 프로젝트 카드에 놓을 수 있게. */
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const [dragHidden, setDragHidden] = useState(false);
+  /** A45: 연필 옆 작은 `이동` 버튼이 열어 둔 할 일 id. */
+  const [moveFor, setMoveFor] = useState<string | null>(null);
+  const dnd = useDnd();
 
   const isIndex = projectId === INDEX_DRAWER_ID;
   const project = !isIndex && projectId ? data.projects.find((item) => item.id === projectId && item.kind === "프로젝트") ?? null : null;
@@ -113,6 +124,87 @@ export function ProjectDrawer({
       status: task.status === "완료" ? "미완료" : "완료",
       doneAt: task.status === "완료" ? null : todayISO(),
     });
+  };
+
+  /** A45: 끄는 동안 서랍·배경을 즉시 감춥니다(뒤의 프로젝트 카드를 그대로 집도록 인라인 스타일). */
+  const hideForDrag = () => {
+    setDragHidden(true);
+    onDragHiddenChange?.(true);
+    const node = rootRef.current;
+    if (node) {
+      // A46: 서랍 안쪽 패널은 `pointer-events-auto` 라서 부모의 none 만으로는 손끝을 계속
+      // 가로챕니다. `visibility` 로 통째로 내려야 뒤의 카드가 그 자리에서 잡힙니다.
+      node.style.opacity = "0";
+      node.style.pointerEvents = "none";
+      node.style.visibility = "hidden";
+    }
+  };
+  const restoreAfterDrag = () => {
+    setDragHidden(false);
+    onDragHiddenChange?.(false);
+    const node = rootRef.current;
+    if (node) {
+      node.style.opacity = "";
+      node.style.pointerEvents = "";
+      node.style.visibility = "";
+    }
+  };
+
+  /** A45: 할 일 하나를 프로젝트(또는 index)로 옴깁니다 — 서랍·카드·빠른 이동 버튼이 함께 씁니다. */
+  const moveTaskTo = (task: ProjectTask | undefined, targetId: string | null) => {
+    if (!task || task.kind !== "할 일") return;
+    const project = targetId ? data.projects.find((item) => item.id === targetId && item.kind === "프로젝트") ?? null : null;
+    const nextIds = project ? [project.id] : [];
+    const currentIds = task.projectIds ?? [];
+    if (currentIds.length === nextIds.length && currentIds.every((id, index) => id === nextIds[index])) return;
+    void update(
+      "projects",
+      task.id,
+      { projectIds: nextIds, ...(project ? { category: project.category } : {}) },
+      { silent: true },
+    ).then((ok) => {
+      if (!ok) return;
+      notify(
+        project ? `‘${task.title}’을(를) ${project.title}로 옮겼습니다` : `‘${task.title}’을(를) index 로 옮겼습니다`,
+        "success",
+      );
+    });
+  };
+
+  /**
+   * A45: 서랍 안 할 일을 꾸우거나 마우스로 끌기 시작하면 서랍과 어두운 배경이 비켜나고, 뒤의
+   * 프로젝트 카드·index 에 놓으면 그리로 옴깁니다. iOS 에서도 끊기지 않도록 dnd.tsx 의
+   * 터치·포인터 끌기를 그대로 씁니다(기존 HTML5 draggable 대신).
+   */
+  const startTaskDrag = (event: React.PointerEvent<HTMLElement>, task: ProjectTask) => {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    dnd.start(
+      event,
+      { kind: "task", id: task.id, label: task.title },
+      (target) => {
+        if (!target) return;
+        if (target.zone === "project-card") {
+          const key = target.data.project;
+          moveTaskTo(task, key && key !== "index" ? key : null);
+          return;
+        }
+        if (target.zone === "drawer-task" && target.data.task) moveWithinDate(task.id, target.data.task);
+      },
+      {
+        onStart: hideForDrag,
+        onEnd: restoreAfterDrag,
+        getHint: (target) => {
+          if (target.zone === "project-card") {
+            const key = target.data.project;
+            if (!key) return null;
+            const name = key === "index" ? "index" : data.projects.find((item) => item.id === key)?.title ?? "프로젝트";
+            return `${name}로 옮기기`;
+          }
+          if (target.zone === "drawer-task") return "같은 날짜 안에서 순서 바꾸기";
+          return null;
+        },
+      },
+    );
   };
 
   const addTask = async () => {
@@ -186,18 +278,78 @@ export function ProjectDrawer({
           <TaskRow
             key={task.id}
             task={task}
-            draggable
-            onDragStart={() => setDragId(task.id)}
-            onDrop={() => {
-              if (dragId) moveWithinDate(dragId, task.id);
-              setDragId(null);
-            }}
+            className={moveFor === task.id ? "z-20 bg-white" : undefined}
+            dropAttrs={{ "data-drop-zone": "drawer-task", "data-drop-task": task.id }}
+            onPointerDragStart={(event) => startTaskDrag(event, task)}
             onOpen={() => onOpenTask(task.id)}
             onToggle={() => toggle(task)}
+            trailing={
+              <button
+                type="button"
+                data-task-move={task.id}
+                aria-label={`${task.title} 이동`}
+                title="다른 프로젝트·index 로 옮기기"
+                onClick={() => setMoveFor((current) => (current === task.id ? null : task.id))}
+                className={cn(
+                  "flex h-6 flex-none items-center gap-0.5 rounded-full px-1.5 text-[calc(12.5px*var(--fs))] transition",
+                  moveFor === task.id ? "bg-ink-900 text-white" : "text-ink-400 hover:bg-paper-200 hover:text-ink-800",
+                )}
+              >
+                <MoveIcon size={11} /> 이동
+              </button>
+            }
           />
         ))}
       </ul>
     );
+
+  /** A45: 연필 옆 `이동` 이 여는 프로젝트 목록 — 한 번 탭으로 확실하게 옮깁니다. */
+  const moveMenu = moveFor ? (
+    <div
+      data-task-move-menu={moveFor}
+      role="menu"
+      aria-label="옮길 곳 고르기"
+      className="fixed inset-x-3 bottom-[calc(4.6rem+env(safe-area-inset-bottom))] z-50 max-h-[60vh] overflow-y-auto rounded-2xl border border-paper-300 bg-white p-1.5 shadow-lift sm:absolute sm:inset-x-auto sm:bottom-auto sm:right-0 sm:top-full sm:mt-1 sm:w-56"
+    >
+      <p className="px-2 py-1 text-[calc(12.5px*var(--fs))] text-ink-400">옮길 곳</p>
+      {[
+        { id: null as string | null, label: "index (분류 없음)" },
+        ...data.projects
+          .filter((item) => item.kind === "프로젝트" && !item.trash)
+          .map((item) => ({ id: item.id as string | null, label: item.title })),
+      ].map((option) => {
+        const task = data.projects.find((item) => item.id === moveFor) ?? null;
+        const active = option.id ? (task?.projectIds ?? []).includes(option.id) : (task?.projectIds ?? []).length === 0;
+        return (
+          <button
+            key={option.id ?? "index"}
+            type="button"
+            role="menuitem"
+            data-move-target={option.id ?? "index"}
+            onClick={() => {
+              moveTaskTo(task ?? undefined, option.id);
+              setMoveFor(null);
+            }}
+            className={cn(
+              "flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-[calc(14px*var(--fs))] transition",
+              active ? "bg-paper-200 text-ink-900" : "text-ink-700 hover:bg-paper-100",
+            )}
+          >
+            {option.id ? <span className="h-2 w-2 flex-none rounded-full bg-sage-400" /> : <InboxIcon size={12} />}
+            <span className="min-w-0 flex-1 truncate">{option.label}</span>
+            {active ? <CheckIcon size={11} className="flex-none text-ink-500" /> : null}
+          </button>
+        );
+      })}
+      <button
+        type="button"
+        onClick={() => setMoveFor(null)}
+        className="mt-0.5 w-full rounded-lg px-2 py-1 text-center text-[calc(13px*var(--fs))] text-ink-400 hover:bg-paper-100"
+      >
+        닫기
+      </button>
+    </div>
+  ) : null;
 
   const addForm = (
     <form
@@ -225,6 +377,8 @@ export function ProjectDrawer({
     <Drawer
       open={!!project || isIndex}
       onClose={onClose}
+      rootRef={rootRef}
+      hidden={dragHidden}
       title={
         project ? (
           <span className="flex items-center gap-2">
@@ -262,9 +416,9 @@ export function ProjectDrawer({
                 void remove("projects", project.id);
                 onClose();
               }}
-              className="btn-ghost btn-xs text-rose-500 hover:bg-rose-50"
+              className="trash-btn btn-ghost btn-xs flex items-center gap-1 text-rose-500 hover:bg-rose-50"
             >
-              삭제
+              <TrashIcon size={12} /> 삭제
             </button>
             <div className="flex gap-2">
               <button
@@ -477,6 +631,8 @@ export function ProjectDrawer({
               <CheckIcon size={12} /> 모든 할 일을 마쳤습니다.
             </p>
           ) : null}
+
+          {moveMenu}
         </div>
       ) : isIndex ? (
         /* A38: index 서랍 — 분류되지 않은 할 일의 지난 기록까지 한 화면에서 봅니다. */
@@ -498,6 +654,8 @@ export function ProjectDrawer({
               <CheckIcon size={12} /> 모든 할 일을 마쳤습니다.
             </p>
           ) : null}
+
+          {moveMenu}
         </div>
       ) : null}
     </Drawer>

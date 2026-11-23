@@ -7,6 +7,18 @@
  *   `/data_sources/{id}` with `2025-09-03`.
  */
 
+import {
+  blockFromNotion,
+  blockPayload,
+  blockSignature,
+  blocksFromDoc,
+  MANAGED_BLOCK_TYPES,
+  notionTypeOf,
+  stampBlock,
+  type Doc,
+  type DocBlock,
+} from "./doc";
+
 const API = "https://api.notion.com/v1";
 const V_LEGACY = "2022-06-28";
 const V_DATA_SOURCE = "2025-09-03";
@@ -399,6 +411,95 @@ export async function replacePageBody(pageId: string, text: string): Promise<Pag
   while (lines.length > 0 && lines[lines.length - 1]!.trim() === "") lines.pop();
   if (lines.length > 0) await appendBlocks(pageId, lines.map(paragraphBlock));
   return { text: lines.join("\n"), preserved: before.preserved, paragraphCount: lines.length };
+}
+
+/**
+ * A45: 본문 문서(서식 있는 일기·메모)를 페이지 블록으로 저장합니다.
+ *
+ * 같은 모양(블록 수·종류가 같은 순서)이면 바뀐 블록만 PATCH 하고, 모양이 달라졌을 때만
+ * 앞서 쓰던 블록을 지우고 새로 붙입니다. 이미지·토글처럼 우리가 다루지 않는 블록은
+ * 건드리지 않습니다.
+ */
+export async function writeDocBlocks(pageId: string, doc: Doc): Promise<void> {
+  const blocks = await listBlockChildren(pageId);
+  const managed = blocks.filter((block) => !block.archived && MANAGED_BLOCK_TYPES.has(String(block.type)));
+  const parsed = managed
+    .map((raw) => ({ raw, block: blockFromNotion(raw) }))
+    .filter((item): item is { raw: NotionBlock; block: DocBlock } => item.block !== null);
+
+  const stamp = stampBlock(doc);
+  const target: DocBlock[] = [...(stamp ? [stamp] : []), ...doc.blocks];
+  const sameShape =
+    parsed.length === target.length &&
+    parsed.every((item, index) => {
+      const next = target[index]!;
+      return String(item.raw.type) === notionTypeOf(next) && !!item.block;
+    });
+
+  if (sameShape) {
+    for (let index = 0; index < target.length; index += 1) {
+      const current = parsed[index]!.block;
+      const next = target[index]!;
+      if (blockSignature(current) === blockSignature(next)) continue;
+      const payload = blockPayload(next) as Record<string, unknown>;
+      const type = String(payload.type);
+      const body = { ...(payload[type] as Record<string, unknown>) };
+      await request(`/blocks/${parsed[index]!.raw.id}`, { method: "PATCH", body: JSON.stringify({ [type]: body }) });
+    }
+    return;
+  }
+
+  for (let index = 0; index < parsed.length; index += 6) {
+    await Promise.all(parsed.slice(index, index + 6).map((item) => deleteBlock(item.raw.id)));
+  }
+  await appendBlocks(pageId, blocksFromDoc(doc));
+}
+
+/** 연결된 페이지 본문을 문서로 읽습니다(우리가 다루는 블록만). */
+export async function readDocBlocks(pageId: string): Promise<{ blocks: NotionBlock[]; preserved: string[] }> {
+  const blocks = await listBlockChildren(pageId);
+  const preserved = [...new Set(blocks.filter((block) => !block.archived && !MANAGED_BLOCK_TYPES.has(String(block.type))).map((block) => String(block.type)))];
+  return { blocks: blocks.filter((block) => !block.archived), preserved };
+}
+
+/**
+ * A45: 노션에서 지운 속성은 보내지 않습니다.
+ *
+ * 사용자가 노션에서 더 이상 쓰지 않는 열을 지우면, 예전에는 그 속성을 담은 PATCH 가
+ * 400 으로 거절되어 저장 자체가 실패했습니다. 지금은 DB 스키마를 잠시(10분) 기억해 두고,
+ * 스키마에 없는 속성만 조용히 빼고 보냅니다. 스키마를 읽지 못하면 하나도 빼지 않습니다(안전한 쪽).
+ */
+const schemaCache = new Map<string, { at: number; names: Set<string> }>();
+const SCHEMA_TTL = 10 * 60 * 1000;
+
+export async function existingProperties(databaseId: string): Promise<Set<string> | null> {
+  const cached = schemaCache.get(databaseId);
+  if (cached && Date.now() - cached.at < SCHEMA_TTL) return cached.names;
+  try {
+    const schema = await retrieveDatabaseSchema(databaseId);
+    const names = new Set(schema.map((property) => property.name));
+    if (names.size === 0) return null;
+    schemaCache.set(databaseId, { at: Date.now(), names });
+    return names;
+  } catch {
+    return cached?.names ?? null;
+  }
+}
+
+/** 스키마를 다시 읽게 합니다 — 노션에서 열을 지운 직후처럼 기억이 낡았을 때. */
+export function clearSchemaCache(databaseId: string): void {
+  schemaCache.delete(databaseId);
+}
+
+/** 보낼 속성에서 지금 스키마에 없는 것만 빼냅니다. */
+export async function prunedProperties(databaseId: string, properties: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const names = await existingProperties(databaseId);
+  if (!names) return properties;
+  const out: Record<string, unknown> = {};
+  for (const [name, value] of Object.entries(properties)) {
+    if (names.has(name)) out[name] = value;
+  }
+  return out;
 }
 
 /**

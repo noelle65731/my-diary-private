@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { isAuthorized } from "@/lib/auth";
-import { createPage, hasNotionToken, NotionError, queryDatabase } from "@/lib/notion";
+import { clearSchemaCache, createPage, hasNotionToken, NotionError, prunedProperties, queryDatabase } from "@/lib/notion";
 import type { NotionPage } from "@/lib/notion";
 import { buildProperties, defaultPatch, mappers } from "@/lib/notion-map";
 import { DB_ENV_KEYS, DB_IDS, DB_LABELS, dbSetupMessage, isResourceKey, type ResourceKey } from "@/lib/db-config";
@@ -96,7 +96,18 @@ export async function POST(request: NextRequest, context: { params: Promise<{ re
   }
 
   try {
-    const page = await createPage(DB_IDS[resource], buildProperties(resource, defaultPatch(resource, patch)));
+    // A45: 노션에서 지운 열은 빼고 만듭니다.
+    const databaseId = DB_IDS[resource]!;
+    const properties = await prunedProperties(databaseId, buildProperties(resource, defaultPatch(resource, patch)));
+    let page: NotionPage;
+    try {
+      page = await createPage(databaseId, properties);
+    } catch (error) {
+      if (!(error instanceof NotionError) || error.status !== 400) throw error;
+      clearSchemaCache(databaseId);
+      const fresh = await prunedProperties(databaseId, buildProperties(resource, defaultPatch(resource, patch)));
+      page = await createPage(databaseId, fresh);
+    }
     const map = mappers[resource] as (page: NotionPage) => unknown;
     return NextResponse.json({ ok: true, data: map(page) });
   } catch (error) {

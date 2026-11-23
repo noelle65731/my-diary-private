@@ -22,9 +22,11 @@ import { holidayName } from "@/lib/holidays";
 import { cn, truncate } from "@/lib/utils";
 import type { BinderEntry, ProjectTask } from "@/lib/types";
 import { previewText, renderMarkdown } from "@/lib/markdown";
-import { BookIcon, CheckIcon, ChevronLeftIcon, ChevronRightIcon, ListIcon, PlusIcon, SearchIcon, StarIcon, XIcon } from "@/components/icons";
+import { BookIcon, CheckIcon, ChevronLeftIcon, ChevronRightIcon, ListIcon, PinIcon, PlusIcon, SearchIcon, StarIcon, XIcon } from "@/components/icons";
 import { EmptyState } from "@/components/common/primitives";
 import { TagInput } from "@/components/editors/shared";
+import { pushToast } from "@/lib/toast-bus";
+import { paperBackground, PAPER_OPTIONS, type PaperStyle } from "@/lib/paper";
 import { BinderEditor } from "@/components/editors/BinderEditor";
 import { BinderDetail } from "@/components/detail/BinderDetail";
 import { eventCoversDay, tasksForDay } from "@/components/calendar/calendar-utils";
@@ -142,6 +144,7 @@ export function BinderTab() {
       entry={dayEntry(day)}
       agenda={agendaForDay(day, agendaEvents, agendaTasks)}
       lines={settings.binderPreviewLines}
+      paper={settings.binderPaper}
       writing={writingDay === day}
       onStartWriting={() => startWriting(day)}
       onStopWriting={() => setWritingDay((current) => (current === day ? null : current))}
@@ -216,6 +219,22 @@ export function BinderTab() {
             </button>
           </div>
 
+          {view === "notes" ? null : (
+            <div className="seg-track" aria-label="속지 배경">
+              {PAPER_OPTIONS.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setSetting("binderPaper", option.value)}
+                  aria-pressed={settings.binderPaper === option.value}
+                  data-paper-option={option.value}
+                  className={cn("seg-item !px-2 !py-0.5 text-[calc(13px*var(--fs))]", settings.binderPaper === option.value && "seg-item-active")}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          )}
           {view === "weekly" ? (
             <button
               type="button"
@@ -284,6 +303,7 @@ export function BinderTab() {
             day={cursor}
             entry={dayEntry(cursor)}
             diaries={diaries}
+            paper={settings.binderPaper}
             tasks={settings.nowOnly ? data.projects.filter((task) => !task.hidden) : data.projects}
             events={settings.nowOnly ? data.calendar.filter((event) => !event.hidden) : data.calendar}
             showSchedule={settings.binderShowSchedule}
@@ -307,6 +327,11 @@ export function BinderTab() {
             onMonth={setMonth}
             onOpen={openEntry}
             onNew={() => openNew(cursor, "노트")}
+            onPin={(note) => {
+              void update("binder", note.id, { favorite: !note.favorite }, { silent: true }).then((ok) => {
+                if (ok) pushToast(note.favorite ? "상단 고정을 해제했습니다" : "맨 위에 고정했습니다");
+              });
+            }}
             onCreateEntry={async (title, date) => {
               const created = await create("binder", { title, kind: "노트", date, body: "" });
               if (created) openEntry(created.id);
@@ -365,6 +390,7 @@ function DiaryRow({
   entry,
   agenda,
   lines,
+  paper,
   writing,
   onStartWriting,
   onStopWriting,
@@ -377,6 +403,7 @@ function DiaryRow({
   entry: BinderEntry | null;
   agenda: AgendaItem[];
   lines: number;
+  paper: PaperStyle;
   writing: boolean;
   onStartWriting: () => void;
   onStopWriting: () => void;
@@ -526,13 +553,14 @@ function DiaryRow({
         {writing ? <DayAgenda day={day} items={agenda} /> : null}
 
         {writing ? (
-          <div className="min-w-0">
+          <div className="min-w-0" data-binder-expanded={day}>
             <textarea
               ref={area}
               value={text}
               onChange={(event) => {
                 setText(event.target.value);
                 const node = event.target;
+                // A45: 줄 수 제한 없이 쓴 만큼 아래로 계속 늘어납니다.
                 node.style.height = "auto";
                 node.style.height = `${node.scrollHeight}px`;
                 schedule(event.target.value);
@@ -556,10 +584,13 @@ function DiaryRow({
                   onStopWriting();
                 }
               }}
-              rows={3}
+              rows={15}
               autoFocus
               placeholder="바로 적어 보세요"
-              className="binder-input min-h-[4.4rem]"
+              /* A45: 눌러서 쓰는 동안에는 그 칸만 넉넉히(15줄) 펼쳐집니다 — 쓴 만큼 더 늘어나고,
+                  닫으면 다시 세 줄 미리보기로 돌아갑니다. */
+              style={{ minHeight: "22rem", ...paperBackground(paper) }}
+              className="binder-input min-h-[22rem]"
             />
             <div className="mt-1 flex items-center justify-between text-[calc(12px*var(--fs))] text-ink-400">
               <span>{saved === "saving" ? "저장 중…" : saved === "saved" ? "저장됨" : "자동 저장 (잠시 멈추면)"}</span>
@@ -567,7 +598,7 @@ function DiaryRow({
                 type="button"
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={onStopWriting}
-                className="hover:text-ink-800"
+                className="rounded-full border border-paper-300 px-2 py-0.5 hover:border-ink-400 hover:text-ink-800"
               >
                 닫기
               </button>
@@ -925,6 +956,7 @@ function DailyView({
   day,
   entry,
   diaries,
+  paper,
   tasks,
   events,
   showSchedule,
@@ -937,6 +969,7 @@ function DailyView({
   day: string;
   entry: BinderEntry | null;
   diaries: BinderEntry[];
+  paper: PaperStyle;
   tasks: ProjectTask[];
   events: CalendarEvent[];
   showSchedule: boolean;
@@ -1105,15 +1138,8 @@ function DailyView({
                 }}
                 onBlur={flush}
                 placeholder={"# 오늘\n\n있었던 일을 천천히 적어 보세요.\n\n- 기억하고 싶은 장면\n- 내일의 다짐"}
-                // A10: the ruled line sits exactly at the bottom of each 26px text row, so
-                // many lines of writing never get covered by it.
-                style={{
-                  lineHeight: "26px",
-                  backgroundImage:
-                    "repeating-linear-gradient(to bottom, transparent 0, transparent 25px, #eef0f3 25px, #eef0f3 26px)",
-                  backgroundAttachment: "local",
-                  backgroundPosition: "0 1px",
-                }}
+                // A45: 설정한 속지(무지·줄노트·모눈)를 그대로 따릅니다.
+                style={{ lineHeight: "28px", ...paperBackground(paper) }}
                 className="min-h-[360px] w-full resize-y border-none bg-transparent px-0 py-0 text-[calc(16px*var(--fs))] text-ink-800 outline-none placeholder:text-ink-300"
               />
             )}
@@ -1247,19 +1273,22 @@ function NotesView({
   onMonth,
   onOpen,
   onNew,
+  onPin,
 }: {
   notes: BinderEntry[];
   month: string;
   onMonth: (month: string) => void;
   onOpen: (id: string) => void;
   onNew: () => void;
+  /** A45: 상단 고정핀 — 노션 `즐겨찾기` 속성에 저장됩니다. */
+  onPin: (note: BinderEntry) => void;
   onCreateEntry: (title: string, date: string) => Promise<void>;
 }) {
   const [query, setQuery] = useState("");
   const filtered = notes
     .filter((note) => (month === "all" ? true : (note.date ?? "").slice(0, 7) === month))
     .filter((note) => (query.trim() ? `${note.title} ${note.body}`.toLowerCase().includes(query.trim().toLowerCase()) : true))
-    .sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""));
+    .sort((a, b) => Number(!!b.favorite) - Number(!!a.favorite) || (b.date ?? "").localeCompare(a.date ?? ""));
 
   return (
     <div className="space-y-3">
@@ -1297,15 +1326,42 @@ function NotesView({
           {filtered.map((note) => {
             const lines = previewText(note.body, 3);
             return (
-              <button
+              <div
                 key={note.id}
-                type="button"
+                role="button"
+                tabIndex={0}
+                data-note-card={note.id}
                 onClick={() => onOpen(note.id)}
-                className="flex flex-col rounded-2xl border border-paper-300 px-3.5 py-3 text-left transition hover:border-paper-400"
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onOpen(note.id);
+                  }
+                }}
+                className={cn(
+                  "flex cursor-pointer flex-col rounded-2xl border px-3.5 py-3 text-left transition hover:border-paper-400",
+                  note.favorite ? "border-ink-900/25 bg-paper-100/60" : "border-paper-300",
+                )}
               >
                 <div className="flex items-start justify-between gap-2">
                   <p className="line-clamp-1 text-[calc(15.5px*var(--fs))] font-medium text-ink-900">{note.title}</p>
-                  {note.favorite ? <StarIcon size={13} filled className="flex-none text-amber-400" /> : null}
+                  <button
+                    type="button"
+                    data-note-pin={note.id}
+                    aria-pressed={note.favorite}
+                    aria-label={note.favorite ? `${note.title} 상단 고정 해제` : `${note.title} 상단 고정`}
+                    title={note.favorite ? "상단 고정 해제" : "상단 고정"}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onPin(note);
+                    }}
+                    className={cn(
+                      "flex h-6 w-6 flex-none items-center justify-center rounded-full transition",
+                      note.favorite ? "bg-ink-900 text-white" : "text-ink-300 hover:bg-paper-200 hover:text-ink-700",
+                    )}
+                  >
+                    <PinIcon size={12} filled={note.favorite} />
+                  </button>
                 </div>
                 <p className="mt-0.5 text-[calc(13.5px*var(--fs))] text-ink-400">
                   {note.date ? `${formatShort(note.date)} ${weekdayKo(note.date)}` : "날짜 없음"}
@@ -1322,7 +1378,7 @@ function NotesView({
                     ))
                   )}
                 </div>
-              </button>
+              </div>
             );
           })}
         </div>

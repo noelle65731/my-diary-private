@@ -1,15 +1,16 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { useData } from "@/state/store";
-import { Modal, StarRating, TextArea, TextInput, Toggle } from "@/components/common/primitives";
+import { Modal, StarRating, TextInput, Toggle } from "@/components/common/primitives";
 import { EditorFooter, ErrorNote, TagInput } from "@/components/editors/shared";
-import { renderMarkdown } from "@/lib/markdown";
+import { RichDocEditor } from "@/components/editors/RichDocEditor";
 import { todayISO } from "@/lib/date";
 import { cn } from "@/lib/utils";
 import { ARCHIVE_KINDS, type ArchiveEntry, type ArchiveKind } from "@/lib/types";
 import { FolderChips, PhotoEditor } from "@/components/common/PhotoField";
 import { useArchiveFolders } from "@/lib/folders";
+import { docEqual, docFromMarkdown, docToMarkdown, emptyDoc, type Doc } from "@/lib/doc";
 
 export interface ArchiveDraft {
   kind?: ArchiveKind;
@@ -23,7 +24,6 @@ interface FormState {
   rating: number | null;
   link: string;
   tags: string[];
-  body: string;
   favorite: boolean;
   photos: string[];
   endDate: string;
@@ -61,7 +61,7 @@ function ArchiveEditorInner({
   draft?: ArchiveDraft;
   onClose: () => void;
 }) {
-  const { data, create, update, remove } = useData();
+  const { data, create, update, remove, fetchBody, saveBody } = useData();
   const existing = archiveId ? data.archive.find((item) => item.id === archiveId) ?? null : null;
   const [form, setForm] = useState<FormState>(
     existing
@@ -72,7 +72,6 @@ function ArchiveEditorInner({
           rating: existing.rating,
           link: existing.link,
           tags: existing.tags,
-          body: existing.body,
           favorite: existing.favorite,
           photos: existing.photos ?? [],
           endDate: existing.endDate ?? "",
@@ -85,14 +84,15 @@ function ArchiveEditorInner({
           rating: null,
           link: "",
           tags: [],
-          body: "",
           favorite: false,
           photos: [],
           endDate: "",
           endTime: "",
         },
   );
-  const [preview, setPreview] = useState(false);
+  /** A45: 본문 서식 문서 — 저장된 블록이 있으면 그것을, 없으면 `기록 데이터` 에서 만듭니다. */
+  const [doc, setDoc] = useState<Doc>(() => docFromMarkdown(existing?.body ?? ""));
+  const initialDoc = useRef<Doc>(docFromMarkdown(existing?.body ?? ""));
   const [error, setError] = useState<string | null>(null);
   /** A16: closing the window saves what was written — compare with the opening state. */
   const initialForm = useRef<FormState | null>(null);
@@ -105,7 +105,6 @@ function ArchiveEditorInner({
           rating: existing.rating ?? null,
           link: existing.link,
           tags: existing.tags,
-          body: existing.body,
           favorite: existing.favorite,
           photos: existing.photos ?? [],
           endDate: existing.endDate ?? "",
@@ -118,17 +117,30 @@ function ArchiveEditorInner({
           rating: null,
           link: "",
           tags: [],
-          body: "",
           favorite: false,
           photos: [],
           endDate: "",
           endTime: "",
         };
   }
-  const closing = useRef(false);
-  const [showEnd, setShowEnd] = useState(Boolean(existing?.endDate || existing?.endTime));
+  const closing = useRef(false);  const [showEnd, setShowEnd] = useState(Boolean(existing?.endDate || existing?.endTime));
   const [folder, setFolder] = useState<string | null>(null);
   const { folders, add: addFolder } = useArchiveFolders();
+
+  /** A45: 저장된 서식 문서가 있으면 그것을 씁니다(없으면 `기록 데이터` 마크다운). */
+  useEffect(() => {
+    if (!archiveId) return;
+    let alive = true;
+    void fetchBody("archive", archiveId).then((payload) => {
+      if (!alive || !payload?.doc) return;
+      if ((existing?.body ?? "").trim() && docToMarkdown(payload.doc) !== (existing?.body ?? "").trim()) return;
+      setDoc(payload.doc);
+      initialDoc.current = payload.doc;
+    });
+    return () => {
+      alive = false;
+    };
+  }, [archiveId, fetchBody, existing?.body]);
 
   const patch = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((current) => ({ ...current, [key]: value }));
@@ -145,13 +157,14 @@ function ArchiveEditorInner({
       baseDate: form.date,
       rating: form.rating,
       link: form.link,
-      body: form.body.replace(/\r\n/g, "\n"),
+      body: docToMarkdown(doc).replace(/\r\n/g, "\n"),
       favorite: form.favorite,
       photos: form.photos,
       endDate: showEnd ? form.endDate || null : null,
       endTime: showEnd ? form.endTime || null : null,
       tags: folder && !form.tags.includes(folder) ? [...form.tags, folder] : form.tags,
     };
+    let id = existing?.id ?? null;
     if (existing) {
       const ok = await update("archive", existing.id, payload);
       if (!ok) {
@@ -164,6 +177,15 @@ function ArchiveEditorInner({
         setError("저장하지 못했습니다. 잠시 후 다시 시도해 주세요.");
         return false;
       }
+      id = created.id;
+    }
+    if (id) {
+      const ok = await saveBody("archive", id, doc);
+      initialDoc.current = doc;
+      if (!ok) {
+        setError("메모 서식을 저장하지 못했습니다. 글은 저장되었습니다.");
+        return true;
+      }
     }
     return true;
   };
@@ -172,7 +194,7 @@ function ArchiveEditorInner({
   const closeWithSave = () => {
     if (closing.current) return;
     closing.current = true;
-    const changed = JSON.stringify(form) !== JSON.stringify(initialForm.current);
+    const changed = JSON.stringify(form) !== JSON.stringify(initialForm.current) || !docEqual(doc, initialDoc.current);
     void (async () => {
       try {
         if (changed && form.title.trim()) await save();
@@ -278,26 +300,16 @@ function ArchiveEditorInner({
         <div>
           <div className="mb-1 flex items-center justify-between">
             <p className="label mb-0">메모</p>
-            <button
-              type="button"
-              onClick={() => setPreview((current) => !current)}
-              className={cn("text-[calc(14px*var(--fs))]", preview ? "text-accent-600" : "text-ink-400 hover:text-ink-600")}
-            >
-              {preview ? "편집으로" : "미리보기"}
-            </button>
+            <span className="text-[calc(13px*var(--fs))] text-ink-400">서식 · 인용 · 강조 · 체크</span>
           </div>
-          {preview ? (
-            <div className="doc-body card-quiet max-h-[32vh] overflow-y-auto px-4 py-3 text-[calc(15.5px*var(--fs))] text-ink-700">
-              {renderMarkdown(form.body)}
-            </div>
-          ) : (
-            <TextArea
-              value={form.body}
-              onChange={(event) => patch("body", event.target.value)}
-              placeholder="인상 깊었던 점, 다시 볼 이유"
-              className="min-h-[120px]"
-            />
-          )}
+          <RichDocEditor
+            doc={doc}
+            onChange={setDoc}
+            paper="plain"
+            minHeight={140}
+            compact
+            placeholder="인상 깊었던 점, 다시 볼 이유"
+          />
         </div>
 
         <div>

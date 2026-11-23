@@ -45,6 +45,8 @@ export interface Settings {
   showCompletedTasks: boolean;
   binderPreviewLines: number;
   binderShowSchedule: boolean;
+  /** A45: 속지 배경 — 무지 / 줄노트 / 모눈. 모든 일기에 공통입니다(localStorage). */
+  binderPaper: "plain" | "ruled" | "grid";
   /** A24: 위클리 바인더에서 그 주의 일정·할 일 참고 창을 열어 둘지. */
   binderWeekSchedule: boolean;
   archiveDefaultCategory: "전체" | ArchiveKind;
@@ -71,6 +73,8 @@ export const DEFAULT_SETTINGS: Settings = {
   showScheduleCard: true,
   showCompletedTasks: false,
   binderPreviewLines: 3,
+  /** A45: 기본은 줄노트 — 예전 일기 화면의 줄과 같습니다. */
+  binderPaper: "ruled",
   binderShowSchedule: true,
   binderWeekSchedule: false,
   archiveDefaultCategory: "전체",
@@ -117,6 +121,8 @@ function settingsToast(key: keyof Settings, value: Settings[keyof Settings]): st
       return value ? "바인더에 오늘 일정을 함께 보여 줍니다" : "바인더의 오늘 일정을 접었습니다";
     case "binderWeekSchedule":
       return value ? "주간 일정 창을 펼쳐 둡니다" : "주간 일정 창을 접었습니다";
+    case "binderPaper":
+      return value === "ruled" ? "속지를 줄노트로 했습니다" : value === "grid" ? "속지를 모눈으로 했습니다" : "속지를 무지로 했습니다";
     case "archiveDefaultCategory":
       return `아카이브 기본 분류를 ${value}로 했습니다`;
     default:

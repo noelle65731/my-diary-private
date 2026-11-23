@@ -138,7 +138,11 @@ export function StarIcon({ filled, ...props }: IconProps & { filled?: boolean })
 export function TrashIcon(props: IconProps) {
   return (
     <svg {...base(props)}>
-      <path d="M4 7h16M9.5 7V4.5h5V7M6.5 7l.8 12.2a1.5 1.5 0 0 0 1.5 1.4h6.4a1.5 1.5 0 0 0 1.5-1.4L17.5 7" />
+      {/* A47: 뚜껑만 따로 움직입니다(호버 시 살짝 열림). */}
+      <g data-trash-lid>
+        <path d="M4 7h16M9.5 7V4.5h5V7" />
+      </g>
+      <path d="M6.5 7l.8 12.2a1.5 1.5 0 0 0 1.5 1.4h6.4a1.5 1.5 0 0 0 1.5-1.4L17.5 7" />
       <path d="M10.5 11v6M13.5 11v6" />
     </svg>
   );
@@ -259,6 +263,26 @@ export function ArrowLeftIcon(props: IconProps) {
   return (
     <svg {...base(props)}>
       <path d="M19 12H5M11 6l-6 6 6 6" />
+    </svg>
+  );
+}
+
+/** A45: 상단 고정핀 — 노트·아카이브의 `즐겨찾기`(고정) 토글. */
+export function PinIcon({ filled, ...props }: IconProps & { filled?: boolean }) {
+  return (
+    <svg {...base(props)} fill={filled ? "currentColor" : "none"}>
+      <path d="M9.2 3.6h5.6l-.9 4.3 3.1 3.1H6.9l3.2-3.1-.9-4.3Z" />
+      <path d="M12 11v9" />
+    </svg>
+  );
+}
+
+/** A45: 서랍의 빠른 `이동` — 다른 프로젝트·index 로 옮기기. */
+export function MoveIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path d="M4 7.5h6.5v10H4a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1Z" />
+      <path d="M13.5 12h6.5M17 8.5 20.5 12 17 15.5" />
     </svg>
   );
 }

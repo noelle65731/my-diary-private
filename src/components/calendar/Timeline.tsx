@@ -274,10 +274,10 @@ export function Timeline({
         <div
           data-now-line="true"
           title={`지금 ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`}
-          className="pointer-events-none absolute right-0 z-30 h-[2px] bg-[#ef4444]"
+          className="pointer-events-none absolute right-0 z-30 h-[2px] bg-[#a8695f]"
           style={{ top: nowTop - 1, left: gutterWidth }}
         >
-          <span className="absolute -left-[4px] top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-[#ef4444] shadow-[0_0_0_1.5px_white]" />
+          <span className="absolute -left-[4px] top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-[#a8695f] shadow-[0_0_0_1.5px_white]" />
         </div>
       ) : null}
       <div className="grid" style={{ gridTemplateColumns: `${gutterWidth} repeat(${days.length}, minmax(0, 1fr))` }}>

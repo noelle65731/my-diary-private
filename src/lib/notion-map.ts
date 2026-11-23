@@ -631,6 +631,8 @@ export function buildProperties(resource: keyof typeof mappers, patch: Patch, cu
     if (has(patch, "cancelReason")) out["취소 사유"] = richText(str(patch, "cancelReason"));
     if (has(patch, "cancelAt")) out["취소 시각"] = dateValue(patch["cancelAt"] as string | null);
     if (has(patch, "repeatGroupId")) out["반복 묶음 ID"] = richText(str(patch, "repeatGroupId"));
+    /* A45: `반복 묶음 ID` 는 웹 UI 가 더 이상 쓰지 않아 위 줄로는 거의 보내지 않습니다 —
+       열을 지워도 저장이 깨지지 않도록 스키마에 있는 속성만 보내는 관문을 지나갑니다. */
   }
 
   if (resource === "routines") {
@@ -706,8 +708,10 @@ export function buildProperties(resource: keyof typeof mappers, patch: Patch, cu
     // 이번 주 꼭 표시는 긴급·중요로 저장됩니다 — mapTask 의 favorite 읽기를 참고하세요.
     projects: ["hidden", "trash", "memo", "sort", "projectIds"],
     routines: ["hidden", "trash", "sort"],
-    binder: ["trash", "favorite", "sort", "projectIds"],
-    archive: ["trash", "favorite", "sort", "projectIds"],
+    /* A45: 일기·아카이브는 `정렬`·`연결 프로젝트`·(일기는) `링크`를 화면에서 쓰지 않아
+       더 이상 보내지 않습니다 — 그 열을 노션에서 지워도 저장이 그대로 됩니다. */
+    binder: ["trash", "favorite"],
+    archive: ["trash", "favorite"],
   };
   for (const key of supports[resource] ?? []) {    const propertyName = shared[key];
     if (!propertyName || !has(patch, key)) continue;

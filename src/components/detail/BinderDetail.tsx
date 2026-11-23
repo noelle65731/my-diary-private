@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useData } from "@/state/store";
+import { useSettings } from "@/state/settings";
 import {
   DetailSection,
   DetailShell,
@@ -13,11 +14,12 @@ import {
   useDetailDraft,
 } from "@/components/common/detail";
 import { TagInput } from "@/components/editors/shared";
-import { renderMarkdown } from "@/lib/markdown";
+import { DocView, RichDocEditor } from "@/components/editors/RichDocEditor";
 import { formatFullKo, formatShort, todayISO, weekdayKo } from "@/lib/date";
 import { BINDER_KINDS, type BinderEntry, type BinderKind } from "@/lib/types";
 import { notionPageUrl } from "@/lib/utils";
 import { PhotoEditor, PhotoGallery } from "@/components/common/PhotoField";
+import { docFromMarkdown, docToMarkdown, type Doc } from "@/lib/doc";
 
 interface BinderForm {
   title: string;
@@ -84,22 +86,49 @@ function BinderDetailInner({
   onBack: () => void;
   onCloseDetail: () => void;
 }) {
-  const { update, remove } = useData();
+  const { update, remove, fetchBody, saveBody } = useData();
+  const { settings } = useSettings();
   const { draft, set, markSaved, changedKeys, isDirty } = useDetailDraft(formFromEntry(entry));
   const [field, setField] = useState<string | null>(null);
+  /** A45: 본문 서식 문서 — 처음에는 `기록 데이터` 에서 만들고, 저장된 블록이 있으면 그것을 씁니다. */
+  const [doc, setDoc] = useState<Doc>(() => docFromMarkdown(entry.body));
+  const docSaved = useRef<string>(docToMarkdown(doc));
+
+  useEffect(() => {
+    let alive = true;
+    void fetchBody("binder", entry.id).then((payload) => {
+      if (!alive || !payload?.doc) return;
+      if ((entry.body ?? "").trim() && docToMarkdown(payload.doc) !== (entry.body ?? "").trim()) return;
+      setDoc(payload.doc);
+      docSaved.current = docToMarkdown(payload.doc);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [entry.id, entry.body, fetchBody]);
 
   const invalidField = draft.title.trim() ? null : "title";
+  const bodyDirty = docToMarkdown(doc) !== docSaved.current;
+  const isProjectDirty = isDirty || bodyDirty;
 
   const commit = async (): Promise<boolean> => {
     const patch = buildPatch(draft, changedKeys as string[]);
-    if (Object.keys(patch).length === 0) return true;
-    const ok = await update("binder", entry.id, patch);
-    if (ok) markSaved();
-    return ok;
+    if (bodyDirty) patch.body = docToMarkdown(doc);
+    if (Object.keys(patch).length > 0) {
+      const ok = await update("binder", entry.id, patch);
+      if (!ok) return false;
+      markSaved();
+    }
+    if (bodyDirty) {
+      const ok = await saveBody("binder", entry.id, doc);
+      if (!ok) return false;
+      docSaved.current = docToMarkdown(doc);
+    }
+    return true;
   };
 
   const run = useCommitOnLeave({
-    isDirty,
+    isDirty: isProjectDirty,
     invalid: invalidField,
     onInvalid: () => setField("title"),
     commit,
@@ -123,7 +152,7 @@ function BinderDetailInner({
         invalidField ? (
           <span className="text-rose-500">필수값을 입력해 주세요</span>
         ) : (
-          <SaveState dirty={isDirty} />
+          <SaveState dirty={isProjectDirty} />
         )
       }
       trashed={entry.trash}
@@ -189,15 +218,15 @@ function BinderDetailInner({
           }
         >
           {field === "body" ? (
-            <textarea
-              autoFocus
-              rows={10}
-              value={draft.body}
-              onChange={(event) => set("body", event.target.value)}
-              aria-label="본문 입력"
-              placeholder={"# 오늘\n\n있었던 일을 적어 보세요."}
-              className="input min-h-[220px] resize-y text-[calc(16px*var(--fs))] leading-[1.75]"
-            />
+            <div data-binder-body-editor>
+              <RichDocEditor
+                doc={doc}
+                onChange={setDoc}
+                paper={settings.binderPaper}
+                minHeight={260}
+                placeholder="오늘 있었던 일을 적어 보세요."
+              />
+            </div>
           ) : (
             <button
               type="button"
@@ -205,8 +234,10 @@ function BinderDetailInner({
               aria-label="본문 수정"
               className="w-full rounded-lg border-b border-dashed border-paper-300 px-1 py-1.5 text-left transition hover:border-ink-400 hover:bg-paper-100/50"
             >
-              {draft.body.trim() ? (
-                <span className="doc-body block text-[calc(16px*var(--fs))] text-ink-700">{renderMarkdown(draft.body)}</span>
+              {docToMarkdown(doc).trim() ? (
+                <span className="block text-[calc(16px*var(--fs))] text-ink-700">
+                  <DocView doc={doc} />
+                </span>
               ) : (
                 <span className="text-[calc(15px*var(--fs))] text-ink-300">눌러서 본문 쓰기</span>
               )}

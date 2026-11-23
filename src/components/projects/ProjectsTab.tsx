@@ -562,6 +562,8 @@ export function ProjectsTab() {
 
   const dragDepth = useRef(0);
   const [dropCard, setDropCard] = useState<string | null>(null);
+  /** A45: 서래 안 할 일을 끄는 동안 서래·배경을 감춥니다. */
+  const [drawerDragHidden, setDrawerDragHidden] = useState(false);
   const clearDrop = () => {
     dragDepth.current = 0;
     setDropCard(null);
@@ -801,7 +803,7 @@ export function ProjectsTab() {
           <button
             type="button"
             onClick={() => openTrash("projects")}
-            className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[calc(14.5px*var(--fs))] text-ink-500 transition hover:bg-paper-200 hover:text-ink-800"
+            className="trash-btn inline-flex items-center gap-1 rounded-full px-2 py-1 text-[calc(14.5px*var(--fs))] text-ink-500 hover:bg-paper-200 hover:text-ink-800"
             aria-label="휴지통"
           >
             <TrashIcon size={13} /> 휴지통
@@ -1055,7 +1057,8 @@ export function ProjectsTab() {
       <ProjectDrawer
         projectId={projectId}
         mode={mode}
-        showBackdrop={taskId === null}
+        showBackdrop={taskId === null && !drawerDragHidden}
+        onDragHiddenChange={setDrawerDragHidden}
         onClose={() => setProjectId(null)}
         onOpenTask={(id) => void openTask(id)}
         /* A42: 서랍에서 연 프로젝트 수정 창을 닫으면 서랍으로 돌아옵니다 — 서랍은 열어 둡니다. */
@@ -1199,13 +1202,12 @@ function ProjectCard({
         </span>
         <button type="button" onClick={() => onOpenProject(project.id)} className="min-w-0 flex-1 text-left">
           <p className="truncate text-[calc(17px*var(--fs))] font-semibold tracking-tight text-ink-900">{project.title}</p>
-          <p className="truncate text-[calc(14px*var(--fs))] text-ink-500">
-            {mode === "history"
-              ? `${project.category} · ${project.history ? "History" : project.status}`
-              : last?.doneAt || last?.date
-                ? `${dateLabel(last.doneAt?.slice(0, 10) ?? last.date)} 기록`
-                : "아직 기록 없음"}
-          </p>
+          {/* A45: 제목 밑의 `~ 기록`(시작일) 문구를 지우고, 그 자리에 완료율 막대를 둘니다. */}
+          {mode === "history" ? (
+            <p className="truncate text-[calc(14px*var(--fs))] text-ink-500">
+              {`${project.category} · ${project.history ? "History" : project.status}`}
+            </p>
+          ) : null}
         </button>
         {mode === "track" ? (
           <button
@@ -1239,6 +1241,23 @@ function ProjectCard({
           <ChevronRightIcon size={15} />
         </button>
       </header>
+
+      {/* A45: 얇은 진행률 막대 — 완료·취소를 뺀 완료 비율. */}
+      <div className="mt-1.5" data-project-progress={project.id}>
+        <div
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={children.length > 0 ? Math.round((completed.length / children.length) * 100) : 0}
+          aria-label={`${project.title} 완료율`}
+          className="h-[5px] w-full overflow-hidden rounded-full bg-black/[0.07]"
+        >
+          <div
+            className="h-full rounded-full bg-sage-500 transition-all"
+            style={{ width: `${children.length > 0 ? Math.round((completed.length / children.length) * 100) : 0}%` }}
+          />
+        </div>
+      </div>
 
       <p className="mt-1.5 text-[calc(14px*var(--fs))] text-ink-500">
         {doneOnly ? `완료·취소한 할 일 ${completed.length}` : `남은 할 일 ${open.length}`}
@@ -1401,8 +1420,9 @@ function TaskLine({
         type="button"
         onClick={onToggle}
         aria-label={done ? "완료 취소" : "완료"}
+        data-on={done ? "true" : undefined}
         className={cn(
-          "mt-[3px] flex h-[16px] w-[16px] flex-none items-center justify-center rounded-[4px] border transition",
+          "chk mt-[3px] flex h-[16px] w-[16px] flex-none items-center justify-center rounded-[4px] border",
           done ? cn(tone.solid, "border-transparent text-white") : "border-paper-400 hover:border-ink-500",
         )}
       >
