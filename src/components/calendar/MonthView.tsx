@@ -27,6 +27,8 @@ interface MonthViewProps {
   showWeekends: boolean;
   /** A3: titles shown per day before the rest folds into `할 일 N` / `+N 더`. */
   dayItems: 3 | 4 | 5;
+  /** A44: 고정 줄의 `할 일` 토글 — 끄면 칸에는 일정만, 할 일은 `할 일 N개`로만 보입니다. */
+  showTasks?: boolean;
   /** Bumped by the calendar tab when an opened detail's X closes every layer. */
   closeDayListSignal?: number;
   onSelectDay: (day: string) => void;
@@ -85,6 +87,7 @@ export function MonthView({
   weekStartsOn,
   showWeekends,
   dayItems,
+  showTasks = true,
   closeDayListSignal = 0,
   onSelectDay,
   onSelectWeek,
@@ -246,16 +249,14 @@ export function MonthView({
 
   /**
    * A3 order: all-day events → timed events by start → tasks.
-   * A41: 여러 날 일정은 위의 연결 막대로 그리므로 날짜 칸 목록에서는 뺍니다.
+   * A41: 여러 날 일정은 위의 연결 막대로 그립니다.
+   * A44: 하루짜리 종일 일정도 같은 색 막대로 그리므로 날짜 칸 목록에서는 뺄니다(시간 지정 일정만 남습니다).
    */
   const cellItemsForDay = (day: string): CellItem[] => [
-    ...allDayForDay(day)
-      .filter((event) => !isSpanned(event))
-      .map((event) => ({ type: "event" as const, event })),
     ...timedForDay(day)
       .filter((event) => !isSpanned(event))
       .map((event) => ({ type: "event" as const, event })),
-    ...tasksForDay(day).map((task) => ({ type: "task" as const, task })),
+    ...(showTasks ? tasksForDay(day).map((task) => ({ type: "task" as const, task })) : []),
   ];
   /** 하루 목록(시트)은 여러 날 일정도 그 날의 일정으로 보여 줍니다. */
   const itemsForDay = (day: string): CellItem[] => [
@@ -396,8 +397,9 @@ export function MonthView({
                 });
             const weekStartDay = row[0] ?? cells[0] ?? cursor;
             const columnStyle = { gridTemplateColumns: `repeat(${cells.length}, minmax(0,1fr))` } as React.CSSProperties;
-            /** A41: 이 줄에서 이어지는 여러 날 일정 — 날짜 칸 위에 긴 막대로 놓입니다. */
-            const segments = spanSegments(activeEvents, cells);
+            /** A41: 이 줄에서 이어지는 여러 날 일정 — 날짜 칸 위에 긴 막대로 놓입니다.
+             *  A44: 하루짜리 종일 일정도 같은 막대(형광펜 바)로 놓습니다. */
+            const segments = spanSegments(activeEvents, cells, { includeAllDaySingles: true });
             const lanes = segments.reduce((max, segment) => Math.max(max, segment.lane + 1), 0);
             const barsHeight = lanes > 0 ? lanes * BAR_HEIGHT + (lanes - 1) * BAR_GAP + 2 : 0;
             return (
@@ -546,6 +548,8 @@ export function MonthView({
                     const rest = items.slice(dayItems);
                     const restTasks = rest.filter((item) => item.type === "task").length;
                     const restEvents = rest.length - restTasks;
+                    /* A44: `할 일` 토글이 꺼져 있어도 그 날 할 일이 있는지는 연한 회색으로 보입니다. */
+                    const hiddenTaskCount = showTasks ? 0 : tasksForDay(day).length;
                     return (
                       <div
                         key={day}
@@ -680,6 +684,20 @@ export function MonthView({
                               className="block w-full px-0.5 text-left text-[calc(13px*var(--fs))] text-ink-400 hover:text-ink-700 md:px-1 md:text-[calc(13.5px*var(--fs))]"
                             >
                               +{restEvents} 더
+                            </button>
+                          ) : null}
+                          {hiddenTaskCount > 0 ? (
+                            <button
+                              type="button"
+                              data-month-task-count={day}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                openCell(day);
+                              }}
+                              aria-label={`${formatShort(day)} 할 일 ${hiddenTaskCount}개 — 눌러서 그 날 목록 열기`}
+                              className="block w-full truncate whitespace-nowrap px-0.5 text-left text-[calc(11.5px*var(--fs))] leading-tight text-ink-300 hover:text-ink-500 md:px-1 md:text-[calc(13px*var(--fs))]"
+                            >
+                              할 일 {hiddenTaskCount}개
                             </button>
                           ) : null}
                         </div>

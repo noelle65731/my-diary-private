@@ -20,19 +20,19 @@ export interface SpanSegment {
 export function spanSegments(
   events: CalendarEvent[],
   days: string[],
-  options: { includeSingleDay?: boolean } = {},
+  options: { includeSingleDay?: boolean; includeAllDaySingles?: boolean } = {},
 ): SpanSegment[] {
   if (days.length === 0) return [];
   const first = days[0]!;
   const last = days[days.length - 1]!;
+  /** A44: 여러 날 일정은 언제나, 하루짜리 종일 일정은 옵션을 켰을 때(월간·주간·3일) 막대로. */
+  const isBarred = (event: CalendarEvent) =>
+    !!event.date &&
+    ((!!event.endDate && event.endDate > event.date) ||
+      (options.includeAllDaySingles === true && event.allDay) ||
+      options.includeSingleDay === true);
   const spans = events
-    .filter(
-      (event) =>
-        event.kind === "일정" &&
-        !event.trash &&
-        !!event.date &&
-        (options.includeSingleDay || (!!event.endDate && event.endDate > event.date)),
-    )
+    .filter((event) => event.kind === "일정" && !event.trash && isBarred(event))
     .sort((a, b) => {
       const byDay = a.date.localeCompare(b.date);
       if (byDay !== 0) return byDay;
@@ -75,4 +75,9 @@ export function spanSegments(
 /** A41: 이 일정이 여러 날(연결 막대)로 그려지는지 — 날짜 칸 목록에서 빼야 하는지 판단합니다. */
 export function isSpanned(event: CalendarEvent): boolean {
   return !!event.endDate && !!event.date && event.endDate > event.date;
+}
+
+/** A44: 하루짜리 종일 일정인지 — 종일 막대로 그리므로 날짜 칸 목록에서는 뺍니다. */
+export function isAllDaySingle(event: CalendarEvent): boolean {
+  return event.allDay === true && !isSpanned(event);
 }

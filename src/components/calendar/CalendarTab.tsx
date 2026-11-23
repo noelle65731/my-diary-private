@@ -22,7 +22,7 @@ import { holidayName } from "@/lib/holidays";
 import { cn, matchesMode } from "@/lib/utils";
 import type { CalendarEvent, ModeFilter, ProjectTask, Routine } from "@/lib/types";
 import { currentCalendarCategory, isLegacyCalendarCategory } from "@/lib/types";
-import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ChevronUpIcon, ListIcon, PlusIcon, SearchIcon, TrashIcon } from "@/components/icons";
+import { ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, ChevronUpIcon, CheckIcon, ListIcon, PlusIcon, SearchIcon, TrashIcon } from "@/components/icons";
 import { ModeChips } from "@/components/common/ModeChips";
 import { WeekBoard } from "@/components/calendar/WeekBoard";
 import { useAutoHideScrollbar } from "@/lib/use-auto-hide-scroll";
@@ -41,14 +41,22 @@ import { TaskDetail } from "@/components/detail/TaskDetail";
 import { RoutineEditor } from "@/components/editors/RoutineEditor";
 import { useConvert } from "@/state/convert";
 
-/** A12: the view switch reads 연간 → 월간 → 주간 → 3일 → 일간; 루틴 sits apart. */
-const VIEWS: { value: CalendarViewKey; label: string }[] = [
-  { value: "year", label: "연간" },
-  { value: "month", label: "월간" },
-  { value: "week", label: "주간" },
-  { value: "three", label: "3일" },
-  { value: "day", label: "일간" },
+/**
+ * A12: the view switch reads 연간 → 월간 → 주간 → 3일 → 일간; 루틴 sits apart.
+ * A44: 폰(390px)에서는 고정 줄에 다 들어가도록 한 글자 이름으로 줄입니다.
+ */
+const VIEWS: { value: CalendarViewKey; label: string; short: string }[] = [
+  { value: "year", label: "연간", short: "연" },
+  { value: "month", label: "월간", short: "월" },
+  { value: "week", label: "주간", short: "주" },
+  { value: "three", label: "3일", short: "3일" },
+  { value: "day", label: "일간", short: "일" },
 ];
+
+/** A44: 윗줄(접히는 줄)의 분류 필터는 어느 보기에서도 같은 목록을 씁니다. */
+const VIEWS_WITH_CUSTOM: CalendarViewKey[] = ["week", "three"];
+/** A44: `할 일` 토글 상태는 이 브라우저에 남깁니다 — 기본은 꺼짐(일정만). */
+const TASKS_VISIBLE_KEY = "my-diary:calendar-tasks-visible:v1";
 
 function eventMode(event: CalendarEvent): string {
   // A10: an old value is read as its current equivalent; A16: a user-made 분류 stays as it is.
@@ -106,14 +114,17 @@ export function CalendarTab() {
   const [weekPanelOpen, setWeekPanelOpen] = useState(false);
   /** A41: PC 주간·3일의 오른쪽 패널 접기 — 접힌 상태는 이 브라우저에 남습니다. */
   const [panelCollapsed, setPanelCollapsed] = useState(false);
-  /** A42: 윗부분 헤더(날짜·보기 전환·분류 줄) 접기 — 접힌 상태도 이 브라우저에 남습니다. */
+  /** A42: 윗부분 헤더(날짜·분류·도구 줄) 접기 — 접힌 상태도 이 브라우저에 남습니다. */
   const [headerCollapsed, setHeaderCollapsed] = useState(false);
+  /** A44: 캘린더에 할 일도 함께 보일지 — 기본은 꺼짐(일정만). */
+  const [showTasks, setShowTasks] = useState(false);
   /** A41: 주간 칸의 프로젝트·index 이름을 누르면 프로젝트 탭과 같은 서랍이 열립니다. */
   const [projectDrawerId, setProjectDrawerId] = useState<string | null>(null);
   useEffect(() => {
     try {
       setPanelCollapsed(window.localStorage.getItem("my-diary:week-panel-collapsed:v1") === "1");
       setHeaderCollapsed(window.localStorage.getItem("my-diary:calendar-header-collapsed:v1") === "1");
+      setShowTasks(window.localStorage.getItem(TASKS_VISIBLE_KEY) === "1");
     } catch {
       /* private mode */
     }
@@ -127,6 +138,19 @@ export function CalendarTab() {
         /* ignore */
       }
       pushToast(next ? "윗부분 헤더를 접었습니다" : "윗부분 헤더를 펼쳤습니다");
+      return next;
+    });
+  };
+  /** A44: `할 일` 토글 — 끄면 캘린더는 일정만 그리고, 켜면 할 일·프로젝트 영역까지 보여 줍니다. */
+  const toggleTasks = () => {
+    setShowTasks((current) => {
+      const next = !current;
+      try {
+        window.localStorage.setItem(TASKS_VISIBLE_KEY, next ? "1" : "0");
+      } catch {
+        /* ignore */
+      }
+      pushToast(next ? "캘린더에 할 일도 함께 보입니다" : "캘린더에는 일정만 보입니다");
       return next;
     });
   };
@@ -548,35 +572,47 @@ export function CalendarTab() {
     /* A41: 툴바는 사이드 패널과 같은 줄 밖에 — 월간(루틴 패널)↔일간(패널 없음)을 오가도
        뷰 전환 스위치가 같은 자리에 있습니다. */
     <div className="flex min-h-0 flex-1 flex-col">
-      {/* toolbar — A40: 위로 바짝 올려 캘린더가 화면을 더 씁니다. A42: `^`/`v` 로 접고 펼칩니다. */}
+      {/* toolbar — A40: 위로 바짝 올려 캘린더가 화면을 더 씁니다.
+          A44: 두 줄 구조 — 윗줄(날짜·분류·도구)은 `^`/`v` 로 접히고, 아랫줄(보기 전환·할 일·새 일정)은
+          연간·월간·주간·3일·일간 어느 보기에서나 같은 자리에 남습니다. */}
       <div data-calendar-header="true" data-header-collapsed={headerCollapsed ? "true" : "false"} className="flex flex-none flex-col gap-1.5">
-        <div id="calendar-header-rows" data-calendar-header-rows="true" className={cn("flex flex-col gap-1.5", headerCollapsed && "hidden")}>
-        {/* A41: 날짜 제목 길이가 달라져도 연간·월간·주간·3일·일간 스위치는 늘 같은 자리에 —
-            넓은 화면은 3열(제목 | 스위치 | 도구), 폰은 스위치가 제 줄을 씁니다. */}
-        <div className="grid items-center gap-x-3 gap-y-1.5 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]">
-          <div className="flex min-w-0 items-baseline gap-2.5">
+        {/* 윗줄 — 접히는 줄: 날짜·주차 · 분류 필터 · 루틴 · <오늘> · 검색 · 일괄 관리 · NOW · 휴지통 */}
+        <div
+          id="calendar-header-rows"
+          data-calendar-header-rows="true"
+          className={cn("flex flex-wrap items-center gap-x-2 gap-y-1.5", headerCollapsed && "hidden")}
+        >
+          {/* A44: 폰에서는 제목이 자기 줄을 써서, 달 이름이 짧은 보기(월간·연간)에서도 아래 고정 줄이 같은 자리에 남습니다. */}
+          <div className="flex w-full min-w-0 items-baseline gap-2.5 md:w-auto md:flex-none">
             <h1 className="truncate text-[calc(22px*var(--fs))] font-semibold leading-none tracking-[-0.02em] text-ink-900">
               {title}
             </h1>
             <p className="truncate text-[calc(13px*var(--fs))] tracking-[0.02em] text-ink-500">{meta}</p>
           </div>
 
-          <div data-view-switch="true" className="flex flex-none items-center justify-start md:justify-center">
-            <div className="seg-track">
-              {VIEWS.map((item) => (
-                <button
-                  key={item.value}
-                  type="button"
-                  onClick={() => setView(item.value)}
-                  className={cn("seg-item", view === item.value && "seg-item-active")}
-                >
-                  {item.label}
-                </button>
-              ))}
-            </div>
+          <div data-mode-filter="true" className="flex min-w-0 items-center">
+            <ModeChips
+              mode={mode}
+              onChange={setMode}
+              categories={categoryOptions}
+              showCustom={VIEWS_WITH_CUSTOM.includes(view)}
+              onAddCategory={addCategory}
+              onRemoveCategory={removeCategory}
+            />
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 md:justify-end">
+          {mode !== "all" && data.calendar.some((event) => event.hidden && !event.trash) ? (
+            <button
+              type="button"
+              onClick={() => setMode("all")}
+              className="flex-none text-[calc(13.5px*var(--fs))] text-ink-400 underline-offset-2 hover:text-ink-700 hover:underline"
+            >
+              숨긴 항목 포함
+            </button>
+          ) : null}
+
+          {/* A44: 폰에서는 도구 줄이 자기 줄을 써서, 보기가 바뀌어도(맞춤 칩 유무) 고정 줄의 자리가 흔들리지 않습니다. */}
+          <div className="flex w-full flex-wrap items-center gap-1.5 md:ml-auto md:w-auto md:flex-none">
             <div className="seg-track">
               <button
                 type="button"
@@ -588,8 +624,7 @@ export function CalendarTab() {
               </button>
             </div>
 
-            {/* A41 → A42: 글자 버튼은 없앴습니다 — 오른쪽 패널 왼쪽 경계에 붙은 `>`/`<` 손잡이가 맡습니다. */}
-
+            {/* A41 → A42: 오른쪽 패널은 왼쪽 경계에 붙은 `>`/`<` 손잡이가 접고 펍니다. */}
             <div className="flex items-center gap-0.5 rounded-full bg-paper-200 p-0.5">
               <button type="button" onClick={() => step(-1)} className="icon-btn h-7 w-7" aria-label="이전">
                 <ChevronLeftIcon size={14} />
@@ -657,65 +692,75 @@ export function CalendarTab() {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-1.5">
-          <ModeChips
-            mode={mode}
-            onChange={setMode}
-            categories={categoryOptions}
-            showCustom={view === "week" || view === "three"}
-            onAddCategory={addCategory}
-            onRemoveCategory={removeCategory}
-          />
-          {mode !== "all" && data.calendar.some((event) => event.hidden && !event.trash) ? (
+        {/* 아랫줄 — 늘 고정: 보기 전환 · 접기/펼치기 · 할 일 · 새 일정 */}
+        <div data-calendar-fixed-row="true" className="flex flex-nowrap items-center gap-1.5 overflow-x-auto pb-0.5">
+          <div data-view-switch="true" className="seg-track flex-none">
+            {VIEWS.map((item) => {
+              const active = view === item.value;
+              return (
+                <button
+                  key={item.value}
+                  type="button"
+                  onClick={() => setView(item.value)}
+                  aria-pressed={active}
+                  aria-label={item.label}
+                  title={item.label}
+                  className={cn(
+                    "shrink-0 whitespace-nowrap rounded-full px-1.5 py-1 text-[calc(13px*var(--fs))] font-medium leading-none transition sm:px-2.5 sm:text-[calc(14px*var(--fs))]",
+                    active ? "bg-white text-ink-900 shadow-[0_1px_2px_rgba(17,24,39,0.12)]" : "text-ink-600 hover:text-ink-900",
+                  )}
+                >
+                  <span className="sm:hidden">{item.short}</span>
+                  <span className="hidden sm:inline">{item.label}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* A42 → A44: 접기/펼치기 화살표는 고정 줄에 — 접혀도 보기에 바로 갈 수 있습니다. */}
+          <button
+            type="button"
+            data-calendar-header-toggle={headerCollapsed ? "expand" : "collapse"}
+            onClick={toggleHeader}
+            aria-expanded={!headerCollapsed}
+            aria-controls="calendar-header-rows"
+            aria-label={headerCollapsed ? "윗부분 헤더 펼치기" : "윗부분 헤더 접기"}
+            title={headerCollapsed ? "날짜·분류·도구 줄 펼치기" : "날짜·분류·도구 줄 접기"}
+            className="flex h-6 w-6 flex-none items-center justify-center rounded-full bg-paper-200 text-ink-500 transition hover:bg-paper-300/70 hover:text-ink-900"
+          >
+            {headerCollapsed ? <ChevronDownIcon size={13} /> : <ChevronUpIcon size={13} />}
+          </button>
+
+          {/* A44: `할 일` 토글 — 기본 OFF(일정만). 켜면 월간 셈·주간 프로젝트 영역이 함께 보입니다. */}
+          <button
+            type="button"
+            data-calendar-tasks-toggle="true"
+            aria-pressed={showTasks}
+            onClick={toggleTasks}
+            aria-label={showTasks ? "할 일 숨기기" : "할 일 보기"}
+            title={showTasks ? "캘린더에서 할 일·프로젝트를 감춥니다" : "캘린더에 할 일·프로젝트도 보여 줍니다"}
+            className={cn(
+              "inline-flex h-6 flex-none items-center gap-1 rounded-full px-2 text-[calc(13px*var(--fs))] font-medium transition sm:h-7 sm:px-2.5 sm:text-[calc(13.5px*var(--fs))]",
+              showTasks ? "bg-ink-900 text-white" : "bg-paper-200 text-ink-500 hover:bg-paper-300/70 hover:text-ink-800",
+            )}
+          >
+            할 일
+            {showTasks ? <CheckIcon size={11} /> : null}
+          </button>
+
+          {view !== "habit" && view !== "year" ? (
             <button
               type="button"
-              onClick={() => setMode("all")}
-              className="ml-1 text-[calc(14px*var(--fs))] text-ink-400 underline-offset-2 hover:text-ink-700 hover:underline"
+              data-new-event="true"
+              onClick={() => createEvent(cursor, null)}
+              title="새 일정"
+              className="btn-primary btn-xs flex-none gap-1 px-2 sm:px-2.5"
             >
-              숨긴 항목 포함
+              <PlusIcon size={12} />
+              <span className="hidden sm:inline">새 일정</span>
             </button>
           ) : null}
-
-          <div className="ml-auto flex items-center gap-1.5">
-            {/* A42: 윗부분 헤더 접기 — 기호만 있는 작은 버튼. */}
-            <button
-              type="button"
-              data-calendar-header-toggle="collapse"
-              onClick={toggleHeader}
-              aria-expanded
-              aria-controls="calendar-header-rows"
-              aria-label="윗부분 헤더 접기"
-              title="날짜·보기 전환·도구 줄 접기"
-              className="flex h-6 w-9 flex-none items-center justify-center rounded-full bg-white/70 text-ink-500 ring-1 ring-paper-300 transition hover:bg-paper-200 hover:text-ink-900"
-            >
-              <ChevronUpIcon size={13} />
-            </button>
-            <div className={cn("hidden items-center gap-1.5 md:flex", (view === "habit" || view === "year") && "md:hidden")}>
-              <button type="button" onClick={() => createEvent(cursor, view === "day" ? "09:00" : null)} className="btn-primary btn-xs">
-                <PlusIcon size={12} /> 새 일정
-              </button>
-            </div>
-          </div>
         </div>
-        </div>
-
-        {/* A42: 접었을 때는 기호(`v`) 하나만 — 누르면 다시 펼쳐집니다. 접은 상태는 이 브라우저에 남습니다. */}
-        {headerCollapsed ? (
-          <div className="flex items-center justify-end" data-header-toggle-row="true">
-            <button
-              type="button"
-              data-calendar-header-toggle="expand"
-              onClick={toggleHeader}
-              aria-expanded={false}
-              aria-controls="calendar-header-rows"
-              aria-label="윗부분 헤더 펼치기"
-              title="날짜·보기 전환·도구 줄 펼치기"
-              className="flex h-5 w-9 items-center justify-center rounded-full bg-paper-200 text-ink-500 transition hover:bg-paper-300/70 hover:text-ink-900"
-            >
-              <ChevronDownIcon size={13} />
-            </button>
-          </div>
-        ) : null}
       </div>
 
       <div className="flex min-h-0 flex-1 items-stretch gap-6 xl:gap-8">
@@ -787,6 +832,7 @@ export function CalendarTab() {
               cursor={cursor}
               events={data.calendar}
               tasks={data.projects}
+              showTasks={showTasks}
               routines={calendarRoutines}
               mode={mode}
               nowOnly={settings.nowOnly}
@@ -827,6 +873,10 @@ export function CalendarTab() {
               events={events}
               tasks={tasks}
               projects={projects}
+              showTasks={showTasks}
+              onShowTasks={() => {
+                if (!showTasks) toggleTasks();
+              }}
               routines={calendarRoutines}
               onSelectDay={(day) => {
                 setCursor(day);
@@ -870,6 +920,10 @@ export function CalendarTab() {
               events={events}
               tasks={tasks}
               projects={projects}
+              showTasks={showTasks}
+              onShowTasks={() => {
+                if (!showTasks) toggleTasks();
+              }}
               routines={calendarRoutines}
               onSelectDay={(day) => {
                 setCursor(day);
@@ -913,6 +967,7 @@ export function CalendarTab() {
               events={events}
               tasks={tasks}
               projects={projects}
+              showTasks={showTasks}
               routines={calendarRoutines}
               hiddenIncluded={hiddenIncluded}
               recordCount={data.binder.filter((entry) => entry.date === cursor && !entry.trash).length}

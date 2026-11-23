@@ -63,6 +63,10 @@ interface WeekBoardProps {
   onToggleRoutineHidden?: (id: string) => void;
   /** B5: all-day bars reorder by dragging one onto another. */
   onReorderAllDay?: (orderedIds: string[]) => void;
+  /** A44: 고정 줄의 `할 일` 토글 — 끄면 아래 프로젝트 영역이 접힙니다. */
+  showTasks?: boolean;
+  /** A44: 프로젝트 영역이 `할 일` 토글 때문에 가려져 있을 때, 펴기 버튼이 토글을 켭니다. */
+  onShowTasks?: () => void;
 }
 
 /** 프로젝트가 없는 할 일은 게시판에서 index 행으로 모입니다. */
@@ -154,6 +158,8 @@ export function WeekBoard({
   onToggleProjectHidden,
   onToggleRoutineHidden,
   onReorderAllDay,
+  showTasks = true,
+  onShowTasks,
 }: WeekBoardProps) {
   const today = todayISO();
   /** 오늘 열은 일정·프로젝트·루틴이 같은 톤으로 이어지도록 한 가지 색을 같이 씁니다.
@@ -378,7 +384,7 @@ export function WeekBoard({
    * 하루짜리 일정은 그 아래 요일 칸 목록으로 놓습니다. 시간표(0~24시 눈금)는 없앴습니다.
    */
   const spanBars = useMemo(
-    () => spanSegments(visibleEvents.filter((event) => event.kind === "일정"), days),
+    () => spanSegments(visibleEvents.filter((event) => event.kind === "일정"), days, { includeAllDaySingles: true }),
     [visibleEvents, days],
   );
   /** 연결 막대 한 줄 높이와, 그 줄이 차지하는 자리(아래 목록이 그만큼 내려갑니다). */
@@ -393,7 +399,10 @@ export function WeekBoard({
    * 끌어서 바꾼 순서가 있으면 그 순서를 그대로 쓰고, 새로 생긴 일정은 시각 자리에 들어갑니다.
    */
   const dayEventsFor = (day: string): CalendarEvent[] => {
-    const items = visibleEvents.filter((event) => event.kind === "일정" && !isSpanned(event) && event.date === day);
+    /* A44: 종일 일정(하루짜리 포함)은 위의 색 막대가 맡으므로 목록에는 시간 지정 일정만 남깁니다. */
+    const items = visibleEvents.filter(
+      (event) => event.kind === "일정" && !isSpanned(event) && !event.allDay && event.date === day,
+    );
     const byTime = [...items].sort(
       (a, b) => listKeyOf(a) - listKeyOf(b) || String(a.createdAt).localeCompare(String(b.createdAt)),
     );
@@ -985,25 +994,43 @@ export function WeekBoard({
       <section
         data-week-section="projects"
         data-week-projects="true"
-        className={cn("overflow-clip border-b-2 border-[#6b7280]", narrow ? "flex-none" : "min-h-fit flex-1")}
+        className={cn(
+          "overflow-clip border-b-2 border-[#6b7280]",
+          /* A44: `할 일` 토글이 꺼져 프로젝트 행이 없을 때는 머리글 줄만 남기고 자리를 비우지 않습니다. */
+          narrow || !showTasks ? "flex-none" : "min-h-fit flex-1",
+        )}
       >
       <div>
         <div className="flex items-center justify-between border-b border-paper-300/70 bg-paper-50/60 py-[3px] pl-2 pr-1.5">
-          <span className="text-[calc(13.5px*var(--fs))] font-medium text-ink-500">프로젝트</span>
+          <span className="flex items-baseline gap-1.5 text-[calc(13.5px*var(--fs))] font-medium text-ink-500">
+            프로젝트
+            {/* A44: `할 일` 토글이 꺼져 있어도 이 주의 할 일이 몇 개인지는 연한 회색으로 남깁니다. */}
+            {!showTasks && weekTasks.length > 0 ? (
+              <span data-week-task-count="true" className="font-normal text-ink-300">할 일 {weekTasks.length}개</span>
+            ) : null}
+          </span>
           <button
             type="button"
-            onClick={() => setProjectsCollapsed((open) => !open)}
-            aria-expanded={!projectsCollapsed}
+            onClick={() => {
+              /* A44: `할 일` 토글이 꺼져 있으면 이 버튼이 그 토글을 켜서 프로젝트를 보여 줍니다. */
+              if (!showTasks) {
+                onShowTasks?.();
+                return;
+              }
+              setProjectsCollapsed((open) => !open);
+            }}
+            aria-expanded={showTasks && !projectsCollapsed}
+            data-week-projects-toggle="true"
             className="inline-flex items-center gap-1 rounded-full bg-paper-200 px-2 py-[2px] text-[calc(13px*var(--fs))] font-medium text-ink-600 transition hover:bg-paper-300/70 hover:text-ink-900"
           >
-            {projectsCollapsed ? "프로젝트 영역 펴기" : "프로젝트 영역 접기"}
-            <ChevronDownIcon size={10} className={cn("transition", projectsCollapsed && "rotate-180")} />
+            {!showTasks || projectsCollapsed ? "프로젝트 영역 펴기" : "프로젝트 영역 접기"}
+            <ChevronDownIcon size={10} className={cn("transition", (!showTasks || projectsCollapsed) && "rotate-180")} />
           </button>
         </div>
-        {projectsCollapsed ? null : rows.length === 0 ? (
+        {!showTasks ? null : projectsCollapsed ? null : rows.length === 0 ? (
           <div className="flex items-center justify-center py-4 text-[calc(14px*var(--fs))] text-ink-400">이번 주에 예정된 할 일이 없습니다.</div>
         ) : null}
-        {projectsCollapsed ? null : rows.map(([key, row]) => {
+        {!showTasks || projectsCollapsed ? null : rows.map(([key, row]) => {
           const project = row.project;
           const tone = project ? categoryColor.toneOf(project.category, taskTone(project.category)) : null;
           return (

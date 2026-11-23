@@ -6,7 +6,8 @@ import { useSettings } from "@/state/settings";
 import { Modal, Segmented, TextInput } from "@/components/common/primitives";
 import { EditorFooter, ErrorNote, ProjectPicker } from "@/components/editors/shared";
 import { MemoEditor } from "@/components/editors/MemoField";
-import { FieldRow, InlineChoice, MoreOptions, ToggleRow } from "@/components/common/detail";
+import { FieldRow, InlineChoice, MoreOptions } from "@/components/common/detail";
+import { StarIcon } from "@/components/icons";
 import { plainOfSpans, spansFromMarkdown } from "@/lib/richtext";
 import { EVENT_COLORS, type EventColorKey } from "@/components/common/event-colors";
 import { useEventColors } from "@/state/event-colors";
@@ -22,6 +23,10 @@ export interface EventDraft {
   endTime?: string | null;
   kind?: CalendarKind;
 }
+
+/** 일정 상태 — 예정 · 완료 · 취소 (done/canceled 두 값으로 저장됩니다). */
+const STATUSES = ["예정", "완료", "취소"] as const;
+type EventStatus = (typeof STATUSES)[number];
 
 interface FormState {
   title: string;
@@ -130,13 +135,31 @@ function EventEditorInner({
   const [form, setForm] = useState<FormState>(initialForm.current);
   const closing = useRef(false);
   const [error, setError] = useState<string | null>(null);
-  /** B6: 여러 날을 고르면 '날짜마다'가 기본이고, 저장할 때 '기간'으로 바꿀 수 있습니다. */
-  const [multiMode, setMultiMode] = useState<"days" | "range">("days");
+  /**
+   * B6 → A44: 여러 날을 켜면 기본은 '하나로 이어서'(한 일정)입니다 — 연결 막대로 이어집니다.
+   * `날짜마다 따로`를 고르면 그때만 날짜 수만큼 기록을 만듭니다.
+   */
+  const [multiMode, setMultiMode] = useState<"days" | "range">("range");
   const projects = data.projects.filter((item) => item.kind === "프로젝트" && !item.trash);
 
   const patch = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setForm((current) => ({ ...current, [key]: value }));
   const multiDayDraft = form.kind === "일정" && !!form.endDate && form.endDate > form.date;
+  /** A44: 상태 칩 — 예정·완료·취소를 한 번에 고릅니다. */
+  const status: EventStatus = form.canceled ? "취소" : form.done ? "완료" : "예정";
+  const setStatus = (next: EventStatus) =>
+    setForm((current) => ({ ...current, done: next === "완료", canceled: next === "취소", cancelReason: next === "취소" ? current.cancelReason : "" }));
+  /**
+   * A44: `여러 날`은 종일/시간 지정과 별개인 토글입니다.
+   * 켜면 바로 아래에 종료 날짜가 펼쳐지고(기본 내일), 끄면 하루짜리로 접힙니다.
+   */
+  const toggleMultiDay = () => {
+    if (multiDayDraft) {
+      patch("endDate", "");
+      return;
+    }
+    patch("endDate", addDaysISO(form.date || todayISO(), 1));
+  };
 
   /** 저장 본문 — 색만 바뀌었는지 비교하려고 따로 만들어 둡니다. */
   const buildPayload = (state: FormState): Record<string, unknown> => {
@@ -261,16 +284,27 @@ function EventEditorInner({
           className="border-0 border-b border-paper-300 bg-transparent px-0 text-[calc(18px*var(--fs))] font-medium focus:ring-0"
         />
 
-        {/* A39: 일정 창에서도 NOW 숨김을 바로 정합니다. */}
-        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        {/* ① 상태·빠른 토글 — 제목 바로 아래: 예정 / 완료 / 취소 · NOW · 이번 주 꼭 */}
+        <div data-editor-quick-row="true" className="mt-2 flex flex-wrap items-center gap-1.5">
+          <Segmented<EventStatus>
+            value={status}
+            onChange={setStatus}
+            size="sm"
+            options={[
+              { value: "예정", label: "예정" },
+              { value: "완료", label: "완료" },
+              { value: "취소", label: "취소" },
+            ]}
+          />
           <button
             type="button"
             data-editor-now="true"
             aria-pressed={form.hidden}
             aria-label={form.hidden ? "NOW 숨김 해제" : "NOW 숨김"}
+            title="NOW 숨김 — 켜면 NOW 모드에서 이 일정을 가립니다"
             onClick={() => patch("hidden", !form.hidden)}
             className={cn(
-              "inline-flex h-[24px] items-center rounded-full border px-2 text-[calc(13px*var(--fs))] font-semibold transition",
+              "inline-flex h-[26px] items-center rounded-full border px-2 text-[calc(13px*var(--fs))] font-semibold transition",
               form.hidden
                 ? "border-ink-900 bg-ink-900 text-white"
                 : "border-paper-300 bg-white text-ink-400 hover:border-ink-400 hover:text-ink-700",
@@ -278,24 +312,40 @@ function EventEditorInner({
           >
             NOW
           </button>
-          <span className="text-[calc(12.5px*var(--fs))] text-ink-400">NOW 숨김 — 켜면 NOW 모드에서 이 일정을 가립니다</span>
+          <button
+            type="button"
+            data-editor-favorite="true"
+            aria-pressed={form.favorite}
+            aria-label={`이번 주 꼭 ${form.favorite ? "끄기" : "켜기"}`}
+            title="이번 주 꼭 — 주간 화면 위쪽에 고정합니다"
+            onClick={() => patch("favorite", !form.favorite)}
+            className={cn(
+              "inline-flex h-[26px] items-center gap-1 rounded-full border px-2 text-[calc(13px*var(--fs))] transition",
+              form.favorite
+                ? "border-amber-300 bg-amber-50 text-amber-700"
+                : "border-paper-300 bg-white text-ink-400 hover:border-ink-400 hover:text-ink-700",
+            )}
+          >
+            <StarIcon size={12} filled={form.favorite} className={form.favorite ? "text-amber-400" : undefined} />
+            이번 주 꼭
+          </button>
         </div>
+        {form.canceled ? (
+          <div className="mt-1.5">
+            <FieldRow label="취소 사유">
+              <TextInput
+                value={form.cancelReason}
+                onChange={(event) => patch("cancelReason", event.target.value)}
+                placeholder="취소 사유 (선택)"
+                aria-label="취소 사유"
+                className="h-9 py-1"
+              />
+            </FieldRow>
+          </div>
+        ) : null}
 
-        <div className="mt-2">
-          <FieldRow label="유형">
-            <Segmented<CalendarKind>
-              value={form.kind}
-              onChange={(value) => patch("kind", value)}
-              size="sm"
-              options={[
-                { value: "일정", label: "일정" },
-                { value: "주간 목표", label: "주간 목표" },
-                { value: "주간 메모", label: "주간 메모" },
-                { value: "월간 메모", label: "월간 메모" },
-              ]}
-            />
-          </FieldRow>
-
+        {/* ② 일시 — 날짜 · 시간(종일/시간 지정 + 여러 날) · 종료 날짜 */}
+        <div className="mt-2.5 border-t border-paper-200 pt-1.5">
           <FieldRow label="날짜">
             <input
               type="date"
@@ -307,69 +357,85 @@ function EventEditorInner({
           </FieldRow>
 
           {form.kind === "일정" ? (
-            <>
-              <FieldRow label="시간" align="start">
-                <div className="space-y-1.5 pt-[3px]">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <button
-                      type="button"
-                      aria-pressed={form.allDay}
-                      onClick={() => patch("allDay", true)}
-                      className={cn(
-                        "rounded-full border px-2.5 py-[3px] text-[calc(13.5px*var(--fs))] leading-5 transition",
-                        form.allDay ? "border-ink-900 bg-ink-900 text-paper-50" : "border-paper-300 bg-white text-ink-400 hover:border-ink-400",
-                      )}
-                    >
-                      종일
-                    </button>
-                    <button
-                      type="button"
-                      aria-pressed={!form.allDay}
-                      onClick={() => patch("allDay", false)}
-                      className={cn(
-                        "rounded-full border px-2.5 py-[3px] text-[calc(13.5px*var(--fs))] leading-5 transition",
-                        !form.allDay ? "border-ink-900 bg-ink-900 text-paper-50" : "border-paper-300 bg-white text-ink-400 hover:border-ink-400",
-                      )}
-                    >
-                      시간 지정
-                    </button>
-                  </div>
-                  {form.allDay ? null : (
-                    <div className="grid grid-cols-2 gap-2">
-                      <label className="block">
-                        <span className="label">시작 시각</span>
-                        <input
-                          type="time"
-                          value={form.startTime}
-                          onChange={(event) => patch("startTime", event.target.value)}
-                          className="input h-9 py-1"
-                        />
-                      </label>
-                      <label className="block">
-                        <span className="label">종료 시각</span>
-                        <input
-                          type="time"
-                          value={form.endTime}
-                          onChange={(event) => patch("endTime", event.target.value)}
-                          className="input h-9 py-1"
-                        />
-                      </label>
-                    </div>
-                  )}
+            <FieldRow label="시간" align="start">
+              <div className="space-y-1.5 pt-[3px]">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <button
+                    type="button"
+                    aria-pressed={form.allDay}
+                    aria-label={form.allDay ? "종일 (켜짐)" : "종일"}
+                    onClick={() => patch("allDay", true)}
+                    className={cn(
+                      "rounded-full border px-2.5 py-[3px] text-[calc(13.5px*var(--fs))] leading-5 transition",
+                      form.allDay ? "border-ink-900 bg-ink-900 text-paper-50" : "border-paper-300 bg-white text-ink-400 hover:border-ink-400",
+                    )}
+                  >
+                    종일
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={!form.allDay}
+                    aria-label={!form.allDay ? "시간 지정 (켜짐)" : "시간 지정"}
+                    onClick={() => patch("allDay", false)}
+                    className={cn(
+                      "rounded-full border px-2.5 py-[3px] text-[calc(13.5px*var(--fs))] leading-5 transition",
+                      !form.allDay ? "border-ink-900 bg-ink-900 text-paper-50" : "border-paper-300 bg-white text-ink-400 hover:border-ink-400",
+                    )}
+                  >
+                    시간 지정
+                  </button>
+                  {/* A44: 종일/시간 지정과 별개로 켜고 끄는 `여러 날` — 종일 + 여러 날, 시간 지정 + 여러 날 둘 다 됩니다. */}
+                  <span aria-hidden="true" className="mx-0.5 h-4 w-px bg-paper-300" />
+                  <button
+                    type="button"
+                    data-editor-multi-day="true"
+                    aria-pressed={multiDayDraft}
+                    aria-label={multiDayDraft ? "여러 날 (켜짐)" : "여러 날"}
+                    onClick={toggleMultiDay}
+                    className={cn(
+                      "rounded-full border px-2.5 py-[3px] text-[calc(13.5px*var(--fs))] leading-5 transition",
+                      multiDayDraft ? "border-ink-900 bg-ink-900 text-paper-50" : "border-paper-300 bg-white text-ink-400 hover:border-ink-400",
+                    )}
+                  >
+                    여러 날
+                  </button>
                 </div>
-              </FieldRow>
-
-              <FieldRow label="종료 날짜" align="start">
-                <div className="space-y-1 pt-[3px]">
-                  <input
-                    type="date"
-                    aria-label="종료 날짜"
-                    value={form.endDate}
-                    min={form.date}
-                    onChange={(event) => patch("endDate", event.target.value)}
-                    className="input h-9 w-[10.5rem] py-1"
-                  />
-                  {multiDayDraft ? (
+                {form.allDay ? null : (
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="block">
+                      <span className="label">시작 시각</span>
+                      <input
+                        type="time"
+                        value={form.startTime}
+                        onChange={(event) => patch("startTime", event.target.value)}
+                        className="input h-9 py-1"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="label">종료 시각</span>
+                      <input
+                        type="time"
+                        value={form.endTime}
+                        onChange={(event) => patch("endTime", event.target.value)}
+                        className="input h-9 py-1"
+                      />
+                    </label>
+                  </div>
+                )}
+                {/* A44: `여러 날`을 켜면 바로 아래에 종료 날짜가 펼쳐지고, 끄면 하루짜리로 접힙니다. */}
+                {multiDayDraft ? (
+                  <div className="space-y-1">
+                    <label className="block">
+                      <span className="label">종료 날짜</span>
+                      <input
+                        type="date"
+                        aria-label="종료 날짜"
+                        value={form.endDate}
+                        min={form.date}
+                        onChange={(event) => patch("endDate", event.target.value)}
+                        className="input h-9 w-[10.5rem] py-1"
+                      />
+                    </label>
                     <div className="flex flex-wrap items-center gap-1.5">
                       {(
                         [
@@ -393,14 +459,15 @@ function EventEditorInner({
                         </button>
                       ))}
                     </div>
-                  ) : (
-                    <p className="text-[calc(12.5px*var(--fs))] text-ink-400">비우면 하루 일정입니다.</p>
-                  )}
-                </div>
-              </FieldRow>
-            </>
+                  </div>
+                ) : null}
+              </div>
+            </FieldRow>
           ) : null}
+        </div>
 
+        {/* ③ 분류 — 분류 · 색 · 연결 프로젝트 */}
+        <div className="mt-2.5 border-t border-paper-200 pt-1.5">
           <FieldRow label="분류">
             <InlineChoice
               label="분류"
@@ -441,37 +508,27 @@ function EventEditorInner({
           </FieldRow>
         </div>
 
+        {/* ④ 메모 */}
         <div className="mt-3 border-t border-paper-200 pt-2.5">
           <p className="mb-1 text-[calc(13px*var(--fs))] text-ink-400">메모</p>
           <MemoEditor value={form.memo} onChange={(value) => patch("memo", value)} rows={2} hint={false} placeholder="메모 (선택)" />
         </div>
 
+        {/* ⑤ 세부 옵션 — 잘 안 쓰는 것만 (유형 변경) */}
         <MoreOptions badges={badges} className="mt-1">
-          <ToggleRow
-            checked={form.favorite}
-            onChange={(value) => patch("favorite", value)}
-            label="이번 주 꼭"
-            description="주간 화면 위쪽에 고정합니다"
-          />
-          <ToggleRow checked={form.done} onChange={(value) => patch("done", value)} label="완료" />
-          <ToggleRow
-            checked={form.hidden}
-            onChange={(value) => patch("hidden", value)}
-            label="NOW 숨김"
-            description="NOW 화면과 기본 보기에서 감춥니다"
-          />
-          <ToggleRow checked={form.canceled} onChange={(value) => patch("canceled", value)} label="취소로 표시" />
-          {form.canceled ? (
-            <div className="px-1 pb-1">
-              <TextInput
-                value={form.cancelReason}
-                onChange={(event) => patch("cancelReason", event.target.value)}
-                placeholder="취소 사유 (선택)"
-                aria-label="취소 사유"
-                className="h-9 py-1"
-              />
-            </div>
-          ) : null}
+          <FieldRow label="유형">
+            <Segmented<CalendarKind>
+              value={form.kind}
+              onChange={(value) => patch("kind", value)}
+              size="sm"
+              options={[
+                { value: "일정", label: "일정" },
+                { value: "주간 목표", label: "주간 목표" },
+                { value: "주간 메모", label: "주간 메모" },
+                { value: "월간 메모", label: "월간 메모" },
+              ]}
+            />
+          </FieldRow>
         </MoreOptions>
 
         <ErrorNote message={error} />

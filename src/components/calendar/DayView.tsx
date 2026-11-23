@@ -39,6 +39,8 @@ interface DayViewProps {
   onCreateTaskForProject: (projectId: string) => void;
   /** A8: how many diary/note records the day holds (`기록 N`). */
   recordCount: number;
+  /** A44: 고정 줄의 `할 일` 토글 — 끄면 오른쪽 할 일 목록 대신 `할 일 N개`만 남깁니다. */
+  showTasks?: boolean;
 }
 
 export function DayView({
@@ -58,6 +60,7 @@ export function DayView({
   onWriteDiary,
   onCreateTaskForProject,
   recordCount,
+  showTasks = true,
 }: DayViewProps) {
   const dnd = useDnd();
   const { toneFor } = useEventColors();
@@ -177,13 +180,19 @@ export function DayView({
       </div>
 
       <aside className="min-h-0 min-w-0 space-y-2 overflow-y-auto pb-1">
-        <h3 className="text-[calc(15px*var(--fs))] text-ink-500">오늘 할 일</h3>
+        <h3 className="flex items-baseline gap-1.5 text-[calc(15px*var(--fs))] text-ink-500">
+          오늘 할 일
+          {/* A44: 토글이 꺼져 있어도 몇 개인지는 연한 회색 글씨로 남깁니다. */}
+          {!showTasks && dayTasks.length > 0 ? (
+            <span data-day-task-count="true" className="text-[calc(13px*var(--fs))] text-ink-300">할 일 {dayTasks.length}개</span>
+          ) : null}
+        </h3>
 
-        {groups.length === 0 ? (
+        {!showTasks ? null : groups.length === 0 ? (
           <div className="rounded-2xl bg-paper-200/50 px-3 py-5 text-center text-[calc(14px*var(--fs))] text-ink-400">오늘 예정된 할 일이 없습니다.</div>
         ) : null}
 
-        {groups.map(({ project, tasks: items }) => {
+        {!showTasks ? null : groups.map(({ project, tasks: items }) => {
           const tone = categoryColor.toneOf(project?.category ?? "개인", taskTone(project?.category ?? "개인"));
           return (
             <section key={project?.id ?? "inbox"} className="rounded-2xl bg-paper-200/50 px-3 py-2.5">

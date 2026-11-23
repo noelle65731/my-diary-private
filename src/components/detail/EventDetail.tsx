@@ -17,7 +17,6 @@ import {
   InlineTitle,
   MoreOptions,
   SaveState,
-  ToggleRow,
   useCommitOnLeave,
   useDetailDraft,
   type SavePhase,
@@ -26,7 +25,7 @@ import { InlineMemo } from "@/components/editors/MemoField";
 import { ProjectPicker } from "@/components/editors/shared";
 import { StarIcon } from "@/components/icons";
 import { editableMemo, plainOfSpans, spansFromMarkdown } from "@/lib/richtext";
-import { formatShort, startOfWeekISO, todayISO, weekKeyOf, weekdayKo } from "@/lib/date";
+import { addDaysISO, formatShort, startOfWeekISO, todayISO, weekKeyOf, weekdayKo } from "@/lib/date";
 import { notionPageUrl } from "@/lib/utils";
 import {
   currentCalendarCategory,
@@ -209,6 +208,18 @@ function EventDetailInner({
     setField(null);
   };
 
+  /**
+   * A44: `여러 날`은 종일/시간 지정과 별개인 토글 — 켜면 종료 날짜 줄이 바로 펼쳐지고,
+   * 끄면 하루짜리(종료 날짜 = 시작 날짜)로 접힙니다. 예전처럼 `세부 옵션`에 숨기지 않습니다.
+   */
+  const toggleMultiDay = () => {
+    if (multiDay) {
+      set("endDate", "");
+      return;
+    }
+    set("endDate", addDaysISO(draft.date || todayISO(), 1));
+  };
+
   const badges = [
     draft.hidden ? "숨김" : null,
     status === "취소" ? "취소" : null,
@@ -322,6 +333,9 @@ function EventDetailInner({
               <div className="flex flex-wrap items-center gap-1.5">
                 <TimeMode pressed={draft.allDay} onClick={() => set("allDay", true)} label="종일" />
                 <TimeMode pressed={!draft.allDay} onClick={() => set("allDay", false)} label="시간 지정" />
+                {/* A44: 종일/시간 지정과 별개로 `여러 날`을 켜고 끕니다 — 둘 다 함께 고를 수 있습니다. */}
+                <span aria-hidden="true" className="mx-0.5 h-4 w-px bg-paper-300" />
+                <TimeMode pressed={multiDay} onClick={toggleMultiDay} label="여러 날" />
                 {draft.allDay ? null : (
                   <span className="flex flex-nowrap items-center gap-0.5 text-[calc(13.5px*var(--fs))] text-ink-300">
                     <InlineText
@@ -370,6 +384,10 @@ function EventDetailInner({
           </>
         ) : null}
 
+      </DetailSection>
+
+      {/* ③ 분류 — 분류 · 색 · 연결 프로젝트 */}
+      <DetailSection title="분류">
         <FieldRow label="분류">
           <InlineChoice
             label="분류"
@@ -409,16 +427,19 @@ function EventDetailInner({
             옛 분류 ‘{legacyCategory}’은(는) ‘{currentCalendarCategory(legacyCategory)}’로 보입니다. 다른 분류를 고르면 그 값으로 저장됩니다.
           </p>
         ) : null}
+
+        <FieldRow label="프로젝트" align="start">
+          <div className="pt-[3px]">
+            <ProjectPicker
+              projects={data.projects.filter((item) => item.kind === "프로젝트" && !item.trash)}
+              value={draft.projectIds}
+              onChange={(ids) => set("projectIds", ids)}
+            />
+          </div>
+        </FieldRow>
       </DetailSection>
 
-      <DetailSection title="프로젝트">
-        <ProjectPicker
-          projects={data.projects.filter((item) => item.kind === "프로젝트" && !item.trash)}
-          value={draft.projectIds}
-          onChange={(ids) => set("projectIds", ids)}
-        />
-      </DetailSection>
-
+      {/* ④ 메모 */}
       <DetailSection title="메모">
         <InlineMemo
           label="메모"
@@ -432,33 +453,11 @@ function EventDetailInner({
         />
       </DetailSection>
 
-      {/* 자주 쓰지 않는 설정 — 기본은 접힘, 켜 둔 값은 배지로 보입니다. */}
+      {/* ⑤ 세부 옵션 — 잘 안 쓰는 것만 (유형 변경). 종료 날짜는 위 `여러 날`이 맡습니다. */}
       <MoreOptions badges={badges}>
         <FieldRow label="유형">
           <InlineChoice label="유형" bare value={draft.kind} options={KINDS} onChange={(value) => set("kind", value)} />
         </FieldRow>
-        {draft.kind === "일정" && !multiDay ? (
-          <FieldRow label="종료 날짜">
-            <InlineText
-              label="종료 날짜"
-              bare
-              type="date"
-              value={draft.endDate}
-              onChange={(value) => set("endDate", value)}
-              active={field === "endDate"}
-              onActivate={() => setField("endDate")}
-              onDone={() => setField(null)}
-              display={endDateLabel}
-              placeholder="여러 날이면 넣기"
-            />
-          </FieldRow>
-        ) : null}
-        <ToggleRow
-          checked={draft.hidden}
-          onChange={(value) => set("hidden", value)}
-          label="NOW 숨김"
-          description="NOW 화면과 기본 보기에서 감춥니다"
-        />
       </MoreOptions>
     </DetailShell>
   );
