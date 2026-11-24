@@ -2,7 +2,7 @@
 
 import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import type { CalendarEvent, ProjectTask } from "@/lib/types";
-import { formatClock, formatShort, timeRangeLabel, weekdayKo } from "@/lib/date";
+import { formatClock, formatShort, weekdayKo } from "@/lib/date";
 import { holidayName } from "@/lib/holidays";
 import { cn } from "@/lib/utils";
 import { taskTone } from "@/components/common/tone";

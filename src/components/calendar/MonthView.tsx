@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { calendarEventMode, type CalendarEvent, type ModeFilter, type ProjectTask, type Routine } from "@/lib/types";
-import { addDaysISO, daysInMonth, diffDays, formatClock, formatShort, isSameISO, monthMatrix, timeRangeLabel, todayISO, weekdayKo } from "@/lib/date";
+import { addDaysISO, daysInMonth, diffDays, formatClock, formatShort, isSameISO, monthMatrix, todayISO, weekdayKo } from "@/lib/date";
 import { holidayName } from "@/lib/holidays";
 import { cn, matchesMode } from "@/lib/utils";
 import { routineTone, taskTone } from "@/components/common/tone";
@@ -19,7 +19,6 @@ import {
   buildDayItems,
   dayItemGroup,
   dayItemKey,
-  dayItemLevel,
   dayItemTitle,
   groupOf,
   moveWithinGroup,

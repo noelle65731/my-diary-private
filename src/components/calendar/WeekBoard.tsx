@@ -22,8 +22,6 @@ import {
   buildDayItems,
   dayItemGroup,
   dayItemKey,
-  dayItemLevel,
-  dayItemTitle,
   groupOf,
   moveWithinGroup,
   shiftWithinGroup,
