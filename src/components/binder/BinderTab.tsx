@@ -582,7 +582,18 @@ function DiaryRow({
         isToday && (dow === 6 ? "bg-sky-100/70" : dow === 0 ? "bg-rose-100/70" : "bg-paper-200/40"),
         writing && "bg-white shadow-[inset_0_0_0_1px_#94a3b8]",
       )}
-      style={{ gridTemplateColumns: "3.6rem minmax(0,1fr)" }}
+      style={{
+        gridTemplateColumns: "3.6rem minmax(0,1fr)",
+        /*
+         * A50: 아이패드 Air 4 세로(820×1180)처럼 폭은 좁고 높은 화면에서 일곱 칸이 위쪽에
+         * 83px씩 뭉쳐 화면의 3분의 1이 비어 보이던 문제. 한 칸의 최소 높이를 남은 화면
+         * 높이를 일곱으로 나눈 값으로 잡아, 주간 스프레드가 세로를 꽉 나눠 갖게 합니다.
+         * 화면이 낮으면(폰 390×844·PC 1440×900·아이패드 가로 1180×820) 4.7rem 아래로는
+         * 내려가지 않아 지금 보이던 높이가 그대로 유지되고, 아주 큰 화면에서는 11rem에서
+         * 멈춥니다. 위아래 여백(머리글·하단 탭·페이지 아래 여백) 22rem을 뺀 값입니다.
+         */
+        minHeight: "clamp(4.7rem, calc((100dvh - 22rem) / 7), 11rem)",
+      }}
     >
       <button
         type="button"
@@ -678,7 +689,7 @@ function DiaryRow({
                 type="button"
                 onClick={onStartWriting}
                 onPointerDown={startDrag}
-                className="flex min-h-[2.6rem] w-full items-center text-left text-[calc(13.5px*var(--fs))] text-ink-400 hover:text-ink-700"
+                className="flex min-h-[2.6rem] w-full items-center text-left text-[calc(13.5px*var(--fs))] text-ink-400 hover:text-ink-700 md:h-full"
               >
                 + 눌러서 바로 쓰기
               </button>
@@ -696,7 +707,7 @@ function DiaryRow({
                 onStartWriting();
               }
             }}
-            className="min-h-[4.7rem] min-w-0 cursor-text overflow-hidden pb-0.5 pt-1 text-left outline-none focus-visible:bg-paper-200/40"
+            className="h-full min-h-[4.7rem] min-w-0 cursor-text overflow-hidden pb-0.5 pt-1 text-left outline-none focus-visible:bg-paper-200/40"
           >
             {entry ? (
               <>
