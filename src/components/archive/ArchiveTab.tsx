@@ -500,12 +500,15 @@ export function ArchiveTab() {
                   data-archive-selected={isSelected ? "true" : undefined}
                   onPointerDown={(event) => {
                     const target = event.target as HTMLElement | null;
-                    if (target?.closest("button, a, input, textarea, select")) return;
                     if (selectMode) {
+                      if (target?.closest("button, a, input, textarea, select")) return;
                       event.preventDefault();
                       toggleSelected(item.id);
                       return;
                     }
+                    /* A48: 한 줄 목록에서는 제목 줄을 잡고 끌어도 분류 칩으로 옮길 수 있습니다.
+                       (체크·고정·삭제 같은 작은 버튼에서만 끌기를 비켜 갑니다.) */
+                    if (target?.closest("[data-archive-row-check], [data-archive-row-pin], .trash-btn, a")) return;
                     startCardDrag(event, item);
                   }}
                   className={cn(
@@ -534,6 +537,7 @@ export function ArchiveTab() {
                   <span className={cn("w-[3.1rem] flex-none text-[calc(13px*var(--fs))] font-medium", tone.text)}>{item.kind}</span>
                   <button
                     type="button"
+                    data-archive-row-title={item.id}
                     onClick={() => (selectMode ? toggleSelected(item.id) : setEditorId(item.id))}
                     className="min-w-0 flex-1 truncate text-left text-[calc(15.5px*var(--fs))] font-medium text-ink-900"
                   >
@@ -567,6 +571,7 @@ export function ArchiveTab() {
                       })
                     }
                     aria-pressed={item.favorite}
+                    data-archive-row-pin={item.id}
                     aria-label={item.favorite ? `${item.title} 상단 고정 해제` : `${item.title} 상단 고정`}
                     title={item.favorite ? "상단 고정 해제" : "상단 고정"}
                     className={cn(
@@ -682,6 +687,7 @@ export function ArchiveTab() {
                       item.favorite ? "bg-ink-900 text-white" : "text-ink-300 hover:bg-paper-200 hover:text-ink-700",
                     )}
                     aria-pressed={item.favorite}
+                    data-archive-row-pin={item.id}
                     aria-label={item.favorite ? `${item.title} 상단 고정 해제` : `${item.title} 상단 고정`}
                     title={item.favorite ? "상단 고정 해제" : "상단 고정"}
                   >
