@@ -911,6 +911,7 @@ export function CalendarTab() {
               hiddenRoutineIds={customHidden.routines}
               onToggleProjectHidden={(id) => toggleCustom("projects", id)}
               onToggleRoutineHidden={(id) => toggleCustom("routines", id)}
+              nowOnly={settings.nowOnly}
             />
           ) : null}
 
@@ -958,6 +959,7 @@ export function CalendarTab() {
               hiddenRoutineIds={customHidden.routines}
               onToggleProjectHidden={(id) => toggleCustom("projects", id)}
               onToggleRoutineHidden={(id) => toggleCustom("routines", id)}
+              nowOnly={settings.nowOnly}
             />
           ) : null}
 

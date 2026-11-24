@@ -67,6 +67,8 @@ interface WeekBoardProps {
   showTasks?: boolean;
   /** A44: 프로젝트 영역이 `할 일` 토글 때문에 가려져 있을 때, 펴기 버튼이 토글을 켭니다. */
   onShowTasks?: () => void;
+  /** A48: NOW가 꺼져 있으면 이번 창에 할 일이 없는 프로젝트도 빈 행으로 남깁니다. */
+  nowOnly?: boolean;
 }
 
 /** 프로젝트가 없는 할 일은 게시판에서 index 행으로 모입니다. */
@@ -160,6 +162,7 @@ export function WeekBoard({
   onReorderAllDay,
   showTasks = true,
   onShowTasks,
+  nowOnly = false,
 }: WeekBoardProps) {
   const today = todayISO();
   /** 오늘 열은 일정·프로젝트·루틴이 같은 톤으로 이어지도록 한 가지 색을 같이 씁니다.
@@ -330,6 +333,14 @@ export function WeekBoard({
       if (!map.has(key)) map.set(key, { project, tasks: [] });
       map.get(key)!.tasks.push(task);
     }
+    /* A48: NOW가 꺼져 있으면 이번 창에 할 일이 하나도 없는 프로젝트도 행으로 남깁니다.
+       (NOW가 켜져 있을 때는 예전처럼 이번 창에 할 일이 있는 프로젝트만 보입니다.) */
+    if (!nowOnly) {
+      for (const project of projects) {
+        if (map.has(project.id)) continue;
+        map.set(project.id, { project, tasks: [] });
+      }
+    }
     return [...map.entries()]
       .filter(([key]) => mode !== "custom" || !hiddenProjectIds.includes(key))
       .sort((a, b) => {
@@ -344,7 +355,7 @@ export function WeekBoard({
         const pb = b[1].project;
         return (order[(pa?.category ?? "개인") as keyof typeof order] ?? 1) - (order[(pb?.category ?? "개인") as keyof typeof order] ?? 1);
       });
-  }, [weekTasks, projects, mode, hiddenProjectIds, rowOrder.projects]);
+  }, [weekTasks, projects, mode, hiddenProjectIds, rowOrder.projects, nowOnly]);
 
   /**
    * A19: 프로젝트 칸 시트에 보여 줄 그 날의 할 일 — 진행 중인 것과 완료한 것 모두.
