@@ -28,7 +28,7 @@ import { EmptyState } from "@/components/common/primitives";
 import { TagInput } from "@/components/editors/shared";
 import { pushToast } from "@/lib/toast-bus";
 import { paperBackground, PAPER_OPTIONS, type PaperStyle } from "@/lib/paper";
-import { docFromMarkdown, docToMarkdown, emptyDoc, type Doc } from "@/lib/doc";
+import { docFromMarkdown, docToMarkdown, emptyDoc, isEmptyDoc, type Doc } from "@/lib/doc";
 import { DocView, RichDocEditor } from "@/components/editors/RichDocEditor";
 import { BinderEditor } from "@/components/editors/BinderEditor";
 import { BinderDetail } from "@/components/detail/BinderDetail";
@@ -469,9 +469,10 @@ function DiaryRow({
     loadedFor.current = id;
     let alive = true;
     void (async () => {
-      const base = id
-        ? ((await onLoadDoc(id))?.doc ?? docFromMarkdown(entry?.body ?? ""))
-        : docFromMarkdown(entry?.body ?? "");
+      /* A48: 노션 블록이 비어 있는 예전 기록은 속성의 본문(마크다운)에서 만듭니다 —
+         그래야 전체 펼치기에서도 예전에 쓴 글이 그대로 보입니다. */
+      const loaded = id ? (await onLoadDoc(id))?.doc ?? null : null;
+      const base = loaded && !isEmptyDoc(loaded) ? loaded : docFromMarkdown(entry?.body ?? "");
       if (!alive) return;
       docRef.current = base;
       setDoc(base);
