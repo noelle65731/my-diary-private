@@ -30,8 +30,17 @@ import { WeekPanel } from "@/components/calendar/WeekPanel";
 import { MonthView, RoutineHeat } from "@/components/calendar/MonthView";
 import { YearView } from "@/components/calendar/YearView";
 import { DayView } from "@/components/calendar/DayView";
-import { DayListPanel, byAllDayOrder, dayItemsFor } from "@/components/calendar/DayListPanel";
-import { eventCoversDay } from "@/components/calendar/calendar-utils";
+import { DayListPanel } from "@/components/calendar/DayListPanel";
+import {
+  applyGroupOrder,
+  buildDayItems,
+  dayItemGroup,
+  dayItemKey,
+  groupOf,
+  shiftWithinGroup,
+  useDayOrder,
+  type DayOrderItem,
+} from "@/lib/day-order";
 import { HabitView } from "@/components/calendar/HabitView";
 import { EventEditor, type EventDraft } from "@/components/editors/EventEditor";
 import { EventDetail } from "@/components/detail/EventDetail";
@@ -73,6 +82,8 @@ export function CalendarTab() {
   const { focus, clearFocus, openBinderForDate, setSearchOpen, setBulkOpen, openTrash, views, setView: setTabView, openTaskDraft } = useUi();
   /** A39: 주간·3일 게시판에서 일정 ↔ 할 일로 끌어 옮길 때의 변환(생성 후 원래 항목 정리). */
   const { eventToTask, taskToEvent } = useConvert();
+  /** A49: 하루 안의 순서 저장소 — 바꾸면 모든 보기가 함께 다시 그려집니다. */
+  const dayOrder = useDayOrder();
 
   const today = todayISO();
   // A15: the view lives in the shared UI state, so the browser's back button returns to it.
@@ -482,21 +493,16 @@ export function CalendarTab() {
     void update("calendar", id, { date: nextStart, endDate: end });
   };
 
-  /** A32: 하루 목록에서 종일 일정 순서를 ↑↓로 바꿉니다 — 월간 보기와 같은 규칙(`정렬`). */
-  const moveAllDayInDay = (day: string, id: string, direction: -1 | 1) => {
-    const list = events
-      .filter((event) => event.kind === "일정" && event.allDay && eventCoversDay(event, day))
-      .sort(byAllDayOrder);
-    const index = list.findIndex((event) => event.id === id);
-    const target = index + direction;
-    if (index < 0 || target < 0 || target >= list.length) return;
-    const reordered = [...list];
-    const moved = reordered[target]!;
-    reordered[target] = reordered[index]!;
-    reordered[index] = moved;
-    reordered.forEach((event, position) => {
-      const value = (position + 1) * 10;
-      if (event.sort !== value) void update("calendar", event.id, { sort: value });
+  /**
+   * A49: 하루 안의 순서 바꾸기 — 같은 층·같은 시각 안에서만 한 칸씩.
+   * (종일 일정·시간 없는 할 일은 `정렬`, 같은 시각에 섞인 일정·할 일은 이 브라우저의 저장소)
+   */
+  const reorderDayItem = (day: string, item: DayOrderItem, direction: -1 | 1) => {
+    const list = buildDayItems(events, tasks, day, dayOrder);
+    const group = groupOf(list, dayItemGroup(item));
+    applyGroupOrder(day, group, shiftWithinGroup(group, dayItemKey(item), direction), {
+      updateEvent: (id, patch) => void update("calendar", id, patch),
+      updateTask: (id, patch) => void update("projects", id, patch),
     });
   };
 
@@ -854,6 +860,7 @@ export function CalendarTab() {
               onOpenTask={openTask}
               onToggleTask={toggleTask}
               onUpdateEvent={(id, patch) => void update("calendar", id, patch)}
+              onUpdateTask={(id, patch) => void update("projects", id, patch)}
               onCreate={(date) => createEvent(date, null)}
               onCreateTask={(date) => openTaskDraft({ kind: "할 일", date })}
               onRoutineCount={(routine, date, count) => void setRoutineCount(routine, date, count)}
@@ -912,6 +919,7 @@ export function CalendarTab() {
               onToggleProjectHidden={(id) => toggleCustom("projects", id)}
               onToggleRoutineHidden={(id) => toggleCustom("routines", id)}
               nowOnly={settings.nowOnly}
+              onUpdateTask={(id, patch) => void update("projects", id, patch)}
             />
           ) : null}
 
@@ -960,6 +968,7 @@ export function CalendarTab() {
               onToggleProjectHidden={(id) => toggleCustom("projects", id)}
               onToggleRoutineHidden={(id) => toggleCustom("routines", id)}
               nowOnly={settings.nowOnly}
+              onUpdateTask={(id, patch) => void update("projects", id, patch)}
             />
           ) : null}
 
@@ -1077,7 +1086,8 @@ export function CalendarTab() {
         <DayListPanel
           day={daySummary.day}
           startTime={daySummary.startTime ?? null}
-          items={dayItemsFor(daySummary.day, events, tasks)}
+          items={buildDayItems(events, tasks, daySummary.day, dayOrder)}
+          onReorder={(item, direction) => reorderDayItem(daySummary.day, item, direction)}
           onClose={() => setDaySummary(null)}
           onGoDay={() => {
             const day = daySummary.day;
@@ -1088,7 +1098,6 @@ export function CalendarTab() {
           onOpenEvent={openEvent}
           onOpenTask={openTask}
           onToggleTask={toggleTask}
-          onMoveAllDay={(id, direction) => moveAllDayInDay(daySummary.day, id, direction)}
           onGoWeek={() => {
             const day = daySummary.day;
             setDaySummary(null);

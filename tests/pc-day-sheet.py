@@ -155,7 +155,7 @@ def pc_day_summary(browser, mock):
     text = text_of(day_list(page))
     check("PC: 요일 머리글 클릭으로 그 날 정리 목록이 열림", day_list(page).count() == 1, text[:80])
     check("PC: 정리 목록에 종일 일정", "종일 일정" in text and "도서관 반납" in text, text[:160])
-    check("PC: 정리 목록에 시간 일정", "시간 일정" in text and "치과 예약" in text, text[:200])
+    check("PC: 정리 목록에 시간 일정", ("시간 일정" in text or "시간 지정" in text) and "치과 예약" in text, text[:200])
     check("PC: 정리 목록에 할 일", "약국 들르기" in text and "오늘 할 일 둘" in text, text[:260])
     check("PC: '+ 일정' · '+ 할 일' · '이 날짜로 이동' 버튼", all(
         day_list(page).locator(f"[data-day-list-add-{key}]").count() == 1 for key in ("event", "task")

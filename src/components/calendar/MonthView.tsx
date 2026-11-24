@@ -10,10 +10,24 @@ import { useEventColors } from "@/state/event-colors";
 import { useCategoryColors } from "@/state/category-colors";
 import { useProjectColors } from "@/state/project-colors";
 import { CheckIcon } from "@/components/icons";
-import { eventCoversDay, routineCountForDay } from "@/components/calendar/calendar-utils";
+import { routineCountForDay } from "@/components/calendar/calendar-utils";
 import { DayListPanel, type DayListItem } from "@/components/calendar/DayListPanel";
 import { spanSegments, isSpanned } from "@/components/calendar/span-bars";
 import { useDnd } from "@/components/common/dnd";
+import {
+  applyGroupOrder,
+  buildDayItems,
+  dayItemGroup,
+  dayItemKey,
+  dayItemLevel,
+  dayItemTitle,
+  groupOf,
+  moveWithinGroup,
+  shiftWithinGroup,
+  useDayOrder,
+  type DayOrderItem,
+} from "@/lib/day-order";
+import { pushToast } from "@/lib/toast-bus";
 
 interface MonthViewProps {
   cursor: string;
@@ -41,6 +55,8 @@ interface MonthViewProps {
   /** A10: a tap on the month checkbox completes the task, a second tap clears it. */
   onToggleTask?: (task: ProjectTask) => void;
   onUpdateEvent: (id: string, patch: Record<string, unknown>) => void;
+  /** A49: 시간 없는 할 일도 `정렬`을 다시 매겨 순서를 바꿉니다. */
+  onUpdateTask?: (id: string, patch: Record<string, unknown>) => void;
   onCreate: (date: string) => void;
   /** A32: 그 날짜로 새 할 일을 더합니다. */
   onCreateTask: (date: string) => void;
@@ -57,25 +73,9 @@ interface MonthViewProps {
 
 type CellItem = DayListItem;
 
-const LAST = Number.MAX_SAFE_INTEGER;
 /** A41: 연결 막대 한 줄의 높이와 줄 사이 간격 */
 const BAR_HEIGHT = 18;
 const BAR_GAP = 2;
-
-/** All-day events keep the order the user arranged (`sort`), then the order they were written. */
-function byAllDayOrder(a: CalendarEvent, b: CalendarEvent): number {
-  const left = a.sort ?? LAST;
-  const right = b.sort ?? LAST;
-  if (left !== right) return left - right;
-  return String(a.createdAt).localeCompare(String(b.createdAt));
-}
-
-function byTimeOrder(a: CalendarEvent, b: CalendarEvent): number {
-  const left = a.startTime ?? "99:99";
-  const right = b.startTime ?? "99:99";
-  if (left !== right) return left.localeCompare(right);
-  return byAllDayOrder(a, b);
-}
 
 export function MonthView({
   cursor,
@@ -96,6 +96,7 @@ export function MonthView({
   onOpenTask,
   onToggleTask,
   onUpdateEvent,
+  onUpdateTask,
   onRoutineCount,
   onMoveItem,
   onMoveSpan,
@@ -145,6 +146,8 @@ export function MonthView({
      항목 끌기(HTML5 drag)와 누르기는 그대로 두기 위해, 마우스 끌기는 빈칸·날짜에서만 시작합니다. ── */
   const swipeStart = useRef<{ x: number; y: number } | null>(null);
   const mouseSwipe = useRef<{ x: number; y: number } | null>(null);
+  /** A49: 항목을 끄는 동안에는 달 넘기기(스와이프)를 잠깁니다 — 손을 떼는 순간 달이 넘어가지 않게. */
+  const swipeBlockUntil = useRef(0);
   const wheelDelta = useRef(0);
   const wheelLock = useRef(0);
   const suppressClick = useRef(0);
@@ -168,6 +171,11 @@ export function MonthView({
   };
 
   const onTouchEnd = (event: React.TouchEvent<HTMLElement>) => {
+    if (performance.now() < swipeBlockUntil.current) {
+      swipeStart.current = null;
+      setSwipeShift(0);
+      return;
+    }
     const start = swipeStart.current;
     swipeStart.current = null;
     setSwipeShift(0);
@@ -240,45 +248,90 @@ export function MonthView({
     [routines, mode, nowOnly],
   );
 
-  const allDayForDay = (day: string) => activeEvents.filter((event) => event.allDay && eventCoversDay(event, day)).sort(byAllDayOrder);
-  const timedForDay = (day: string) => activeEvents.filter((event) => !event.allDay && eventCoversDay(event, day)).sort(byTimeOrder);
-  const tasksForDay = (day: string) =>
-    activeTasks
-      .filter((task) => task.date === day || task.due === day)
-      .sort((a, b) => (a.sort ?? LAST) - (b.sort ?? LAST) || String(a.createdAt).localeCompare(String(b.createdAt)));
+  /** A49: 하루 안의 순서 — 같은 층·같은 시각 안에서만 바뀝니다. */
+  const dayOrder = useDayOrder();
+  /** A49: 이 날의 일정·할 일을 3층으로 — 종일 → 시간 지정(일정+할 일 시각 순) → 시간 없음. */
+  const itemsForDay = (day: string): CellItem[] => buildDayItems(activeEvents, activeTasks, day, dayOrder);
+  /**
+   * 날짜 칸은 종일 일정(위의 색 막대)과 여러 날 일정(연결 막대)을 빼고, 시간 지정·시간 없는
+   * 항목만 보여 줍니다. `할 일` 토글이 꺼져 있으면 일정만.
+   * A41: 여러 날 일정은 위의 연결 막대로 그립니다.
+   * A44: 하루짜리 종일 일정도 같은 색 막대로 그리므로 목록에서는 뺍니다.
+   */
+  const cellItemsForDay = (day: string): CellItem[] =>
+    itemsForDay(day)
+      .filter((item) => showTasks || item.type === "event")
+      .filter((item) => !(item.type === "event" && (item.event.allDay || isSpanned(item.event))));
+
+  /** A49: 한 묶음(같은 층·같은 시각) 안에서 한 칸 위/아래로 옮깁니다. */
+  const reorderItem = (day: string, item: DayOrderItem, direction: -1 | 1) => {
+    const group = groupOf(itemsForDay(day), dayItemGroup(item));
+    applyGroupOrder(day, group, shiftWithinGroup(group, dayItemKey(item), direction), {
+      updateEvent: onUpdateEvent,
+      updateTask: (id, patch) => onUpdateTask?.(id, patch),
+    });
+  };
+
+  /** A49: 같은 날 두 항목 사이로 끌어 놓았을 때 — 같은 묶음일 때만 순서를 바꿉니다. */
+  const reorderDrop = (day: string, item: DayOrderItem, targetKey: string, after: boolean): boolean => {
+    const group = groupOf(itemsForDay(day), dayItemGroup(item));
+    if (!group.some((entry) => dayItemKey(entry) === targetKey)) {
+      pushToast("시작 시각이 다르면 시간순이 먼저라 순서를 바꿀 수 없습니다");
+      return false;
+    }
+    return applyGroupOrder(day, group, moveWithinGroup(group, dayItemKey(item), targetKey, after), {
+      updateEvent: onUpdateEvent,
+      updateTask: (id, patch) => onUpdateTask?.(id, patch),
+    });
+  };
 
   /**
-   * A3 order: all-day events → timed events by start → tasks.
-   * A41: 여러 날 일정은 위의 연결 막대로 그립니다.
-   * A44: 하루짜리 종일 일정도 같은 색 막대로 그리므로 날짜 칸 목록에서는 뺄니다(시간 지정 일정만 남습니다).
+   * A49: 날짜 칸의 한 칩을 끕니다 — 같은 날 같은 층·같은 시각의 칩 위에 놓으면 그 자리로 순서가
+   * 바뀌고, 다른 날짜 칸·다른 날의 칩에 놓으면 그 날짜로 옮겨집니다(PC·손가락 모두 같은 동작).
    */
-  const cellItemsForDay = (day: string): CellItem[] => [
-    ...timedForDay(day)
-      .filter((event) => !isSpanned(event))
-      .map((event) => ({ type: "event" as const, event })),
-    ...(showTasks ? tasksForDay(day).map((task) => ({ type: "task" as const, task })) : []),
-  ];
-  /** 하루 목록(시트)은 여러 날 일정도 그 날의 일정으로 보여 줍니다. */
-  const itemsForDay = (day: string): CellItem[] => [
-    ...allDayForDay(day).map((event) => ({ type: "event" as const, event })),
-    ...timedForDay(day).map((event) => ({ type: "event" as const, event })),
-    ...tasksForDay(day).map((task) => ({ type: "task" as const, task })),
-  ];
-
-  /** Swaps two all-day events of that day and stores the new order in `sort`. */
-  const moveAllDay = (day: string, id: string, direction: -1 | 1) => {
-    const list = allDayForDay(day);
-    const index = list.findIndex((event) => event.id === id);
-    const target = index + direction;
-    if (index < 0 || target < 0 || target >= list.length) return;
-    const reordered = [...list];
-    const moved = reordered[target];
-    reordered[target] = reordered[index] as CalendarEvent;
-    reordered[index] = moved as CalendarEvent;
-    reordered.forEach((event, position) => {
-      const value = (position + 1) * 10;
-      if (event.sort !== value) onUpdateEvent(event.id, { sort: value });
-    });
+  const startItemDrag = (pointerEvent: React.PointerEvent<HTMLElement>, item: DayOrderItem, day: string) => {
+    if (!onMoveItem && !onUpdateTask) return;
+    const type = item.type === "event" ? "event" : "task";
+    const id = item.type === "event" ? item.event.id : item.task.id;
+    const group = dayItemGroup(item);
+    dnd.start(
+      pointerEvent,
+      { kind: type, id, label: dayItemTitle(item) },
+      (target, point) => {
+        if (!target) return;
+        const targetKey = target.data.key;
+        const targetDay = target.data.day ?? day;
+        /* 같은 날 같은 묶음 위 — 그 자리로 순서 바꾸기 */
+        if (target.zone === "month-order" && targetKey && targetDay === day) {
+          if (target.data.group && target.data.group !== group) {
+            pushToast("시작 시각이 다르면 시간순이 먼저라 순서를 바꿀 수 없습니다");
+            return;
+          }
+          reorderDrop(day, item, targetKey, point.y > target.rect.top + target.rect.height / 2);
+          return;
+        }
+        /* 다른 날 — 그 날짜로 옮기기 */
+        if (target.data.day && target.data.day !== day) onMoveItem?.(type, id, target.data.day, day);
+      },
+      {
+        onStart: () => {
+          swipeBlockUntil.current = performance.now() + 60000;
+        },
+        onEnd: () => {
+          swipeBlockUntil.current = performance.now() + 500;
+        },
+        getHint: (target, point) => {
+          const targetKey = target.data.key;
+          const targetDay = target.data.day ?? day;
+          if (target.zone === "month-order" && targetKey && targetDay === day) {
+            if (target.data.group && target.data.group !== group) return "시간이 달라 순서를 바꿀 수 없음";
+            return point.y > target.rect.top + target.rect.height / 2 ? "아래로 순서 바꾸기" : "위로 순서 바꾸기";
+          }
+          if (target.data.day && target.data.day !== day) return `${formatShort(target.data.day)}로 옮기기`;
+          return null;
+        },
+      },
+    );
   };
 
   /** 한 칩이 차지하는 높이(px) — 설정한 개수만큼은 잘리지 않고 보이도록 행 최소 높이를 잡습니다. */
@@ -549,7 +602,7 @@ export function MonthView({
                     const restTasks = rest.filter((item) => item.type === "task").length;
                     const restEvents = rest.length - restTasks;
                     /* A44: `할 일` 토글이 꺼져 있어도 그 날 할 일이 있는지는 연한 회색으로 보입니다. */
-                    const hiddenTaskCount = showTasks ? 0 : tasksForDay(day).length;
+                    const hiddenTaskCount = showTasks ? 0 : activeTasks.filter((task) => task.date === day || task.due === day).length;
                     return (
                       <div
                         key={day}
@@ -558,16 +611,6 @@ export function MonthView({
                         data-drop-zone="month-day"
                         data-drop-day={day}
                         onClick={() => openCell(day)}
-                        onDragOver={(event) => {
-                          if (onMoveItem) event.preventDefault();
-                        }}
-                        onDrop={(event) => {
-                          const payload = event.dataTransfer.getData("text/diary-item");
-                          if (!payload || !onMoveItem) return;
-                          event.preventDefault();
-                          const [type, id] = payload.split(":");
-                          if ((type === "event" || type === "task") && id) onMoveItem(type, id, day);
-                        }}
                         className={cn(
                           "group relative min-h-0 overflow-hidden border-r border-paper-300 px-0.5 pb-1 last:border-r-0 md:px-2 md:pb-1",
                           !inMonth && "bg-paper-200/25",
@@ -582,11 +625,13 @@ export function MonthView({
                                   key={item.event.id}
                                   data-month-item={item.event.id}
                                   type="button"
-                                  draggable={!!onMoveItem}
-                                  onDragStart={(event) => {
-                                    event.dataTransfer.setData("text/diary-item", `event:${item.event.id}`);
-                                    event.dataTransfer.effectAllowed = "move";
-                                  }}
+                                  /* A49: 같은 시간대 안에서 끌어 순서를 바꾸고, 다른 날짜 칸에 놓으면 옮깁니다. */
+                                  data-month-order-item={dayItemKey(item)}
+                                  data-drop-zone="month-order"
+                                  data-drop-key={dayItemKey(item)}
+                                  data-drop-group={dayItemGroup(item)}
+                                  data-drop-day={day}
+                                  onPointerDown={(pointerEvent) => startItemDrag(pointerEvent, item, day)}
                                   onClick={(event) => {
                                     event.stopPropagation();
                                     openCell(day);
@@ -613,11 +658,12 @@ export function MonthView({
                               <div
                                 key={item.task.id}
                                 data-month-item={item.task.id}
-                                draggable={!!onMoveItem}
-                                onDragStart={(event) => {
-                                  event.dataTransfer.setData("text/diary-item", `task:${item.task.id}`);
-                                  event.dataTransfer.effectAllowed = "move";
-                                }}
+                                data-month-order-item={dayItemKey(item)}
+                                data-drop-zone="month-order"
+                                data-drop-key={dayItemKey(item)}
+                                data-drop-group={dayItemGroup(item)}
+                                data-drop-day={day}
+                                onPointerDown={(pointerEvent) => startItemDrag(pointerEvent, item, day)}
                                 className="flex min-h-[1rem] w-full items-center gap-0.5 px-0.5 py-[1px] md:min-h-[1.05rem] md:gap-1 md:px-1"
                               >
                                 <button
@@ -651,7 +697,7 @@ export function MonthView({
                                   <span className="border-b-2 pb-[0.5px]" style={{ borderColor: underline }}>
                                     {item.task.startTime ? (
                                       <span className="mr-1 hidden tabular-nums opacity-80 md:inline">
-                                        {timeRangeLabel(item.task.startTime, item.task.endTime)}
+                                        {formatClock(item.task.startTime)}
                                       </span>
                                     ) : null}
                                     {item.task.title}
@@ -763,7 +809,7 @@ export function MonthView({
           onOpenEvent={onOpenEvent}
           onOpenTask={onOpenTask}
           onToggleTask={onToggleTask}
-          onMoveAllDay={(id, direction) => moveAllDay(openDayDate, id, direction)}
+          onReorder={(item, direction) => reorderItem(openDayDate, item, direction)}
           onMoveItem={(type, id, date) => onMoveItem?.(type, id, date, openDayDate)}
         />
       ) : null}

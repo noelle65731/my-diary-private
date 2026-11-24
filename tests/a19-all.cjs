@@ -414,7 +414,7 @@ const want = (n) => ONLY.length === 0 || ONLY.includes(n);
     const manyText = manyOpen ? await dialog.innerText() : "";
     console.log("MONTH-MANY", JSON.stringify(manyText.slice(0, 200)));
     check("PC 월간: 여러 개 있는 날의 빈 여백 → 하루 목록", manyOpen, "안 열림");
-    check("PC 월간: 하루 목록에 시간 일정과 할 일이 함께", /시간 일정/.test(manyText) && /할 일/.test(manyText), manyText.slice(0, 120));
+    check("PC 월간: 하루 목록에 시간 일정과 할 일이 함께", /(시간 일정|시간 지정)/.test(manyText) && /할 일/.test(manyText), manyText.slice(0, 120));
     await shot(page, "month-daylist-pc");
     await closeDay();
 

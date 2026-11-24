@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import type { CalendarEvent, ProjectTask } from "@/lib/types";
 import { formatClock, formatShort, timeRangeLabel, weekdayKo } from "@/lib/date";
 import { holidayName } from "@/lib/holidays";
@@ -9,8 +9,8 @@ import { taskTone } from "@/components/common/tone";
 import { useEventColors } from "@/state/event-colors";
 import { useCategoryColors } from "@/state/category-colors";
 import { CheckIcon, ChevronLeftIcon, ChevronRightIcon, XIcon } from "@/components/icons";
-import { eventCoversDay } from "@/components/calendar/calendar-utils";
 import { useDnd } from "@/components/common/dnd";
+import { dayItemGroup, dayItemKey, dayItemLevel, type DayOrderItem } from "@/lib/day-order";
 
 /**
  * A3 · A32: 한 날짜의 정리 목록.
@@ -19,44 +19,15 @@ import { useDnd } from "@/components/common/dnd";
  * 보여 주고, 항목을 누르면 그 기록의 상세로 들어갑니다. 아래에서 새 일정·새 할 일을
  * 그 날짜로 바로 더할 수 있고, `이 날짜로 이동`은 그 날의 일간 보기를 엽니다.
  *
+ * A49: 하루 목록은 세 층입니다 — ① 종일 일정 ② 시작 시각이 있는 일정과 할 일을 시각 순으로
+ * 섞어서(할 일은 체크박스로 구분) ③ 시간이 없는 할 일. 같은 층·같은 시각끼리는 ↑↓로
+ * 순서를 바꾸며, 바뀐 순서는 `my-diary:day-order:v1` 에 남아 새로고침해도 그대로입니다.
+ *
  * A33: 목록 안의 일정·할 일을 꾹 눌러(마우스는 조금 끌어) 뒤의 달력 칸으로 끌어다 놓으면
  * 그 날짜로 옮겨집니다. 끄는 동안에는 이 시트와 어두운 배경을 잠시 감춰 뒤의 날짜 칸이
  * 그대로 보이게 하고, 손을 떼면 원래대로 돌아옵니다.
  */
-export type DayListItem = { type: "event"; event: CalendarEvent } | { type: "task"; task: ProjectTask };
-
-const LAST = Number.MAX_SAFE_INTEGER;
-
-/** All-day events keep the order the user arranged (`sort`), then the order they were written. */
-export function byAllDayOrder(a: CalendarEvent, b: CalendarEvent): number {
-  const left = a.sort ?? LAST;
-  const right = b.sort ?? LAST;
-  if (left !== right) return left - right;
-  return String(a.createdAt).localeCompare(String(b.createdAt));
-}
-
-export function byTimeOrder(a: CalendarEvent, b: CalendarEvent): number {
-  const left = a.startTime ?? "99:99";
-  const right = b.startTime ?? "99:99";
-  if (left !== right) return left.localeCompare(right);
-  return byAllDayOrder(a, b);
-}
-
-/**
- * A3 order: 종일 일정 → 시작 시각 순 시간 일정 → 할 일.
- * 넘겨받은 목록은 이미 보기 필터(분류·NOW)를 지난 것이고, 여기서는 그 날 것만 고릅니다.
- */
-export function dayItemsFor(day: string, events: CalendarEvent[], tasks: ProjectTask[]): DayListItem[] {
-  const activeEvents = events.filter((event) => event.kind === "일정" && !event.trash && eventCoversDay(event, day));
-  const activeTasks = tasks.filter(
-    (task) => !task.trash && task.status !== "취소" && (task.date === day || task.due === day),
-  );
-  return [
-    ...activeEvents.filter((event) => event.allDay).sort(byAllDayOrder).map((event) => ({ type: "event" as const, event })),
-    ...activeEvents.filter((event) => !event.allDay).sort(byTimeOrder).map((event) => ({ type: "event" as const, event })),
-    ...activeTasks.sort((a, b) => (a.sort ?? LAST) - (b.sort ?? LAST) || String(a.createdAt).localeCompare(String(b.createdAt))).map((task) => ({ type: "task" as const, task })),
-  ];
-}
+export type DayListItem = DayOrderItem;
 
 export function DayListPanel({
   day,
@@ -67,7 +38,7 @@ export function DayListPanel({
   onOpenEvent,
   onOpenTask,
   onToggleTask,
-  onMoveAllDay,
+  onReorder,
   onCreateEvent,
   onCreateTask,
   onMoveItem,
@@ -82,7 +53,8 @@ export function DayListPanel({
   onOpenEvent: (id: string) => void;
   onOpenTask: (id: string) => void;
   onToggleTask?: (task: ProjectTask) => void;
-  onMoveAllDay: (id: string, direction: -1 | 1) => void;
+  /** A49: 같은 층·같은 시각 안에서 한 칸 위/아래로 — 손가락으로도 확실한 방식입니다. */
+  onReorder?: (item: DayOrderItem, direction: -1 | 1) => void;
   /** A33: 목록의 항목을 다른 날짜 칸에 놓았을 때 — 그 날짜(`YYYY-MM-DD`)로 옮깁니다. */
   onMoveItem?: (type: "event" | "task", id: string, date: string) => void;
   /** A16: the day list can start a new record without leaving the view. */
@@ -142,9 +114,71 @@ export function DayListPanel({
       },
     );
   };
-  const allDay = items.filter((item) => item.type === "event" && item.event.allDay) as { type: "event"; event: CalendarEvent }[];
-  const timed = items.filter((item) => item.type === "event" && !item.event.allDay) as { type: "event"; event: CalendarEvent }[];
-  const dayTasks = items.filter((item) => item.type === "task") as { type: "task"; task: ProjectTask }[];
+
+  /** A49: 층별 묶음과 그 안에서의 자리 — 첫/마지막 항목은 그쪽 화살표를 끕니다. */
+  const groups = useMemo(() => {
+    const map = new Map<string, DayOrderItem[]>();
+    for (const item of items) {
+      const key = dayItemGroup(item);
+      const list = map.get(key);
+      if (list) list.push(item);
+      else map.set(key, [item]);
+    }
+    return map;
+  }, [items]);
+
+  const placeOf = (item: DayOrderItem) => {
+    const list = groups.get(dayItemGroup(item)) ?? [];
+    const index = list.findIndex((entry) => dayItemKey(entry) === dayItemKey(item));
+    return { canUp: index > 0, canDown: index >= 0 && index < list.length - 1, many: list.length > 1 };
+  };
+
+  const allDay = items.filter((item) => item.type === "event" && dayItemLevel(item) === 1) as {
+    type: "event";
+    event: CalendarEvent;
+  }[];
+  const timed = items.filter((item) => dayItemLevel(item) === 2);
+  const untimed = items.filter((item) => item.type === "task" && dayItemLevel(item) === 3) as {
+    type: "task";
+    task: ProjectTask;
+  }[];
+
+  /** A49: ↑↓ 한 쌍 — 좁은 화면에서도 손가락으로 누를 수 있는 크기(24px)로 둡니다. */
+  const OrderButtons = ({ item }: { item: DayOrderItem }) => {
+    const { canUp, canDown, many } = placeOf(item);
+    if (!onReorder || !many) return null;
+    return (
+      <span className="flex flex-none items-center gap-0.5" data-day-order-controls={dayItemKey(item)}>
+        <button
+          type="button"
+          data-day-order-up={dayItemKey(item)}
+          onClick={(event) => {
+            event.stopPropagation();
+            onReorder(item, -1);
+          }}
+          disabled={!canUp}
+          aria-label={`${item.type === "event" ? item.event.title : item.task.title} 위로`}
+          className="flex h-6 w-6 items-center justify-center rounded text-ink-500 transition hover:bg-paper-200 hover:text-ink-900 disabled:opacity-20"
+        >
+          <ChevronLeftIcon size={12} className="rotate-90" />
+        </button>
+        <button
+          type="button"
+          data-day-order-down={dayItemKey(item)}
+          onClick={(event) => {
+            event.stopPropagation();
+            onReorder(item, 1);
+          }}
+          disabled={!canDown}
+          aria-label={`${item.type === "event" ? item.event.title : item.task.title} 아래로`}
+          className="flex h-6 w-6 items-center justify-center rounded text-ink-500 transition hover:bg-paper-200 hover:text-ink-900 disabled:opacity-20"
+        >
+          <ChevronRightIcon size={12} className="rotate-90" />
+        </button>
+      </span>
+    );
+  };
+
   return (
     <div
       ref={sheet}
@@ -179,17 +213,22 @@ export function DayListPanel({
             </p>
           ) : null}
 
+          {/* 1층 — 종일 일정 */}
           {allDay.length > 0 ? (
-            <section className="mb-3">
+            <section className="mb-3" data-day-layer="allday">
               <p className="mb-1 flex items-baseline justify-between text-[calc(13.5px*var(--fs))] text-ink-400">
-                <span>종일 일정</span>
+                <span>종일 일정 {allDay.length}</span>
                 {allDay.length > 1 ? <span className="text-[calc(13px*var(--fs))] text-ink-300">↑↓ 로 순서 바꾸기</span> : null}
               </p>
               <ul className="space-y-1">
-                {allDay.map(({ event }, index) => {
+                {allDay.map(({ event }) => {
                   const tone = toneFor(event);
                   return (
-                    <li key={event.id} className={cn("flex items-center gap-1 rounded-lg border px-2 py-1.5", tone.bg, tone.border)}>
+                    <li
+                      key={event.id}
+                      data-day-order-item={dayItemKey({ type: "event", event })}
+                      className={cn("flex items-center gap-1 rounded-lg border px-2 py-1.5", tone.bg, tone.border)}
+                    >
                       <button
                         type="button"
                         data-day-list-event={event.id}
@@ -206,28 +245,7 @@ export function DayListPanel({
                       >
                         {event.title}
                       </button>
-                      {allDay.length > 1 ? (
-                        <span className="flex flex-none items-center gap-0.5">
-                          <button
-                            type="button"
-                            onClick={() => onMoveAllDay(event.id, -1)}
-                            disabled={index === 0}
-                            aria-label={`${event.title} 위로`}
-                            className="flex h-5 w-5 items-center justify-center rounded text-ink-400 transition hover:bg-white/70 hover:text-ink-800 disabled:opacity-25"
-                          >
-                            <ChevronLeftIcon size={12} className="rotate-90" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => onMoveAllDay(event.id, 1)}
-                            disabled={index === allDay.length - 1}
-                            aria-label={`${event.title} 아래로`}
-                            className="flex h-5 w-5 items-center justify-center rounded text-ink-400 transition hover:bg-white/70 hover:text-ink-800 disabled:opacity-25"
-                          >
-                            <ChevronRightIcon size={12} className="rotate-90" />
-                          </button>
-                        </span>
-                      ) : null}
+                      <OrderButtons item={{ type: "event", event }} />
                     </li>
                   );
                 })}
@@ -235,48 +253,98 @@ export function DayListPanel({
             </section>
           ) : null}
 
+          {/* 2층 — 시간이 있는 일정 + 할 일을 시각 순으로 섞어서 */}
           {timed.length > 0 ? (
-            <section className="mb-3">
-              <p className="mb-1 text-[calc(13.5px*var(--fs))] text-ink-400">시간 일정</p>
+            <section className="mb-3" data-day-layer="timed">
+              <p className="mb-1 flex items-baseline justify-between text-[calc(13.5px*var(--fs))] text-ink-400">
+                <span>시간 지정 {timed.length}</span>
+                {timed.length > 1 ? <span className="text-[calc(13px*var(--fs))] text-ink-300">↑↓ 로 순서 바꾸기</span> : null}
+              </p>
               <ul className="space-y-1">
-                {timed.map(({ event }) => {
-                  const tone = toneFor(event);
-                  return (
-                    <li key={event.id} className="flex items-center gap-2">
-                      <span className={cn("w-[5.3rem] flex-none whitespace-nowrap text-[calc(14px*var(--fs))] tabular-nums", tone.text)}>
-                        {formatClock(event.startTime)}
-                        {event.endTime ? `–${event.endTime}` : ""}
-                      </span>
-                      <button
-                        type="button"
-                        data-day-list-event={event.id}
-                        onPointerDown={(pointerEvent) => startDrag(pointerEvent, "event", event)}
-                        onClick={() => onOpenEvent(event.id)}
-                        title={onMoveItem ? "끌어서 다른 날짜로 옮기기" : undefined}
-                        className={cn(
-                          "min-w-0 flex-1 select-none truncate text-left text-[calc(15px*var(--fs))] text-ink-700",
-                          event.canceled && "line-through opacity-50",
-                          event.done && "line-through opacity-60",
-                        )}
-                      >
-                        {event.title}
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            </section>
-          ) : null}
-
-          {dayTasks.length > 0 ? (
-            <section className="mb-3">
-              <p className="mb-1 text-[calc(13.5px*var(--fs))] text-ink-400">할 일 {dayTasks.length}</p>
-              <ul className="space-y-0.5">
-                {dayTasks.map(({ task }) => {
+                {timed.map((item) => {
+                  if (item.type === "event") {
+                    const event = item.event;
+                    const tone = toneFor(event);
+                    return (
+                      <li key={`e-${event.id}`} data-day-order-item={dayItemKey(item)} className="flex items-start gap-2">
+                        <span className={cn("w-[5.3rem] flex-none whitespace-nowrap pt-[1px] text-[calc(14px*var(--fs))] tabular-nums", tone.text)}>
+                          {formatClock(event.startTime)}
+                          {event.endTime ? `–${event.endTime}` : ""}
+                        </span>
+                        <button
+                          type="button"
+                          data-day-list-event={event.id}
+                          onPointerDown={(pointerEvent) => startDrag(pointerEvent, "event", event)}
+                          onClick={() => onOpenEvent(event.id)}
+                          title={onMoveItem ? "끌어서 다른 날짜로 옮기기" : undefined}
+                          className={cn(
+                            "min-w-0 flex-1 select-none text-left text-[calc(15px*var(--fs))] leading-snug text-ink-700",
+                            event.canceled && "line-through opacity-50",
+                            event.done && "line-through opacity-60",
+                          )}
+                        >
+                          {event.title}
+                        </button>
+                        <OrderButtons item={item} />
+                      </li>
+                    );
+                  }
+                  const task = item.task;
                   const tone = categoryColor.toneOf(task.category, taskTone(task.category));
                   const waiting = task.status === "대기 중";
                   return (
-                    <li key={task.id} className="flex items-start gap-2">
+                    <li key={`t-${task.id}`} data-day-order-item={dayItemKey(item)} className="flex items-start gap-2">
+                      <span className="w-[5.3rem] flex-none whitespace-nowrap pt-[2px] text-[calc(14px*var(--fs))] tabular-nums text-ink-400">
+                        {formatClock(task.startTime)}
+                        {task.endTime && task.endTime > (task.startTime ?? "") ? `–${task.endTime}` : ""}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => onToggleTask?.(task)}
+                        aria-label={task.status === "완료" ? `${task.title} 완료 해제` : `${task.title} 완료`}
+                        aria-pressed={task.status === "완료"}
+                        className={cn(
+                          "mt-[5px] flex h-[15px] w-[15px] flex-none items-center justify-center rounded-[4px] border transition",
+                          task.status === "완료" ? cn(tone.solid, "border-transparent text-white") : "border-ink-300 hover:border-ink-500",
+                        )}
+                      >
+                        {task.status === "완료" ? <CheckIcon size={9} /> : null}
+                      </button>
+                      <button
+                        type="button"
+                        data-day-list-task={task.id}
+                        onPointerDown={(pointerEvent) => startDrag(pointerEvent, "task", task)}
+                        onClick={() => onOpenTask(task.id)}
+                        title={onMoveItem ? "끌어서 다른 날짜로 옮기기" : undefined}
+                        className={cn(
+                          "min-w-0 flex-1 select-none text-left text-[calc(15px*var(--fs))] leading-snug text-ink-700",
+                          task.status === "완료" && "text-ink-300 line-through",
+                        )}
+                      >
+                        {task.title}
+                      </button>
+                      {waiting ? <span className="mt-[3px] flex-none rounded bg-paper-200 px-1 text-[calc(12.5px*var(--fs))] text-ink-500">대기</span> : null}
+                      <OrderButtons item={item} />
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          ) : null}
+
+          {/* 3층 — 시간이 없는 할 일 */}
+          {untimed.length > 0 ? (
+            <section className="mb-3" data-day-layer="untimed">
+              <p className="mb-1 flex items-baseline justify-between text-[calc(13.5px*var(--fs))] text-ink-400">
+                <span>할 일 {untimed.length}</span>
+                {untimed.length > 1 ? <span className="text-[calc(13px*var(--fs))] text-ink-300">↑↓ 로 순서 바꾸기</span> : null}
+              </p>
+              <ul className="space-y-0.5">
+                {untimed.map(({ task }) => {
+                  const tone = categoryColor.toneOf(task.category, taskTone(task.category));
+                  const waiting = task.status === "대기 중";
+                  return (
+                    <li key={task.id} data-day-order-item={dayItemKey({ type: "task", task })} className="flex items-start gap-2">
                       <button
                         type="button"
                         onClick={() => onToggleTask?.(task)}
@@ -303,11 +371,7 @@ export function DayListPanel({
                         {task.title}
                       </button>
                       {waiting ? <span className="mt-[1px] flex-none rounded bg-paper-200 px-1 text-[calc(12.5px*var(--fs))] text-ink-500">대기</span> : null}
-                      {task.startTime ? (
-                        <span className="mt-[3px] flex-none text-[calc(12.5px*var(--fs))] tabular-nums text-ink-400">
-                          {timeRangeLabel(task.startTime, task.endTime)}
-                        </span>
-                      ) : null}
+                      <OrderButtons item={{ type: "task", task }} />
                     </li>
                   );
                 })}

@@ -7,8 +7,8 @@ import { holidayName } from "@/lib/holidays";
 import { cn } from "@/lib/utils";
 import { mergeCategories } from "@/state/categories";
 import { priorityOf, projectEmoji, routineTone, taskTone } from "@/components/common/tone";
-import { CheckIcon, ChevronDownIcon, ChevronRightIcon, XIcon } from "@/components/icons";
-import { eventStartMinutes, routineCountForDay } from "@/components/calendar/calendar-utils";
+import { CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, XIcon } from "@/components/icons";
+import { routineCountForDay } from "@/components/calendar/calendar-utils";
 import { isSpanned, spanSegments } from "@/components/calendar/span-bars";
 import { pushToast } from "@/lib/toast-bus";
 import { useDnd, type DropTarget } from "@/components/common/dnd";
@@ -17,6 +17,19 @@ import { useProjectColors } from "@/state/project-colors";
 import { useAutoHideScrollbar } from "@/lib/use-auto-hide-scroll";
 import { useCategoryColors } from "@/state/category-colors";
 import { useSettings } from "@/state/settings";
+import {
+  applyGroupOrder,
+  buildDayItems,
+  dayItemGroup,
+  dayItemKey,
+  dayItemLevel,
+  dayItemTitle,
+  groupOf,
+  moveWithinGroup,
+  shiftWithinGroup,
+  useDayOrder,
+  type DayOrderItem,
+} from "@/lib/day-order";
 
 interface WeekBoardProps {
   days: string[];
@@ -69,36 +82,14 @@ interface WeekBoardProps {
   onShowTasks?: () => void;
   /** A48: NOW가 꺼져 있으면 이번 창에 할 일이 없는 프로젝트도 빈 행으로 남깁니다. */
   nowOnly?: boolean;
+  /** A49: 프로젝트 칸·시트에서 시간 없는 할 일 순서를 바꿀 때 `정렬`을 다시 매깁니다. */
+  onUpdateTask?: (id: string, patch: Record<string, unknown>) => void;
 }
 
 /** 프로젝트가 없는 할 일은 게시판에서 index 행으로 모입니다. */
 const INBOX_KEY = "inbox";
 /** A40: 주간·3일 보기의 프로젝트 행·루틴 행 순서는 이 브라우저에 남깁니다. */
 const ROW_ORDER_KEY = "my-diary:week-row-order:v1";
-/**
- * A42: 하루 일정 목록의 순서도 이 브라우저에 남깁니다 — 날짜 → 일정 id 배열.
- * 같은 시각에 겹친 일정을 끌어 위아래로 바꾸면 이 순서가 먼저 적용됩니다.
- */
-const EVENT_ORDER_KEY = "my-diary:week-event-order:v1";
-
-type DayEventOrder = Record<string, string[]>;
-
-function readEventOrder(): DayEventOrder {
-  if (typeof window === "undefined") return {};
-  try {
-    const raw = window.localStorage.getItem(EVENT_ORDER_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== "object") return {};
-    const out: DayEventOrder = {};
-    for (const [day, list] of Object.entries(parsed as Record<string, unknown>)) {
-      if (Array.isArray(list)) out[day] = list.filter((id): id is string => typeof id === "string");
-    }
-    return out;
-  } catch {
-    return {};
-  }
-}
 
 type RowOrder = { projects: string[]; routines: string[] };
 
@@ -124,9 +115,6 @@ function orderOf(list: string[], key: string): number {
 /** A32: 행을 만드는 기준과 똑같이, 이 할 일이 어느 행에 속하는지 돌려줍니다. */
 const rowKeyOf = (task: ProjectTask, projects: ProjectTask[]) =>
   projects.find((item) => item.id === (task.projectIds[0] ?? ""))?.id ?? INBOX_KEY;
-
-/** 하루 일정 목록의 기본 순서 — 종일(시간 없음)이 먼저, 그다음 시작 시각이 빠른 순. */
-const listKeyOf = (event: CalendarEvent) => (event.allDay || !event.startTime ? -1 : eventStartMinutes(event));
 
 export function WeekBoard({
   days,
@@ -163,6 +151,7 @@ export function WeekBoard({
   showTasks = true,
   onShowTasks,
   nowOnly = false,
+  onUpdateTask,
 }: WeekBoardProps) {
   const today = todayISO();
   /** 오늘 열은 일정·프로젝트·루틴이 같은 톤으로 이어지도록 한 가지 색을 같이 씁니다.
@@ -271,8 +260,8 @@ export function WeekBoard({
   const [scheduleCollapsed, setScheduleCollapsed] = useState(false);
   /** A42: 하루 일정이 설정한 개수를 넘으면 그 요일만 펼칩니다. */
   const [expandedDays, setExpandedDays] = useState<string[]>([]);
-  /** A42: 끌어서 바꾼 하루 일정 순서 — 날짜마다 id 배열로 남깁니다. */
-  const [eventOrder, setEventOrder] = useState<DayEventOrder>(() => readEventOrder());
+  /** A49: 하루 안의 순서 — 2층(같은 시작 시각)은 이 브라우저에 남기고, 1·3층은 `정렬`로. */
+  const dayOrder = useDayOrder();
   /**
    * A2: on a phone the task title itself is the checkbox — one tap completes, another
    * clears it. A tap that turned into a swipe or a scroll must never toggle anything,
@@ -324,6 +313,16 @@ export function WeekBoard({
     [visibleTasks, days],
   );
 
+  /**
+   * A49: 날짜별 3층 목록 — 위 일정 칸과 아래 프로젝트 칸·시트가 같은 순서를 씁니다.
+   * 종일 → 시간 지정(일정과 할 일을 시작 시각 순으로 섞어서) → 시간 없는 할 일.
+   */
+  const dayColumns = useMemo(
+    () => days.map((day) => ({ day, items: buildDayItems(visibleEvents, visibleTasks, day, dayOrder) })),
+    [days, visibleEvents, visibleTasks, dayOrder],
+  );
+  const columnOf = (day: string): DayOrderItem[] => dayColumns.find((entry) => entry.day === day)?.items ?? [];
+
   const rows = useMemo(() => {
     const map = new Map<string, { project: ProjectTask | null; tasks: ProjectTask[] }>();
     for (const task of weekTasks) {
@@ -365,13 +364,12 @@ export function WeekBoard({
    */
   const sheetTasks = useMemo(() => {
     if (!cellSheet) return [];
-    return visibleTasks
-      .filter((task) => {
-        if (!(task.date === cellSheet.day || task.due === cellSheet.day)) return false;
-        return rowKeyOf(task, projects) === cellSheet.key;
-      })
-      .sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0) || String(a.createdAt).localeCompare(String(b.createdAt)));
-  }, [cellSheet, visibleTasks, projects]);
+    return columnOf(cellSheet.day)
+      .filter((item): item is { type: "task"; task: ProjectTask } => item.type === "task")
+      .map((item) => item.task)
+      .filter((task) => rowKeyOf(task, projects) === cellSheet.key);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cellSheet, dayColumns, projects]);
 
   const sheetDateLabel = cellSheet
     ? `${Number(cellSheet.day.slice(5, 7))}월 ${Number(cellSheet.day.slice(8, 10))}일 (${weekdayKo(cellSheet.day)})`
@@ -406,34 +404,13 @@ export function WeekBoard({
   const dayItemCap = Math.max(3, Math.min(7, Number(settings.weekDayItems) || 5));
 
   /**
-   * 그 날의 하루 일정 — 종일이 먼저, 그다음 시작 시각이 빠른 순입니다.
-   * 끌어서 바꾼 순서가 있으면 그 순서를 그대로 쓰고, 새로 생긴 일정은 시각 자리에 들어갑니다.
+   * A49: 그 날의 하루 일정 — 3층 목록에서 종일·연결 막대를 뺀 시간 지정 일정만.
+   * (종일 일정은 위의 색 막대가 맡습니다.)
    */
-  const dayEventsFor = (day: string): CalendarEvent[] => {
-    /* A44: 종일 일정(하루짜리 포함)은 위의 색 막대가 맡으므로 목록에는 시간 지정 일정만 남깁니다. */
-    const items = visibleEvents.filter(
-      (event) => event.kind === "일정" && !isSpanned(event) && !event.allDay && event.date === day,
-    );
-    const byTime = [...items].sort(
-      (a, b) => listKeyOf(a) - listKeyOf(b) || String(a.createdAt).localeCompare(String(b.createdAt)),
-    );
-    const stored = eventOrder[day];
-    if (!stored || stored.length === 0) return byTime;
-    const remaining = new Map(byTime.map((event) => [event.id, event]));
-    const out: CalendarEvent[] = [];
-    for (const id of stored) {
-      const event = remaining.get(id);
-      if (!event) continue;
-      out.push(event);
-      remaining.delete(id);
-    }
-    for (const event of byTime) {
-      if (!remaining.has(event.id)) continue;
-      const at = out.findIndex((other) => listKeyOf(other) > listKeyOf(event));
-      out.splice(at < 0 ? out.length : at, 0, event);
-    }
-    return out;
-  };
+  const dayEventsFor = (day: string): CalendarEvent[] =>
+    columnOf(day)
+      .map((item) => (item.type === "event" ? item.event : null))
+      .filter((event): event is CalendarEvent => !!event && !isSpanned(event) && !event.allDay && event.date === day);
   const dayLists = days.map((day) => ({ day, list: dayEventsFor(day) }));
   /** 구역 머리에 보여 줄 이번 창의 일정 수(막대 + 목록, 중복 없이). */
   const weekEventCount = (() => {
@@ -492,17 +469,25 @@ export function WeekBoard({
     );
   };
 
-  /** A42: 끌어서 바꾼 하루 일정 순서를 이 브라우저에 남깁니다. */
-  const saveEventOrder = (day: string, ids: string[]) => {
-    pushToast("일정 순서를 변경했습니다");
-    setEventOrder((current) => {
-      const next = { ...current, [day]: ids };
-      try {
-        window.localStorage.setItem(EVENT_ORDER_KEY, JSON.stringify(next));
-      } catch {
-        /* 저장 공간이 없으면 이번 화면에서만 유지됩니다. */
-      }
-      return next;
+  /** A49: 한 묶음(같은 층·같은 시각) 안에서 한 칸 위/아래로 — 시트·칸 공통. */
+  const reorderItem = (day: string, item: DayOrderItem, direction: -1 | 1) => {
+    const group = groupOf(columnOf(day), dayItemGroup(item));
+    applyGroupOrder(day, group, shiftWithinGroup(group, dayItemKey(item), direction), {
+      updateEvent: () => undefined,
+      updateTask: (id, patch) => onUpdateTask?.(id, patch),
+    });
+  };
+
+  /** A49: 같은 날 같은 묶음끼리 끌어 놓았을 때 — 그 자리로 순서 바꾸기. */
+  const reorderDrop = (day: string, item: DayOrderItem, targetKey: string, after: boolean): boolean => {
+    const group = groupOf(columnOf(day), dayItemGroup(item));
+    if (!group.some((entry) => dayItemKey(entry) === targetKey)) {
+      pushToast("시작 시각이 다르면 시간순이 먼저라 순서를 바꿀 수 없습니다");
+      return false;
+    }
+    return applyGroupOrder(day, group, moveWithinGroup(group, dayItemKey(item), targetKey, after), {
+      updateEvent: () => undefined,
+      updateTask: (id, patch) => onUpdateTask?.(id, patch),
     });
   };
 
@@ -518,23 +503,16 @@ export function WeekBoard({
       (target, point) => {
         if (!target) return;
         /* A39: 프로젝트 칸·index 칸에 놓으면 그 프로젝트의 할 일로 바꿉니다. */
-        if (target.zone === "week-task-day" || target.zone === "week-project-row") {
+        if (target.zone === "week-task-day" || target.zone === "week-task-item" || target.zone === "week-project-row") {
           onConvertEventToTask?.(item.id, target.data.project ?? INBOX_KEY, target.data.day ?? null);
           return;
         }
         const nextDay = target.data.day;
         if (!nextDay) return;
         if (target.zone === "week-event-item" && nextDay === day) {
-          const over = target.data.id;
-          if (!over || over === item.id) return;
-          const ids = dayEventsFor(day)
-            .map((event) => event.id)
-            .filter((id) => id !== item.id);
-          const at = ids.indexOf(over);
-          if (at < 0) return;
-          const after = point.y > target.rect.top + target.rect.height / 2;
-          ids.splice(at + (after ? 1 : 0), 0, item.id);
-          saveEventOrder(day, ids);
+          const over = target.data.key;
+          if (!over || over === `e:${item.id}`) return;
+          reorderDrop(day, { type: "event", event: item }, over, point.y > target.rect.top + target.rect.height / 2);
           return;
         }
         if (nextDay === day) return;
@@ -542,12 +520,14 @@ export function WeekBoard({
       },
       {
         getHint: (target, point) => {
-          if (target.zone === "week-task-day" || target.zone === "week-project-row") {
+          if (target.zone === "week-task-day" || target.zone === "week-task-item" || target.zone === "week-project-row") {
             return `${rowTitleOf(target.data.project ?? INBOX_KEY)} 할 일로 옮기기`;
           }
           const nextDay = target.data.day;
           if (!nextDay) return null;
           if (target.zone === "week-event-item" && nextDay === day) {
+            if (target.data.group && target.data.group !== dayItemGroup({ type: "event", event: item }))
+              return "시간이 달라 순서를 바꿀 수 없음";
             return point.y > target.rect.top + target.rect.height / 2 ? "아래로 순서 바꾸기" : "위로 순서 바꾸기";
           }
           if (nextDay === day) return null;
@@ -556,6 +536,19 @@ export function WeekBoard({
         },
       },
     );
+  };
+
+  /** A49: 프로젝트 칸 시트의 ↑↓ — 같은 시각·시간 없는 형제 사이에서만 한 칸씩 옮깁니다. */
+  const sheetReorder = (task: ProjectTask, direction: -1 | 1, siblings: ProjectTask[]) => {
+    if (!cellSheet) return;
+    const index = siblings.findIndex((other) => other.id === task.id);
+    const target = siblings[index + direction];
+    if (!target) return;
+    const group = groupOf(columnOf(cellSheet.day), dayItemGroup({ type: "task", task }));
+    applyGroupOrder(cellSheet.day, group, moveWithinGroup(group, `t:${task.id}`, `t:${target.id}`, direction > 0), {
+      updateEvent: () => undefined,
+      updateTask: (id, patch) => onUpdateTask?.(id, patch),
+    });
   };
 
   /**
@@ -569,7 +562,7 @@ export function WeekBoard({
       (target) => {
         if (!target) return;
         /* A39: 프로젝트 칸·index 칸에 놓으면 그 프로젝트의 할 일로 바꿉니다. */
-        if (target.zone === "week-task-day" || target.zone === "week-project-row") {
+        if (target.zone === "week-task-day" || target.zone === "week-task-item" || target.zone === "week-project-row") {
           onConvertEventToTask?.(event.id, target.data.project ?? INBOX_KEY, target.data.day ?? null);
           return;
         }
@@ -589,7 +582,7 @@ export function WeekBoard({
       },
       {
         getHint: (target) => {
-          if (target.zone === "week-task-day" || target.zone === "week-project-row") {
+          if (target.zone === "week-task-day" || target.zone === "week-task-item" || target.zone === "week-project-row") {
             const key = target.data.project ?? INBOX_KEY;
             const stamp = target.data.day ? ` · ${target.data.day.slice(5).replace("-", "/")}` : "";
             return `${rowTitleOf(key)}${stamp} 할 일로 옮기기`;
@@ -616,6 +609,8 @@ export function WeekBoard({
         data-week-event-day={day}
         data-drop-zone="week-event-item"
         data-drop-id={event.id}
+        data-drop-key={`e:${event.id}`}
+        data-drop-group={`t:${event.startTime ?? ""}`}
         data-drop-day={day}
         onPointerDown={(pointerEvent) => startEventDrag(pointerEvent, event, day)}
         onClick={(clickEvent) => {
@@ -1100,7 +1095,10 @@ export function WeekBoard({
               </div>
 
               {days.map((day) => {
-                const cell = row.tasks.filter((task) => task.date === day || task.due === day);
+                /* A49: 이 칸의 할 일 — 시간 지정 할 일이 시각 순으로 위에, 시간 없는 할 일이 아래에. */
+                const cell = columnOf(day)
+                  .map((item) => (item.type === "task" ? item.task : null))
+                  .filter((task): task is ProjectTask => !!task && rowKeyOf(task, projects) === key);
                 return (
                   <div
                     key={day}
@@ -1135,16 +1133,29 @@ export function WeekBoard({
                           <div
                             key={task.id}
                             data-week-task={task.id}
+                            data-drop-zone="week-task-item"
+                            data-drop-key={`t:${task.id}`}
+                            data-drop-group={dayItemGroup({ type: "task", task })}
+                            data-drop-day={day}
+                            data-drop-project={key}
                             onClick={(event) => event.stopPropagation()}
                             onPointerDown={(event) => {
                               if (!onMoveTask && !onMoveTaskToProject) return;
                               dnd.start(
                                 event,
                                 { kind: "task", id: task.id, label: task.title },
-                                (target) => {
-                                  /* A35: 게시판에서 바로 다른 프로젝트 행·다른 날로 끌어도 됩니다. */
+                                (target, point) => {
                                   if (!target) return;
-                                  if (target.zone === "week-task-day" || target.zone === "week-project-row") {
+                                  /* A49: 같은 칸 안에서 위아래로 끌면 같은 묶음일 때만 순서가 바뀍니다. */
+                                  if (target.zone === "week-task-item" && target.data.day === day && target.data.project === key) {
+                                    const over = target.data.key;
+                                    if (!over || over === `t:${task.id}`) return;
+                                    reorderDrop(day, { type: "task", task }, over, point.y > target.rect.top + target.rect.height / 2);
+                                    return;
+                                  }
+                                  /* A35: 게시판에서 바로 다른 프로젝트 행·다른 날로 끌어도 됩니다.
+                                     A49: 다른 칸의 할 일 위에 놓아도 그 칸으로 옮깁니다. */
+                                  if (target.zone === "week-task-item" || target.zone === "week-task-day" || target.zone === "week-project-row") {
                                     applyTaskDrop(task, day, key, target);
                                     return;
                                   }
@@ -1154,7 +1165,13 @@ export function WeekBoard({
                                   }
                                 },
                                 {
-                                  getHint: (target) => {
+                                  getHint: (target, point) => {
+                                    if (target.zone === "week-task-item" && target.data.day === day && target.data.project === key) {
+                                      if (target.data.key === `t:${task.id}`) return null;
+                                      if (target.data.group && target.data.group !== dayItemGroup({ type: "task", task }))
+                                        return "시간이 달라 순서를 바꿀 수 없음";
+                                      return point.y > target.rect.top + target.rect.height / 2 ? "아래로 순서 바꾸기" : "위로 순서 바꾸기";
+                                    }
                                     if (target.zone === "week-day-list") {
                                       const stamp = (target.data.day ?? day).slice(5).replace("-", "/");
                                       return `${stamp} 종일 일정으로 옮기기`;
@@ -1502,6 +1519,37 @@ export function WeekBoard({
                         ) : waiting ? (
                           <span className="mt-[2px] flex-none rounded bg-paper-200 px-1 text-[calc(11.5px*var(--fs))] font-medium text-ink-500">대기</span>
                         ) : null}
+                        {/* A49: 시트 안에서도 같은 시각·시간 없는 할 일끼리 순서 바꾸기 (손가락으로도 확실히) */}
+                        {(() => {
+                          const groupKey = dayItemGroup({ type: "task", task });
+                          const siblings = sheetTasks.filter((other) => dayItemGroup({ type: "task", task: other }) === groupKey);
+                          const at = siblings.findIndex((other) => other.id === task.id);
+                          if (siblings.length < 2 || at < 0) return null;
+                          return (
+                            <span className="mt-[1px] flex flex-none items-center gap-0.5" data-week-cell-order={task.id}>
+                              <button
+                                type="button"
+                                data-week-cell-order-up={task.id}
+                                onClick={() => sheetReorder(task, -1, siblings)}
+                                disabled={at === 0}
+                                aria-label={`${task.title} 위로`}
+                                className="flex h-6 w-6 items-center justify-center rounded text-ink-400 transition hover:bg-paper-200 hover:text-ink-800 disabled:opacity-25"
+                              >
+                                <ChevronLeftIcon size={12} className="rotate-90" />
+                              </button>
+                              <button
+                                type="button"
+                                data-week-cell-order-down={task.id}
+                                onClick={() => sheetReorder(task, 1, siblings)}
+                                disabled={at === siblings.length - 1}
+                                aria-label={`${task.title} 아래로`}
+                                className="flex h-6 w-6 items-center justify-center rounded text-ink-400 transition hover:bg-paper-200 hover:text-ink-800 disabled:opacity-25"
+                              >
+                                <ChevronRightIcon size={12} className="rotate-90" />
+                              </button>
+                            </span>
+                          );
+                        })()}
                       </li>
                     );
                   })}

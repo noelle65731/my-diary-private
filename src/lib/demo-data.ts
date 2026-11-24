@@ -56,6 +56,8 @@ export function buildDemoData(): AllData {
 
   const calendar: CalendarEvent[] = [
     event("demo-ev-1", "아침 요가", today, { startTime: "08:30", endTime: "09:20", allDay: false, category: "개인", favorite: true }),
+    /* A49: 같은 시작 시각(08:30)에 겹친 일정 — 끌어서 순서를 바꾸는 예시입니다. */
+    event("demo-ev-17", "모닝 브리핑", today, { startTime: "08:30", endTime: "08:45", allDay: false, category: "업무" }),
     event("demo-ev-2", "브랜드팀 인터뷰 준비", addDaysISO(today, -1), { startTime: "10:00", endTime: "12:00", allDay: false, category: "성과" }),
     event("demo-ev-3", "포트폴리오 사이트 수정", addDaysISO(today, 1), { startTime: "14:00", endTime: "17:00", allDay: false, category: "성과" }),
     /* A41: 여러 날에 걸친 일정 — 월간·주간에서 하나의 긴 막대로 이어 보이는 예시입니다. */
@@ -216,6 +218,11 @@ export function buildDemoData(): AllData {
     task("demo-tk-10", "Tailwind 레이아웃 연습", { category: "공부", status: "완료", date: addDaysISO(today, -2), doneAt: addDaysISO(today, -2), projectIds: [projectIds.study] }),
 
     task("demo-tk-11", "약국 들르기", { category: "개인", date: today }),
+    /* A49: 시작 시각이 있는 할 일 — 일정과 같은 시각에 섞여 시간순으로 보이는 예시입니다. */
+    task("demo-tk-19", "요가 후 스트레칭", { category: "개인", date: today, startTime: "08:30", endTime: "08:50", projectIds: [projectIds.home] }),
+    task("demo-tk-20", "아침 메일 정리", { category: "업무", date: today, startTime: "09:00", endTime: "09:20", projectIds: [projectIds.work] }),
+    task("demo-tk-21", "와이어프레임 리뷰 요청", { category: "업무", date: addDaysISO(today, 1), startTime: "14:00", projectIds: [projectIds.work] }),
+    task("demo-tk-22", "브랜드 가이드 다시 읽기", { category: "업무", date: today, projectIds: [projectIds.work] }),
     task("demo-tk-12", "중고 거래 글 올리기", { category: "개인", date: addDaysISO(today, 1), urgent: true }),
     task("demo-tk-13", "생일 선물 고르기", { category: "개인", due: addDaysISO(today, 6), important: true }),
     task("demo-tk-14", "지난달 지출 정리", { category: "개인", status: "취소", cancelReason: "다음 달로 미룸" }),
