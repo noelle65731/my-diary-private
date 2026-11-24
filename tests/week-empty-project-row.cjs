@@ -52,9 +52,17 @@ const EMPTY_TITLE = "새 프로젝트";
 const WORK_TITLE = "브랜드 포트폴리오";
 const STUDY_TITLE = "자격증 공부";
 
+const event = (id, title, date, extra = {}) => ({
+  ...base(id, title),
+  kind: "일정", category: "개인", date, startTime: "09:30", endTime: "10:30", endDate: null,
+  allDay: false, done: false, canceled: false, cancelReason: "", cancelAt: null,
+  weekKey: "", baseDate: null,
+  ...extra,
+});
+
 function fixture() {
   return {
-    calendar: [],
+    calendar: [event("ev-1", "주간 회의", TODAY)],
     projects: [
       project("p-empty", EMPTY_TITLE, "개인", { createdAt: "2026-11-24T01:00:00.000Z" }),
       project("p-work", WORK_TITLE, "업무"),
@@ -85,6 +93,13 @@ async function installMocks(page, state) {
     if (path === "/api/notion/all") return route.fulfill({ json: { ok: true, data: state.data, errors: {} } });
     if (path.endsWith("/schema")) return route.fulfill({ json: { ok: true, data: [] } });
     if (path.endsWith("/blocks")) return route.fulfill({ json: { ok: true, data: { text: "", preserved: [] } } });
+    if (path === "/api/notion/projects" && method === "POST") {
+      const body = request.postDataJSON() ?? {};
+      state.patches.push({ resource: "projects", id: "(new)", patch: body });
+      return route.fulfill({
+        json: { ok: true, data: { ...body, id: `p-new-${state.patches.length}`, url: "", createdAt: stamp(), updatedAt: stamp() } },
+      });
+    }
     const patchMatch = path.match(/^\/api\/notion\/([^/]+)\/([^/]+)$/);
     if (patchMatch && (method === "PATCH" || method === "POST")) {
       const [, resource, id] = patchMatch;
@@ -317,6 +332,22 @@ const shot = async (page, name) => {
       JSON.stringify(lastMove?.patch ?? null),
     );
     await shot(page, `${mode}-three-drop`);
+
+    // ⑧ 일정을 빈 행 위로 끌어 놓으면 그 프로젝트의 할 일로 바뀐다(A39 경로)
+    state.patches.length = 0;
+    const eventNode = page.locator('[data-week-event="ev-1"]').first();
+    const eventBox = await center(eventNode);
+    const emptyRowAgain = await center(page.locator('[data-week-project-row="p-empty"]').first());
+    await drag({ x: eventBox.x, y: eventBox.y }, { x: emptyRowAgain.x, y: emptyRowAgain.y });
+    await page.waitForTimeout(900);
+    const creates = state.patches.filter((entry) => entry.resource === "projects" && entry.id === "(new)");
+    console.log(mode, "event->task creates", JSON.stringify(creates));
+    check(
+      `${mode}: 빈 행 위에 일정을 놓으면 그 프로젝트 할 일로 만들어짐`,
+      creates.some((entry) => entry.patch.kind === "할 일" && Array.isArray(entry.patch.projectIds) && entry.patch.projectIds.includes("p-empty")),
+      JSON.stringify(creates),
+    );
+    await shot(page, `${mode}-three-event-to-task`);
 
     const consoleErrors = errors.filter((text) => !/favicon|Failed to load resource: the server responded with a status of 404/i.test(text));
     check(`${mode}: 콘솔 에러 0건`, consoleErrors.length === 0, JSON.stringify(consoleErrors.slice(0, 4)));
