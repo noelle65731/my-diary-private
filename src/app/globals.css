@@ -2,12 +2,620 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ─────────────────────────── A48: 테마 · 글꼴 · 밀도 ───────────────────────────
+   화면 전체의 색은 `--c-*` 채널 하나를 거칩니다. 설정에서 색감 테마를 고르면
+   `html[data-theme]` 아래의 값이 바뀌어 바탕·선·글자·포인트 색이 함께 바뀝니다.
+   파스텔(`--pastel-*`)은 프로젝트 카드·점 색으로, 열 가지가 서로 구분되도록
+   테마마다 조금씩 다른 톤을 씁니다. */
+
 :root {
-  --canvas: #ffffff;
-  --ink: #1f1d1a;
-  /* A18: 설정의 글자 크기 배율 — 글자 크기를 준 모든 클래스가 이 값을 곱해 씁니다. */
-  --fs: 1;
+  --c-white: 255 255 255;
+  --c-black: 0 0 0;
+  --c-paper-50: 255 255 255;
+  --c-paper-100: 255 255 255;
+  --c-paper-200: 246 244 240;
+  --c-paper-300: 220 215 206;
+  --c-paper-400: 186 179 168;
+  --c-paper-500: 141 134 123;
+  --c-ink-900: 31 29 26;
+  --c-ink-800: 38 36 31;
+  --c-ink-700: 59 55 48;
+  --c-ink-600: 75 70 62;
+  --c-ink-500: 92 86 77;
+  --c-ink-400: 110 104 94;
+  --c-ink-300: 155 148 138;
+  --c-ink-200: 214 209 200;
+  --c-line: 217 212 203;
+  --c-line-soft: 230 225 217;
+  --c-line-strong: 179 172 161;
+  --c-accent-50: 251 245 242;
+  --c-accent-100: 247 222 210;
+  --c-accent-200: 238 196 180;
+  --c-accent-300: 214 176 163;
+  --c-accent-400: 191 145 130;
+  --c-accent-500: 168 122 105;
+  --c-accent-600: 127 83 66;
+  --c-accent-700: 117 81 69;
+  --c-sage-50: 244 246 241;
+  --c-sage-100: 227 237 215;
+  --c-sage-200: 203 218 184;
+  --c-sage-300: 176 193 157;
+  --c-sage-400: 141 165 120;
+  --c-sage-500: 113 138 93;
+  --c-sage-600: 79 106 63;
+  --c-dusk-100: 231 225 239;
+  --c-dusk-300: 191 178 209;
+  --c-dusk-500: 141 130 163;
+  --c-dusk-600: 101 91 133;
+  --c-binder-ink: 63 72 84;
+  --c-binder-sat: 78 117 147;
+  --c-binder-sun: 168 105 95;
+  --c-sky-50: 243 246 248;
+  --c-sky-100: 223 234 241;
+  --c-sky-200: 195 216 228;
+  --c-sky-500: 118 150 170;
+  --c-sky-600: 79 114 134;
+  --c-sky-700: 74 104 121;
+  --c-blue-50: 243 246 248;
+  --c-blue-100: 229 236 241;
+  --c-blue-200: 203 218 227;
+  --c-blue-500: 118 150 170;
+  --c-blue-600: 92 125 145;
+  --c-blue-700: 74 104 121;
+  --c-rose-50: 251 244 243;
+  --c-rose-100: 247 226 222;
+  --c-rose-200: 238 205 198;
+  --c-rose-300: 215 170 162;
+  --c-rose-400: 192 141 132;
+  --c-rose-500: 168 111 102;
+  --c-rose-600: 143 90 82;
+  --c-rose-700: 117 73 64;
+  --c-red-50: 251 244 243;
+  --c-red-100: 246 231 229;
+  --c-red-200: 236 211 207;
+  --c-red-300: 217 172 165;
+  --c-red-400: 196 139 131;
+  --c-red-500: 169 107 98;
+  --c-red-600: 143 84 76;
+  --c-amber-50: 250 246 238;
+  --c-amber-100: 244 230 205;
+  --c-amber-200: 231 209 168;
+  --c-amber-300: 211 188 147;
+  --c-amber-400: 191 161 115;
+  --c-amber-500: 169 138 92;
+  --c-amber-700: 125 96 47;
+  --c-amber-800: 111 87 51;
+  --pastel-rose-bg: #f8ecef;
+  --pastel-rose-border: #efd8de;
+  --pastel-rose-dot: #d98ea2;
+  --pastel-peach-bg: #f8efe7;
+  --pastel-peach-border: #eeddcd;
+  --pastel-peach-dot: #dda877;
+  --pastel-lemon-bg: #f7f3de;
+  --pastel-lemon-border: #eae3c3;
+  --pastel-lemon-dot: #cbb455;
+  --pastel-mint-bg: #eaf5ef;
+  --pastel-mint-border: #d7e9df;
+  --pastel-mint-dot: #6fbc98;
+  --pastel-sky-bg: #eaf2f8;
+  --pastel-sky-border: #d7e6f1;
+  --pastel-sky-dot: #79aede;
+  --pastel-lavender-bg: #f1edf8;
+  --pastel-lavender-border: #e4ddf0;
+  --pastel-lavender-dot: #9a86d4;
+  --pastel-sage-bg: #eef4ea;
+  --pastel-sage-border: #dde8d6;
+  --pastel-sage-dot: #93b47c;
+  --pastel-cream-bg: #f7f0e5;
+  --pastel-cream-border: #ece0cd;
+  --pastel-cream-dot: #c9a875;
+  --pastel-aqua-bg: #e9f4f4;
+  --pastel-aqua-border: #d6e8e7;
+  --pastel-aqua-dot: #6fbfba;
+  --pastel-lilac-bg: #f5edf5;
+  --pastel-lilac-border: #ecdfec;
+  --pastel-lilac-dot: #c48cc0;
+}
+
+html[data-theme="vivid"] {
+  --c-white: 255 255 255;
+  --c-black: 0 0 0;
+  --c-paper-50: 251 252 255;
+  --c-paper-100: 255 255 255;
+  --c-paper-200: 242 244 247;
+  --c-paper-300: 213 218 225;
+  --c-paper-400: 169 178 189;
+  --c-paper-500: 109 117 128;
+  --c-ink-900: 18 20 26;
+  --c-ink-800: 26 29 36;
+  --c-ink-700: 44 48 57;
+  --c-ink-600: 61 67 78;
+  --c-ink-500: 77 84 95;
+  --c-ink-400: 94 101 114;
+  --c-ink-300: 141 148 159;
+  --c-ink-200: 204 210 218;
+  --c-line: 207 213 221;
+  --c-line-soft: 227 232 238;
+  --c-line-strong: 154 164 177;
+  --c-accent-50: 255 242 238;
+  --c-accent-100: 255 223 214;
+  --c-accent-200: 255 194 176;
+  --c-accent-300: 251 154 128;
+  --c-accent-400: 242 112 80;
+  --c-accent-500: 221 82 51;
+  --c-accent-600: 189 63 37;
+  --c-accent-700: 152 48 27;
+  --c-sage-50: 239 249 239;
+  --c-sage-100: 216 242 217;
+  --c-sage-200: 179 229 184;
+  --c-sage-300: 136 212 147;
+  --c-sage-400: 87 186 104;
+  --c-sage-500: 58 158 77;
+  --c-sage-600: 44 129 62;
+  --c-dusk-100: 233 226 255;
+  --c-dusk-300: 185 166 255;
+  --c-dusk-500: 122 86 255;
+  --c-dusk-600: 98 64 226;
+  --c-binder-ink: 31 37 48;
+  --c-binder-sat: 47 111 158;
+  --c-binder-sun: 180 74 62;
+  --c-sky-50: 238 247 255;
+  --c-sky-100: 217 236 255;
+  --c-sky-200: 176 215 255;
+  --c-sky-500: 47 140 227;
+  --c-sky-600: 32 115 196;
+  --c-sky-700: 24 92 159;
+  --c-blue-50: 238 247 255;
+  --c-blue-100: 217 236 255;
+  --c-blue-200: 176 215 255;
+  --c-blue-500: 47 140 227;
+  --c-blue-600: 32 115 196;
+  --c-blue-700: 24 92 159;
+  --c-rose-50: 255 240 240;
+  --c-rose-100: 255 220 220;
+  --c-rose-200: 255 182 182;
+  --c-rose-300: 246 138 138;
+  --c-rose-400: 228 101 95;
+  --c-rose-500: 210 74 69;
+  --c-rose-600: 178 55 51;
+  --c-rose-700: 145 41 39;
+  --c-red-50: 255 240 240;
+  --c-red-100: 255 220 220;
+  --c-red-200: 255 182 182;
+  --c-red-300: 246 138 138;
+  --c-red-400: 228 101 95;
+  --c-red-500: 210 74 69;
+  --c-red-600: 178 55 51;
+  --c-amber-50: 255 248 230;
+  --c-amber-100: 255 238 192;
+  --c-amber-200: 255 219 135;
+  --c-amber-300: 255 196 79;
+  --c-amber-400: 240 164 37;
+  --c-amber-500: 212 134 12;
+  --c-amber-700: 165 98 0;
+  --c-amber-800: 130 77 0;
+  --pastel-rose-bg: #fde6ea;
+  --pastel-rose-border: #f9c7d1;
+  --pastel-rose-dot: #e0637f;
+  --pastel-peach-bg: #fdeade;
+  --pastel-peach-border: #f8d2b8;
+  --pastel-peach-dot: #e88a45;
+  --pastel-lemon-bg: #fcf5cf;
+  --pastel-lemon-border: #f4e79e;
+  --pastel-lemon-dot: #d4ab22;
+  --pastel-mint-bg: #dcf5e9;
+  --pastel-mint-border: #b7e8d3;
+  --pastel-mint-dot: #2fa875;
+  --pastel-sky-bg: #ddeeff;
+  --pastel-sky-border: #b8d9fb;
+  --pastel-sky-dot: #2f8de0;
+  --pastel-lavender-bg: #eae4fd;
+  --pastel-lavender-border: #d0c4f5;
+  --pastel-lavender-dot: #7647e0;
+  --pastel-sage-bg: #e2f3d9;
+  --pastel-sage-border: #c4e5b3;
+  --pastel-sage-dot: #5aa53f;
+  --pastel-cream-bg: #fbeed7;
+  --pastel-cream-border: #f0dcb9;
+  --pastel-cream-dot: #c08c33;
+  --pastel-aqua-bg: #d6f2f1;
+  --pastel-aqua-border: #aee5e3;
+  --pastel-aqua-dot: #16a8a1;
+  --pastel-lilac-bg: #f8e2f7;
+  --pastel-lilac-border: #f0c6ee;
+  --pastel-lilac-dot: #c05cb8;
+}
+
+html[data-theme="pastel"] {
+  --c-white: 255 254 251;
+  --c-black: 0 0 0;
+  --c-paper-50: 255 252 246;
+  --c-paper-100: 255 254 251;
+  --c-paper-200: 247 241 232;
+  --c-paper-300: 228 217 202;
+  --c-paper-400: 197 183 163;
+  --c-paper-500: 154 140 122;
+  --c-ink-900: 51 44 35;
+  --c-ink-800: 59 51 42;
+  --c-ink-700: 75 67 56;
+  --c-ink-600: 91 82 70;
+  --c-ink-500: 107 97 83;
+  --c-ink-400: 124 113 99;
+  --c-ink-300: 168 156 140;
+  --c-ink-200: 222 212 199;
+  --c-line: 221 210 194;
+  --c-line-soft: 235 227 215;
+  --c-line-strong: 184 169 146;
+  --c-accent-50: 253 242 240;
+  --c-accent-100: 251 227 223;
+  --c-accent-200: 246 201 195;
+  --c-accent-300: 237 169 161;
+  --c-accent-400: 220 135 128;
+  --c-accent-500: 199 108 99;
+  --c-accent-600: 170 86 77;
+  --c-accent-700: 138 66 59;
+  --c-sage-50: 243 248 240;
+  --c-sage-100: 228 241 222;
+  --c-sage-200: 204 229 196;
+  --c-sage-300: 171 210 161;
+  --c-sage-400: 136 185 125;
+  --c-sage-500: 109 159 98;
+  --c-sage-600: 87 132 78;
+  --c-dusk-100: 240 234 247;
+  --c-dusk-300: 207 192 228;
+  --c-dusk-500: 155 134 184;
+  --c-dusk-600: 130 105 159;
+  --c-binder-ink: 74 85 104;
+  --c-binder-sat: 107 143 168;
+  --c-binder-sun: 180 124 114;
+  --c-sky-50: 241 247 251;
+  --c-sky-100: 225 238 247;
+  --c-sky-200: 199 221 235;
+  --c-sky-500: 123 166 199;
+  --c-sky-600: 95 141 174;
+  --c-sky-700: 76 120 150;
+  --c-blue-50: 241 247 251;
+  --c-blue-100: 225 238 247;
+  --c-blue-200: 199 221 235;
+  --c-blue-500: 123 166 199;
+  --c-blue-600: 95 141 174;
+  --c-blue-700: 76 120 150;
+  --c-rose-50: 253 243 242;
+  --c-rose-100: 250 229 227;
+  --c-rose-200: 243 204 202;
+  --c-rose-300: 228 167 162;
+  --c-rose-400: 213 132 126;
+  --c-rose-500: 192 109 102;
+  --c-rose-600: 164 85 79;
+  --c-rose-700: 135 68 63;
+  --c-red-50: 253 243 242;
+  --c-red-100: 250 229 227;
+  --c-red-200: 243 204 202;
+  --c-red-300: 228 167 162;
+  --c-red-400: 213 132 126;
+  --c-red-500: 192 109 102;
+  --c-red-600: 164 85 79;
+  --c-amber-50: 253 247 236;
+  --c-amber-100: 248 237 214;
+  --c-amber-200: 240 220 180;
+  --c-amber-300: 228 196 134;
+  --c-amber-400: 212 169 93;
+  --c-amber-500: 189 144 65;
+  --c-amber-700: 148 107 41;
+  --c-amber-800: 120 88 33;
+  --pastel-rose-bg: #f9e9e7;
+  --pastel-rose-border: #f0d2ce;
+  --pastel-rose-dot: #d98a80;
+  --pastel-peach-bg: #faece0;
+  --pastel-peach-border: #f1d8c2;
+  --pastel-peach-dot: #dda26a;
+  --pastel-lemon-bg: #f7f1d7;
+  --pastel-lemon-border: #ebe2be;
+  --pastel-lemon-dot: #c9b25c;
+  --pastel-mint-bg: #e9f3ec;
+  --pastel-mint-border: #d5e7da;
+  --pastel-mint-dot: #7fbd9c;
+  --pastel-sky-bg: #eaf1f6;
+  --pastel-sky-border: #d7e4ee;
+  --pastel-sky-dot: #8aaec9;
+  --pastel-lavender-bg: #f0ecf7;
+  --pastel-lavender-border: #e2d9ef;
+  --pastel-lavender-dot: #a290c4;
+  --pastel-sage-bg: #eef2e8;
+  --pastel-sage-border: #dfe7d5;
+  --pastel-sage-dot: #9bb785;
+  --pastel-cream-bg: #f8f1e6;
+  --pastel-cream-border: #eee2d2;
+  --pastel-cream-dot: #cba97a;
+  --pastel-aqua-bg: #e8f3f2;
+  --pastel-aqua-border: #d5e7e6;
+  --pastel-aqua-dot: #83bfbb;
+  --pastel-lilac-bg: #f5edf4;
+  --pastel-lilac-border: #ecdfeb;
+  --pastel-lilac-dot: #c496bf;
+}
+
+html[data-theme="sage"] {
+  --c-white: 252 253 249;
+  --c-black: 0 0 0;
+  --c-paper-50: 247 250 243;
+  --c-paper-100: 252 253 249;
+  --c-paper-200: 238 242 232;
+  --c-paper-300: 212 221 201;
+  --c-paper-400: 177 188 158;
+  --c-paper-500: 124 138 106;
+  --c-ink-900: 30 42 32;
+  --c-ink-800: 36 49 36;
+  --c-ink-700: 51 65 48;
+  --c-ink-600: 68 82 63;
+  --c-ink-500: 85 99 78;
+  --c-ink-400: 103 117 95;
+  --c-ink-300: 150 163 139;
+  --c-ink-200: 204 213 195;
+  --c-line: 205 214 194;
+  --c-line-soft: 224 231 216;
+  --c-line-strong: 167 179 148;
+  --c-accent-50: 251 244 238;
+  --c-accent-100: 245 230 216;
+  --c-accent-200: 236 208 184;
+  --c-accent-300: 220 176 142;
+  --c-accent-400: 201 140 100;
+  --c-accent-500: 176 112 72;
+  --c-accent-600: 145 88 54;
+  --c-accent-700: 116 68 42;
+  --c-sage-50: 242 247 238;
+  --c-sage-100: 226 238 216;
+  --c-sage-200: 203 224 187;
+  --c-sage-300: 176 207 155;
+  --c-sage-400: 147 184 124;
+  --c-sage-500: 120 156 98;
+  --c-sage-600: 94 130 80;
+  --c-dusk-100: 232 235 227;
+  --c-dusk-300: 192 200 181;
+  --c-dusk-500: 136 149 119;
+  --c-dusk-600: 111 125 96;
+  --c-binder-ink: 61 74 58;
+  --c-binder-sat: 77 122 104;
+  --c-binder-sun: 165 98 79;
+  --c-sky-50: 239 245 240;
+  --c-sky-100: 223 234 226;
+  --c-sky-200: 194 214 201;
+  --c-sky-500: 109 148 130;
+  --c-sky-600: 85 122 104;
+  --c-sky-700: 67 99 83;
+  --c-blue-50: 239 245 240;
+  --c-blue-100: 223 234 226;
+  --c-blue-200: 194 214 201;
+  --c-blue-500: 109 148 130;
+  --c-blue-600: 85 122 104;
+  --c-blue-700: 67 99 83;
+  --c-rose-50: 251 243 240;
+  --c-rose-100: 245 228 222;
+  --c-rose-200: 235 205 196;
+  --c-rose-300: 217 169 155;
+  --c-rose-400: 201 139 121;
+  --c-rose-500: 177 112 94;
+  --c-rose-600: 148 89 74;
+  --c-rose-700: 120 70 57;
+  --c-red-50: 251 243 240;
+  --c-red-100: 245 228 222;
+  --c-red-200: 235 205 196;
+  --c-red-300: 217 169 155;
+  --c-red-400: 201 139 121;
+  --c-red-500: 177 112 94;
+  --c-red-600: 148 89 74;
+  --c-amber-50: 249 245 232;
+  --c-amber-100: 242 234 208;
+  --c-amber-200: 230 216 171;
+  --c-amber-300: 211 191 124;
+  --c-amber-400: 191 165 87;
+  --c-amber-500: 166 139 63;
+  --c-amber-700: 130 106 44;
+  --c-amber-800: 105 85 31;
+  --pastel-rose-bg: #f6e9e6;
+  --pastel-rose-border: #ead3cd;
+  --pastel-rose-dot: #c07f6f;
+  --pastel-peach-bg: #f7ece1;
+  --pastel-peach-border: #ebd9c7;
+  --pastel-peach-dot: #c79767;
+  --pastel-lemon-bg: #f4f1da;
+  --pastel-lemon-border: #e5e0bf;
+  --pastel-lemon-dot: #b8a855;
+  --pastel-mint-bg: #e6f0e7;
+  --pastel-mint-border: #d1e3d5;
+  --pastel-mint-dot: #6f9f7e;
+  --pastel-sky-bg: #e8eff0;
+  --pastel-sky-border: #d3e2e3;
+  --pastel-sky-dot: #729a9b;
+  --pastel-lavender-bg: #edeef0;
+  --pastel-lavender-border: #dde0e3;
+  --pastel-lavender-dot: #8f96a0;
+  --pastel-sage-bg: #e9f0e0;
+  --pastel-sage-border: #d6e3c8;
+  --pastel-sage-dot: #85a566;
+  --pastel-cream-bg: #f5efe2;
+  --pastel-cream-border: #e9dfcb;
+  --pastel-cream-dot: #bda677;
+  --pastel-aqua-bg: #e5f1ee;
+  --pastel-aqua-border: #d0e4df;
+  --pastel-aqua-dot: #6ea59a;
+  --pastel-lilac-bg: #f2edf0;
+  --pastel-lilac-border: #e7dde2;
+  --pastel-lilac-dot: #b28da2;
+}
+
+html[data-theme="mono"] {
+  --c-white: 255 255 255;
+  --c-black: 0 0 0;
+  --c-paper-50: 250 250 251;
+  --c-paper-100: 255 255 255;
+  --c-paper-200: 244 244 245;
+  --c-paper-300: 222 222 226;
+  --c-paper-400: 182 182 189;
+  --c-paper-500: 124 124 133;
+  --c-ink-900: 12 12 14;
+  --c-ink-800: 21 21 24;
+  --c-ink-700: 38 38 43;
+  --c-ink-600: 58 58 65;
+  --c-ink-500: 76 76 84;
+  --c-ink-400: 95 95 104;
+  --c-ink-300: 145 145 155;
+  --c-ink-200: 211 211 217;
+  --c-line: 213 213 219;
+  --c-line-soft: 230 230 234;
+  --c-line-strong: 168 168 177;
+  --c-accent-50: 245 243 244;
+  --c-accent-100: 236 235 237;
+  --c-accent-200: 222 218 221;
+  --c-accent-300: 195 188 192;
+  --c-accent-400: 162 149 155;
+  --c-accent-500: 132 118 124;
+  --c-accent-600: 105 93 99;
+  --c-accent-700: 82 72 77;
+  --c-sage-50: 240 244 240;
+  --c-sage-100: 226 233 227;
+  --c-sage-200: 204 216 206;
+  --c-sage-300: 169 189 174;
+  --c-sage-400: 127 154 132;
+  --c-sage-500: 100 125 104;
+  --c-sage-600: 79 101 84;
+  --c-dusk-100: 239 237 244;
+  --c-dusk-300: 203 196 218;
+  --c-dusk-500: 139 130 164;
+  --c-dusk-600: 110 101 135;
+  --c-binder-ink: 43 43 48;
+  --c-binder-sat: 74 106 134;
+  --c-binder-sun: 138 90 82;
+  --c-sky-50: 241 244 247;
+  --c-sky-100: 228 233 239;
+  --c-sky-200: 205 215 225;
+  --c-sky-500: 107 139 166;
+  --c-sky-600: 82 114 137;
+  --c-sky-700: 66 92 112;
+  --c-blue-50: 241 244 247;
+  --c-blue-100: 228 233 239;
+  --c-blue-200: 205 215 225;
+  --c-blue-500: 107 139 166;
+  --c-blue-600: 82 114 137;
+  --c-blue-700: 66 92 112;
+  --c-rose-50: 247 242 242;
+  --c-rose-100: 239 228 227;
+  --c-rose-200: 226 207 205;
+  --c-rose-300: 201 170 166;
+  --c-rose-400: 171 133 128;
+  --c-rose-500: 141 106 102;
+  --c-rose-600: 113 83 79;
+  --c-rose-700: 91 66 63;
+  --c-red-50: 247 242 242;
+  --c-red-100: 239 228 227;
+  --c-red-200: 226 207 205;
+  --c-red-300: 201 170 166;
+  --c-red-400: 171 133 128;
+  --c-red-500: 141 106 102;
+  --c-red-600: 113 83 79;
+  --c-amber-50: 246 244 236;
+  --c-amber-100: 236 232 216;
+  --c-amber-200: 219 212 184;
+  --c-amber-300: 193 181 141;
+  --c-amber-400: 166 151 106;
+  --c-amber-500: 139 125 82;
+  --c-amber-700: 106 94 58;
+  --c-amber-800: 85 75 46;
+  --pastel-rose-bg: #f6f0f0;
+  --pastel-rose-border: #e6dcdc;
+  --pastel-rose-dot: #8c5d5d;
+  --pastel-peach-bg: #f6f1ec;
+  --pastel-peach-border: #e6ddd4;
+  --pastel-peach-dot: #8f7050;
+  --pastel-lemon-bg: #f5f3ea;
+  --pastel-lemon-border: #e5e1d2;
+  --pastel-lemon-dot: #877f45;
+  --pastel-mint-bg: #eef3ef;
+  --pastel-mint-border: #dbe5dd;
+  --pastel-mint-dot: #4f7d63;
+  --pastel-sky-bg: #eef1f5;
+  --pastel-sky-border: #dbe1e8;
+  --pastel-sky-dot: #4f6f8c;
+  --pastel-lavender-bg: #f1f0f5;
+  --pastel-lavender-border: #e0dee8;
+  --pastel-lavender-dot: #6a6187;
+  --pastel-sage-bg: #eff2ea;
+  --pastel-sage-border: #dfe4d6;
+  --pastel-sage-dot: #5d7350;
+  --pastel-cream-bg: #f5f1e9;
+  --pastel-cream-border: #e6dfd1;
+  --pastel-cream-dot: #8a7550;
+  --pastel-aqua-bg: #ecf3f2;
+  --pastel-aqua-border: #d9e5e3;
+  --pastel-aqua-dot: #4a7d78;
+  --pastel-lilac-bg: #f4f0f3;
+  --pastel-lilac-border: #e5dde2;
+  --pastel-lilac-dot: #835f79;
+}
+
+:root {
+  /* 글꼴 — 설정에서 고른 글꼴이 이 세 값을 바꿉니다. */
+  --font-app: "Pretendard Variable", Pretendard, "Noto Sans KR", -apple-system, BlinkMacSystemFont, system-ui, Roboto, "Apple SD Gothic Neo", sans-serif;
+  --font-serif: "Noto Serif KR", Nanum Myeongjo, "Pretendard Variable", serif;
+  --font-hand: Gaegu, "Nanum Pen Script", "Pretendard Variable", sans-serif;
+  --font-title: var(--font-app);
+  /* 속지 줄 간격 — 글자 line-height 와 정확히 같은 값입니다(줄노트 1:1). */
+  --rule-scale: 1;
+  --doc-rule: calc(28px * var(--fs) * var(--rule-scale));
+  --doc-grid: calc(24px * var(--fs) * var(--rule-scale));
+  /* 밀도 — 여유롭게(1) / 촘촘히(0.82). */
+  --density: 1;
+  /* 속지 가로선 — 테마의 종이색을 조금 진하게 씁니다. */
+  --paper-line: rgb(var(--c-paper-300) / 0.55);
+  --canvas: rgb(var(--c-white));
+  --ink: rgb(var(--c-ink-900));
   color-scheme: light;
+}
+
+/* 글꼴 세 가지 — 화면 전체 글꼴이 실제로 바뀝니다. */
+html[data-font="serif"] {
+  --font-app: var(--font-serif);
+  --font-title: var(--font-serif);
+  font-family: var(--font-serif);
+}
+html[data-font="hand"] {
+  --font-app: var(--font-hand);
+  --font-title: var(--font-hand);
+  letter-spacing: -0.01em;
+}
+html[data-font="serif"] body,
+html[data-font="hand"] body {
+  font-family: var(--font-app);
+}
+
+/* 밀도 — 여유롭게가 기본, 촘촘히는 여백과 행간을 함께 줄입니다. */
+html[data-density="compact"] {
+  --density: 0.82;
+  --rule-scale: 0.92;
+}
+html[data-density="compact"] body {
+  line-height: 1.45;
+}
+html[data-density="comfortable"] body {
+  line-height: 1.5;
+}
+/* 카드·날짜 칸·목록 줄의 세로 여백만 밀도에 따라 줄입니다(가로는 그대로). */
+html[data-density="compact"] [data-project-card],
+html[data-density="compact"] [data-archive-card],
+html[data-density="compact"] [data-month-cell],
+html[data-density="compact"] [data-binder-day] {
+  padding-top: calc(0.45rem);
+  padding-bottom: calc(0.4rem);
+}
+html[data-density="compact"] [data-project-card] li,
+html[data-density="compact"] [data-week-task],
+html[data-density="compact"] [data-day-list-event],
+html[data-density="compact"] [data-week-event] {
+  margin-top: 1px;
+  margin-bottom: 0;
+}
+:root {
+  --fs: 1;
 }
 
 @layer base {
@@ -18,7 +626,8 @@
   }
 
   body {
-    @apply bg-white text-ink-900 antialiased;
+    @apply text-ink-900 antialiased;
+    background-color: rgb(var(--c-paper-50));
     font-family: theme("fontFamily.sans");
     font-feature-settings: "tnum" 0;
   }
@@ -170,7 +779,7 @@
   }
 
   .serif {
-    font-family: theme("fontFamily.serif");
+    font-family: var(--font-title);
     letter-spacing: -0.02em;
   }
 
@@ -284,8 +893,11 @@
   }
 
   /* binder: click a day and type — no ruled lines, just a caret */
+  /* A48: 줄노트의 가로선과 글자 줄이 같은 간격이 되도록 line-height 를 `--doc-rule` 로
+     맞춥니다. 배경(paper.ts)도 같은 값을 써서 글자가 선을 밟지 않고 줄 위에 얹힙니다. */
   .binder-input {
-    @apply w-full resize-none border-none bg-transparent p-0 text-[calc(15px*var(--fs))] leading-[1.6] text-ink-900 outline-none placeholder:text-ink-300;
+    @apply w-full resize-none border-none bg-transparent p-0 text-[calc(15px*var(--fs))] text-ink-900 outline-none placeholder:text-ink-300;
+    line-height: var(--doc-rule);
   }
 }
 

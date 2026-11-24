@@ -1,153 +1,134 @@
 import type { Config } from "tailwindcss";
 
+/** 테마가 바꾸는 색 채널 — `globals.css` 의 `--c-*` 변수를 그대로 씁니다. */
+const c = (name: string) => `rgb(var(--c-${name}) / <alpha-value>)`;
+
 const config: Config = {
   content: ["./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
       fontFamily: {
-        /* One Korean stack everywhere — Pretendard Variable first, Noto Sans KR fallback. */
-        sans: [
-          "Pretendard Variable",
-          "Pretendard",
-          "Noto Sans KR",
-          "-apple-system",
-          "BlinkMacSystemFont",
-          "system-ui",
-          "Roboto",
-          "Apple SD Gothic Neo",
-          "sans-serif",
-        ],
-        serif: [
-          "Pretendard Variable",
-          "Pretendard",
-          "Noto Sans KR",
-          "-apple-system",
-          "BlinkMacSystemFont",
-          "system-ui",
-          "sans-serif",
-        ],
-        display: [
-          "Pretendard Variable",
-          "Pretendard",
-          "Noto Sans KR",
-          "-apple-system",
-          "BlinkMacSystemFont",
-          "system-ui",
-          "sans-serif",
-        ],
+        /* A48: 설정의 글꼴 세 가지 — 고딕(Pretendard)·명조(Noto Serif KR)·손글씨(Gaegu).
+           `--font-app` 은 테마가 아니라 글꼴 설정이 바꾸는 값입니다. */
+        sans: ["var(--font-app)", "Pretendard Variable", "Pretendard", "Noto Sans KR", "-apple-system", "BlinkMacSystemFont", "system-ui", "Roboto", "Apple SD Gothic Neo", "sans-serif"],
+        serif: ["var(--font-serif)", "Noto Serif KR", "Nanum Myeongjo", "Pretendard Variable", "serif"],
+        display: ["var(--font-app)", "Pretendard Variable", "Pretendard", "Noto Sans KR", "system-ui", "sans-serif"],
+        hand: ["var(--font-hand)", "Gaegu", "Nanum Pen Script", "Pretendard Variable", "sans-serif"],
         mono: ["ui-monospace", "SFMono-Regular", "Menlo", "Consolas", "monospace"],
       },
       colors: {
-        /* A46: 따뜻한 뉴트럴 + 톤다운(더스티 파스텔) 팔레트.
-           흰 바탕과 얇은 선은 그대로 두고, 색이 들어가는 곳만 채도를 낮춰 차분하게 맞췄습니다.
-           글자 대비는 유지했습니다(ink-400 ≈ 5.5:1 on white). */
+        /* A48: 색은 모두 CSS 변수(`globals.css` 의 테마 블록)를 거칩니다 — 설정에서
+           고른 색감 테마 다섯 가지가 화면 전체(바탕·선·글자·포인트)를 바꿉니다.
+           알파 표기(bg-ink-900/15)도 그대로 동작하도록 rgb 채널 + <alpha-value> 로 씁니다. */
+        white: c("white"),
+        black: c("black"),
         /* neutral surfaces — warm off-white canvas, warm gray support */
         paper: {
-          50: "#ffffff",
-          100: "#ffffff",
-          200: "#f6f4f0",
-          300: "#dcd7ce",
-          400: "#bab3a8",
-          500: "#8d867b",
+          50: c("paper-50"),
+          100: c("paper-100"),
+          200: c("paper-200"),
+          300: c("paper-300"),
+          400: c("paper-400"),
+          500: c("paper-500"),
         },
-        /* text scale — body copy stays #1f1d1a–#3b3730, meta at least #6e685e */
+        /* text scale — body copy stays deep, meta readable */
         ink: {
-          900: "#1f1d1a",
-          800: "#26241f",
-          700: "#3b3730",
-          600: "#4b463e",
-          500: "#5c564d",
-          400: "#6e685e",
-          300: "#9b948a",
-          200: "#d6d1c8",
+          900: c("ink-900"),
+          800: c("ink-800"),
+          700: c("ink-700"),
+          600: c("ink-600"),
+          500: c("ink-500"),
+          400: c("ink-400"),
+          300: c("ink-300"),
+          200: c("ink-200"),
         },
-        /* one soft warm hairline for every table-like border */
+        /* one soft hairline for every table-like border */
         line: {
-          DEFAULT: "#d9d4cb",
-          soft: "#e6e1d9",
-          strong: "#b3aca1",
+          DEFAULT: c("line"),
+          soft: c("line-soft"),
+          strong: c("line-strong"),
         },
         /* primary accent — dusty rose (events, work) */
         accent: {
-          50: "#fbf5f2",
-          100: "#f5e7e1",
-          200: "#e9d2c9",
-          300: "#d6b0a3",
-          400: "#bf9182",
-          500: "#a87a69",
-          600: "#8d6354",
-          700: "#755145",
+          50: c("accent-50"),
+          100: c("accent-100"),
+          200: c("accent-200"),
+          300: c("accent-300"),
+          400: c("accent-400"),
+          500: c("accent-500"),
+          600: c("accent-600"),
+          700: c("accent-700"),
         },
         /* routines — soft sage */
         sage: {
-          50: "#f4f6f1",
-          100: "#e7eddd",
-          200: "#d2ddc4",
-          300: "#b0c19d",
-          400: "#8da578",
-          500: "#718a5d",
-          600: "#5c7349",
+          50: c("sage-50"),
+          100: c("sage-100"),
+          200: c("sage-200"),
+          300: c("sage-300"),
+          400: c("sage-400"),
+          500: c("sage-500"),
+          600: c("sage-600"),
         },
         /* study — muted violet */
         dusk: {
-          100: "#ebe7f0",
-          300: "#c6bcd4",
-          500: "#8d82a3",
-          600: "#716890",
+          100: c("dusk-100"),
+          300: c("dusk-300"),
+          500: c("dusk-500"),
+          600: c("dusk-600"),
         },
-        /* A24 → A42: 바인더 주간 날짜의 먹색·파랑·빨강. A46 에서 주말 색도 같은 결로 낮췄습니다. */
+        /* binder weekly ink · saturday · sunday */
         binder: {
-          ink: "#3f4854",
-          sat: "#4e7593",
-          sun: "#a8695f",
+          ink: c("binder-ink"),
+          sat: c("binder-sat"),
+          sun: c("binder-sun"),
         },
         /* cool dusty blue for all-day / focus bands */
         sky: {
-          50: "#f3f6f8",
-          100: "#e5ecf1",
-          200: "#cbdae3",
-          500: "#7696aa",
-          600: "#5c7d91",
-          700: "#4a6879",
+          50: c("sky-50"),
+          100: c("sky-100"),
+          200: c("sky-200"),
+          500: c("sky-500"),
+          600: c("sky-600"),
+          700: c("sky-700"),
         },
         blue: {
-          50: "#f3f6f8",
-          100: "#e5ecf1",
-          200: "#cbdae3",
-          500: "#7696aa",
-          600: "#5c7d91",
-          700: "#4a6879",
+          50: c("blue-50"),
+          100: c("blue-100"),
+          200: c("blue-200"),
+          500: c("blue-500"),
+          600: c("blue-600"),
+          700: c("blue-700"),
         },
-        /* danger / 주말 강조 — 낮은 채도의 로즈 */
+        /* danger / 주말 강조 */
         rose: {
-          50: "#fbf4f3",
-          100: "#f4e6e3",
-          200: "#e9d0cb",
-          300: "#d7aaa2",
-          400: "#c08d84",
-          500: "#a86f66",
-          600: "#8f5a52",
-          700: "#754940",
+          50: c("rose-50"),
+          100: c("rose-100"),
+          200: c("rose-200"),
+          300: c("rose-300"),
+          400: c("rose-400"),
+          500: c("rose-500"),
+          600: c("rose-600"),
+          700: c("rose-700"),
         },
         red: {
-          50: "#fbf4f3",
-          100: "#f6e7e5",
-          200: "#ecd3cf",
-          300: "#d9aca5",
-          400: "#c48b83",
-          500: "#a96b62",
-          600: "#8f544c",
+          50: c("red-50"),
+          100: c("red-100"),
+          200: c("red-200"),
+          300: c("red-300"),
+          400: c("red-400"),
+          500: c("red-500"),
+          600: c("red-600"),
         },
         /* 대기·주의 — 따뜻한 샌드 */
         amber: {
-          50: "#faf6ee",
-          100: "#f3ead9",
-          200: "#e6d6b8",
-          300: "#d3bc93",
-          400: "#bfa173",
-          500: "#a98a5c",
-          700: "#8a6d41",
-          800: "#6f5733",
+          50: c("amber-50"),
+          100: c("amber-100"),
+          200: c("amber-200"),
+          300: c("amber-300"),
+          400: c("amber-400"),
+          500: c("amber-500"),
+          700: c("amber-700"),
+          800: c("amber-800"),
         },
       },
       borderRadius: {

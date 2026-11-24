@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useData } from "@/state/store";
-import { useSettings } from "@/state/settings";
+import { useSettings, type ArchiveViewKey } from "@/state/settings";
 import { useTabReset, useUi } from "@/state/ui";
 import { cn, truncate } from "@/lib/utils";
 import { formatShort, todayISO, weekdayKo } from "@/lib/date";
@@ -28,7 +28,9 @@ interface MarqueeRect {
 
 export function ArchiveTab() {
   const { data, create, update, destroy } = useData();
-  const { settings } = useSettings();
+  const { settings, set: setSetting } = useSettings();
+  /** A48: 아카이브 보기 — 설정(카드형/한 줄 목록형)을 그대로 따릅니다. */
+  const view = settings.archiveView;
   const { focus, clearFocus, notify } = useUi();
   const dnd = useDnd();
 
@@ -398,7 +400,32 @@ export function ArchiveTab() {
         >
           <TrashIcon size={11} /> {trashMode ? "휴지통" : "휴지통"}
         </button>
-        <span className="ml-auto">{items.length}개</span>
+        <div className="ml-auto flex items-center gap-2">
+          {/* A48: 카드형 ↔ 한 줄 목록형 — 설정과 같은 값을 씁니다. */}
+          <div className="flex items-center gap-0.5 rounded-full bg-paper-200 p-0.5" data-archive-view-toggle="true" role="group" aria-label="보기 방식">
+            {(
+              [
+                { value: "card", label: "카드" },
+                { value: "list", label: "목록" },
+              ] as { value: ArchiveViewKey; label: string }[]
+            ).map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                data-archive-view={option.value}
+                aria-pressed={view === option.value}
+                onClick={() => setSetting("archiveView", option.value)}
+                className={cn(
+                  "rounded-full px-2 py-0.5 text-[calc(13.5px*var(--fs))] font-medium transition",
+                  view === option.value ? "bg-white text-ink-900 shadow-[0_1px_2px_rgba(17,24,39,0.12)]" : "text-ink-500 hover:text-ink-800",
+                )}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+          <span>{items.length}개</span>
+        </div>
       </div>
 
       {items.length === 0 ? (
@@ -447,18 +474,144 @@ export function ArchiveTab() {
         <div
           ref={gridRef}
           data-archive-grid
+          data-archive-current-view={view}
           onPointerDown={onGridPointerDown}
           onPointerMove={onGridPointerMove}
           onPointerUp={endMarquee}
           onPointerCancel={endMarquee}
           className={cn(
-            "mt-3 grid select-none grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6",
+            "mt-3 select-none",
+            view === "card"
+              ? "grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6"
+              : "flex flex-col gap-1.5",
             selectMode && "pb-24",
           )}
         >
           {items.map((item) => {
             const tone = archiveTone(item.kind);
             const isSelected = selected.includes(item.id);
+            /* A48: 한 줄 목록형 — 제목·분류·날짜·태그·별점·고정·삭제를 한 줄에. */
+            if (view === "list") {
+              return (
+                <article
+                  key={item.id}
+                  data-archive-card={item.id}
+                  data-archive-row={item.id}
+                  data-archive-selected={isSelected ? "true" : undefined}
+                  onPointerDown={(event) => {
+                    const target = event.target as HTMLElement | null;
+                    if (target?.closest("button, a, input, textarea, select")) return;
+                    if (selectMode) {
+                      event.preventDefault();
+                      toggleSelected(item.id);
+                      return;
+                    }
+                    startCardDrag(event, item);
+                  }}
+                  className={cn(
+                    "group relative flex items-center gap-2 rounded-xl border px-2.5 py-2 transition",
+                    isSelected
+                      ? "border-ink-900 bg-paper-200/70 ring-1 ring-ink-900"
+                      : item.favorite
+                        ? "border-ink-900/25 bg-paper-100/60 hover:border-paper-400"
+                        : "border-paper-300 bg-white hover:border-paper-400",
+                  )}
+                >
+                  <button
+                    type="button"
+                    data-archive-row-check={item.id}
+                    aria-label={isSelected ? `${item.title} 선택 해제` : `${item.title} 선택`}
+                    aria-pressed={isSelected}
+                    onClick={() => toggleSelected(item.id)}
+                    className={cn(
+                      "flex h-[17px] w-[17px] flex-none items-center justify-center rounded-[4px] border text-[calc(10px*var(--fs))] transition",
+                      isSelected ? "border-ink-900 bg-ink-900 text-white" : "border-paper-400 bg-white text-transparent hover:border-ink-400",
+                    )}
+                  >
+                    ✓
+                  </button>
+                  <span className={cn("h-2 w-2 flex-none rounded-full", tone.solid)} aria-hidden />
+                  <span className={cn("w-[3.1rem] flex-none text-[calc(13px*var(--fs))] font-medium", tone.text)}>{item.kind}</span>
+                  <button
+                    type="button"
+                    onClick={() => (selectMode ? toggleSelected(item.id) : setEditorId(item.id))}
+                    className="min-w-0 flex-1 truncate text-left text-[calc(15.5px*var(--fs))] font-medium text-ink-900"
+                  >
+                    {item.title}
+                  </button>
+                  {item.tags.length > 0 ? (
+                    <span className="hidden flex-none items-center gap-1 sm:flex">
+                      {item.tags.slice(0, 2).map((itemTag) => (
+                        <button
+                          key={itemTag}
+                          type="button"
+                          onClick={() => setTag(itemTag)}
+                          className="rounded-full bg-paper-200/70 px-1.5 py-0.5 text-[calc(12.5px*var(--fs))] text-ink-500 hover:bg-paper-300/60"
+                        >
+                          #{itemTag}
+                        </button>
+                      ))}
+                    </span>
+                  ) : null}
+                  <span className="hidden flex-none sm:block">
+                    <StarRating value={item.rating} size={11} onChange={(value) => void update("archive", item.id, { rating: value })} />
+                  </span>
+                  <span className="hidden w-[4.6rem] flex-none text-right text-[calc(13px*var(--fs))] tabular-nums text-ink-400 md:block">
+                    {item.date ? `${formatShort(item.date)} ${weekdayKo(item.date)}` : ""}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      void update("archive", item.id, { favorite: !item.favorite }, { silent: true }).then((ok) => {
+                        if (ok) notify(item.favorite ? "상단 고정을 해제했습니다" : "맨 위에 고정했습니다", "success");
+                      })
+                    }
+                    aria-pressed={item.favorite}
+                    aria-label={item.favorite ? `${item.title} 상단 고정 해제` : `${item.title} 상단 고정`}
+                    title={item.favorite ? "상단 고정 해제" : "상단 고정"}
+                    className={cn(
+                      "flex h-6 w-6 flex-none items-center justify-center rounded-full transition",
+                      item.favorite ? "bg-ink-900 text-white" : "text-ink-300 hover:bg-paper-200 hover:text-ink-700",
+                    )}
+                  >
+                    <PinIcon size={12} filled={item.favorite} />
+                  </button>
+                  {trashMode ? (
+                    <span className="flex flex-none items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void update("archive", item.id, { trash: false }).then((ok) => {
+                            if (ok) notify(`‘${item.title}’을(를) 복원했습니다.`, "success");
+                          });
+                        }}
+                        className="rounded px-1.5 py-0.5 text-[calc(13px*var(--fs))] text-ink-500 hover:bg-paper-200"
+                      >
+                        복원
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void destroy("archive", item.id).then(() => notify(`‘${item.title}’을(를) 완전히 삭제했습니다.`, "success"));
+                        }}
+                        className="rounded px-1.5 py-0.5 text-[calc(13px*var(--fs))] text-red-500 hover:bg-red-50"
+                      >
+                        완전 삭제
+                      </button>
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => void update("archive", item.id, { trash: true })}
+                      className="trash-btn flex h-6 w-6 flex-none items-center justify-center rounded-full text-ink-300 transition hover:bg-paper-200 hover:text-red-500"
+                      aria-label={`${item.title} 휴지통으로`}
+                    >
+                      <TrashIcon size={12} />
+                    </button>
+                  )}
+                </article>
+              );
+            }
             return (
               <article
                 key={item.id}

@@ -19,6 +19,7 @@ import {
   WEATHER_STAMPS,
   blockText,
   colorNameOf,
+  hasStamp,
   cloneDoc,
   highlightHex,
   newBlockId,
@@ -258,6 +259,12 @@ export function RichDocEditor({
   const clearColor = () => {
     command("foreColor", "#111827");
   };
+  /** A48: 고른 글자에 링크를 겁니다 — 주소는 한 번만 물어봅니다. */
+  const addLink = () => {
+    const url = window.prompt("링크 주소를 넣어 주세요", "https://");
+    if (!url || url.trim() === "https://") return;
+    command("createLink", url.trim());
+  };
 
   const setBlockType = (type: DocBlockType) => {
     if (!activeBlock) return;
@@ -371,9 +378,9 @@ export function RichDocEditor({
   return (
     <div className={cn("doc-editor", className)} data-doc-editor data-paper={paper}>
       {/* 스탬프 — 한 번 탭으로 기분·날씨를 찍습니다. */}
-      <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1" data-doc-stamp>
-        <div className="flex items-center gap-1">
-          <span className="text-[calc(13px*var(--fs))] text-ink-400">날씨</span>
+      <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1.5" data-doc-stamp>
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+          <span className="mr-0.5 flex-none whitespace-nowrap text-[calc(14px*var(--fs))] font-medium text-ink-400">날씨</span>
           {WEATHER_STAMPS.map((emoji) => (
             <button
               key={emoji}
@@ -384,7 +391,7 @@ export function RichDocEditor({
               data-tip={`날씨 ${emoji}`}
               onClick={() => setStamp("weather", emoji)}
               className={cn(
-                "flex h-6 w-6 items-center justify-center rounded-full text-[calc(14px*var(--fs))] transition",
+                "flex h-9 w-9 items-center justify-center rounded-full text-[calc(19px*var(--fs))] leading-none transition active:scale-95",
                 doc.stamp.weather === emoji ? "bg-ink-900/90 ring-1 ring-ink-900" : "bg-paper-200/70 hover:bg-paper-300",
               )}
             >
@@ -392,8 +399,8 @@ export function RichDocEditor({
             </button>
           ))}
         </div>
-        <div className="flex items-center gap-1">
-          <span className="text-[calc(13px*var(--fs))] text-ink-400">기분</span>
+        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+          <span className="mr-0.5 flex-none whitespace-nowrap text-[calc(14px*var(--fs))] font-medium text-ink-400">기분</span>
           {MOOD_STAMPS.map((emoji) => (
             <button
               key={emoji}
@@ -404,7 +411,7 @@ export function RichDocEditor({
               data-tip={`기분 ${emoji}`}
               onClick={() => setStamp("mood", emoji)}
               className={cn(
-                "flex h-6 w-6 items-center justify-center rounded-full text-[calc(14px*var(--fs))] transition",
+                "flex h-9 w-9 items-center justify-center rounded-full text-[calc(19px*var(--fs))] leading-none transition active:scale-95",
                 doc.stamp.mood === emoji ? "bg-ink-900/90 ring-1 ring-ink-900" : "bg-paper-200/70 hover:bg-paper-300",
               )}
             >
@@ -417,9 +424,9 @@ export function RichDocEditor({
       {/* 툴바 */}
       <div
         data-doc-toolbar
-        className="sticky top-0 z-10 mb-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 rounded-xl border border-paper-300 bg-white/95 px-1.5 py-1 backdrop-blur"
+        className="sticky top-0 z-10 mb-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 rounded-xl border border-paper-300 bg-white/95 px-2 py-1.5 backdrop-blur"
       >
-        <div className="flex items-center gap-0.5">
+        <div className="flex items-center gap-1">
           <ToolButton label="굵게" onClick={() => command("bold")} active={false} bold>
             B
           </ToolButton>
@@ -429,15 +436,18 @@ export function RichDocEditor({
           <ToolButton label="취소선" onClick={() => command("strikeThrough")} active={false} strike>
             S
           </ToolButton>
+          <ToolButton label="링크" onClick={addLink} active={false}>
+            🔗
+          </ToolButton>
           <ToolButton label="서식 지우기" onClick={() => command("removeFormat")} active={false}>
             ⌫
           </ToolButton>
         </div>
 
-        <span className="h-4 w-px bg-paper-300" aria-hidden />
+        <span className="h-6 w-px bg-paper-300" aria-hidden />
 
-        <div className="flex items-center gap-0.5" data-doc-text-colors>
-          <span className="mr-0.5 text-[calc(12px*var(--fs))] text-ink-400">글자</span>
+        <div className="flex items-center gap-1.5" data-doc-text-colors>
+          <span className="mr-1 text-[calc(13px*var(--fs))] text-ink-400">글자</span>
           {TEXT_COLORS.map((item) => (
             <button
               key={item.name}
@@ -448,16 +458,16 @@ export function RichDocEditor({
               data-tip={`글자색 ${item.label}`}
               data-text-color={item.name}
               title={`글자색 ${item.label}`}
-              className="h-4 w-4 rounded-full border border-black/10 transition hover:scale-110"
+              className="h-6 w-6 rounded-full border border-black/10 transition hover:scale-110 active:scale-95"
               style={{ backgroundColor: item.name === "default" ? "#ffffff" : item.hex }}
             />
           ))}
         </div>
 
-        <span className="h-4 w-px bg-paper-300" aria-hidden />
+        <span className="h-6 w-px bg-paper-300" aria-hidden />
 
-        <div className="flex items-center gap-0.5" data-doc-highlights>
-          <span className="mr-0.5 text-[calc(12px*var(--fs))] text-ink-400">형광펜</span>
+        <div className="flex items-center gap-1.5" data-doc-highlights>
+          <span className="mr-1 text-[calc(13px*var(--fs))] text-ink-400">형광펜</span>
           {HIGHLIGHT_COLORS.map((item) => (
             <button
               key={item.name}
@@ -468,15 +478,15 @@ export function RichDocEditor({
               data-tip={`형광펜 ${item.label}`}
               data-highlight={item.name}
               title={`형광펜 ${item.label}`}
-              className="h-4 w-4 rounded-[4px] border border-black/10 transition hover:scale-110"
+              className="h-6 w-6 rounded-[6px] border border-black/10 transition hover:scale-110 active:scale-95"
               style={{ backgroundColor: item.hex }}
             />
           ))}
         </div>
 
-        <span className="h-4 w-px bg-paper-300" aria-hidden />
+        <span className="h-6 w-px bg-paper-300" aria-hidden />
 
-        <div className="flex items-center gap-0.5" data-doc-block-types>
+        <div className="flex items-center gap-1" data-doc-block-types>
           {(
             [
               { type: "paragraph", label: "본문" },
@@ -494,7 +504,7 @@ export function RichDocEditor({
               data-tip={item.label}
               data-block-type={item.type}
               className={cn(
-                "rounded-full px-1.5 py-0.5 text-[calc(12.5px*var(--fs))] transition",
+                "rounded-full px-3 py-1.5 text-[calc(14px*var(--fs))] font-medium transition active:scale-95",
                 activeBlock?.type === item.type ? "bg-ink-900 text-white" : "text-ink-500 hover:bg-paper-200",
               )}
             >
@@ -505,9 +515,9 @@ export function RichDocEditor({
 
         {activeBlock && (activeBlock.type === "callout" || activeBlock.type === "quote") ? (
           <>
-            <span className="h-4 w-px bg-paper-300" aria-hidden />
-            <div className="flex items-center gap-0.5" data-doc-tones>
-              <span className="mr-0.5 text-[calc(12px*var(--fs))] text-ink-400">배경</span>
+            <span className="h-6 w-px bg-paper-300" aria-hidden />
+            <div className="flex items-center gap-1.5" data-doc-tones>
+              <span className="mr-1 text-[calc(13px*var(--fs))] text-ink-400">배경</span>
               {TONE_COLORS.map((item) => (
                 <button
                   key={item.name}
@@ -518,7 +528,7 @@ export function RichDocEditor({
                   data-tip={`배경 ${item.label}`}
                   data-tone={item.name}
                   title={`배경 ${item.label}`}
-                  className="h-4 w-4 rounded-full border border-black/10 transition hover:scale-110"
+                  className="h-6 w-6 rounded-full border border-black/10 transition hover:scale-110 active:scale-95"
                   style={{ backgroundColor: item.hex }}
                 />
               ))}
@@ -541,7 +551,6 @@ export function RichDocEditor({
             key={block.id}
             block={block}
             active={activeBlock?.id === block.id}
-            only={doc.blocks.length === 1}
             placeholder={placeholder}
             busy={selectionBusy}
             register={(node) => {
@@ -591,7 +600,7 @@ function ToolButton({
       data-tip={label}
       data-doc-command={label}
       className={cn(
-        "flex h-6 w-6 items-center justify-center rounded-md text-[calc(13px*var(--fs))] text-ink-600 transition hover:bg-paper-200",
+        "flex h-9 w-9 items-center justify-center rounded-lg text-[calc(16px*var(--fs))] text-ink-600 transition hover:bg-paper-200 active:scale-95",
         active && "bg-ink-900 text-white",
         bold && "font-bold",
         underline && "underline",
@@ -606,7 +615,6 @@ function ToolButton({
 function BlockRow({
   block,
   active,
-  only,
   placeholder,
   busy,
   register,
@@ -620,7 +628,6 @@ function BlockRow({
 }: {
   block: DocBlock;
   active: boolean;
-  only: boolean;
   placeholder: string;
   busy: boolean;
   register: (node: HTMLDivElement | null) => void;
@@ -667,13 +674,14 @@ function BlockRow({
       data-doc-block={block.type}
       data-doc-block-active={active ? "true" : undefined}
       data-doc-block-checked={block.type === "todo" ? (block.checked ? "true" : "false") : undefined}
+      /* A48: 줄마다 네모 테두리를 치지 않습니다 — 인용구는 왼쪽 선, 강조 박스는 배경만.
+         위아래 여백도 두지 않아 줄노트 가로선과 글자 줄이 1:1로 맞습니다. */
       className={cn(
-        "group relative flex items-start gap-1.5 rounded-lg px-1",
-        block.type === "quote" && "my-1 border-l-[3px] pl-2.5",
+        "group relative flex items-start gap-1.5 px-0.5",
+        block.type === "quote" && "border-l-[3px] pl-2.5",
         block.type === "quote" && !tone && "border-paper-400",
-        block.type === "callout" && "my-1.5 px-2 py-1.5",
-        block.type === "heading" && "mt-2",
-        active && "ring-1 ring-paper-300",
+        block.type === "callout" && "rounded-md px-2",
+        block.type === "heading" && "pt-1",
       )}
       style={
         block.type === "quote" && tone
@@ -733,27 +741,15 @@ function BlockRow({
         onInput={() => onInput(spansFromHtml(ref.current))}
         onKeyDown={onKeyDown}
         onPaste={onPaste}
+        style={{ lineHeight: "var(--doc-rule)" }}
         className={cn(
-          "min-w-0 flex-1 whitespace-pre-wrap break-words py-[3px] leading-[1.75] outline-none",
+          "min-w-0 flex-1 whitespace-pre-wrap break-words outline-none",
           "empty:before:pointer-events-none empty:before:text-ink-300 empty:before:content-[attr(data-placeholder)]",
           block.type === "heading" && "font-semibold",
           block.type === "quote" && "text-ink-700",
           block.type === "todo" && block.checked && "text-ink-400 line-through",
         )}
       />
-
-      <button
-        type="button"
-        onClick={onRemove}
-        aria-label="이 줄 지우기"
-        tabIndex={-1}
-        className={cn(
-          "mt-[0.2em] flex-none text-[calc(13px*var(--fs))] text-ink-300 transition hover:text-rose-500",
-          only ? "hidden" : "opacity-0 group-hover:opacity-100",
-        )}
-      >
-        ×
-      </button>
     </div>
   );
 }
@@ -765,6 +761,13 @@ export function DocView({ doc, className }: { doc: Doc; className?: string }) {
   if (!doc || doc.blocks.length === 0) return null;
   return (
     <div className={cn("doc-view space-y-0.5", className)} data-doc-view>
+      {/* A48: 저장된 날씨·기분 스탬프도 그대로 — 주간 전체 펼치기에서도 보입니다. */}
+      {hasStamp(doc.stamp) ? (
+        <p className="mb-0.5 flex items-center gap-1 text-[calc(15px*var(--fs))] leading-none" data-doc-view-stamp>
+          {doc.stamp.weather ? <span>{doc.stamp.weather}</span> : null}
+          {doc.stamp.mood ? <span>{doc.stamp.mood}</span> : null}
+        </p>
+      ) : null}
       {doc.blocks.map((block) => {
         const spans = block.spans.length > 0 ? spansToHtml(block.spans) : "";
         if (block.type === "divider") return <hr key={block.id} className="my-3 border-paper-300" />;

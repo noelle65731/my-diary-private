@@ -12,8 +12,19 @@ import {
 import type { ArchiveKind } from "@/lib/types";
 import type { TaskDateOrder } from "@/lib/order";
 import { pushToast } from "@/lib/toast-bus";
+import { setClockFormat } from "@/lib/date";
 
 export type CalendarViewKey = "year" | "month" | "week" | "three" | "day" | "habit";
+/** A48: 화면 색감 테마 다섯 가지. */
+export type ThemeKey = "tone" | "vivid" | "pastel" | "sage" | "mono";
+/** A48: 글꼴 세 가지 — 고딕 · 명조 · 손글씨. */
+export type FontKey = "gothic" | "serif" | "hand";
+/** A48: 화면 밀도. */
+export type DensityKey = "comfortable" | "compact";
+/** A48: 시간 표기 — 24시간제 / 오전·오후. */
+export type TimeFormatKey = "24" | "ampm";
+/** A48: 아카이브 기본 보기 — 카드형 / 한 줄 목록형. */
+export type ArchiveViewKey = "card" | "list";
 
 export interface Settings {
   /** A18: 1–9단계 — 1~3은 더 작은 쪽에 새로 더한 단계, 6이 기본(15px)입니다. */
@@ -50,6 +61,16 @@ export interface Settings {
   /** A24: 위클리 바인더에서 그 주의 일정·할 일 참고 창을 열어 둘지. */
   binderWeekSchedule: boolean;
   archiveDefaultCategory: "전체" | ArchiveKind;
+  /** A48: 화면 전체 색감 테마 (기본: 차분한 톤다운). */
+  theme: ThemeKey;
+  /** A48: 화면 글꼴 (기본: 깔끔한 고딕). */
+  font: FontKey;
+  /** A48: 화면 밀도 (기본: 여유롭게). */
+  density: DensityKey;
+  /** A48: 시간 표기 (기본: 24시간제 `14:30`). */
+  timeFormat: TimeFormatKey;
+  /** A48: 아카이브 기본 보기 (기본: 카드형). */
+  archiveView: ArchiveViewKey;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -78,9 +99,32 @@ export const DEFAULT_SETTINGS: Settings = {
   binderShowSchedule: true,
   binderWeekSchedule: false,
   archiveDefaultCategory: "전체",
+  theme: "tone",
+  font: "gothic",
+  density: "comfortable",
+  timeFormat: "24",
+  archiveView: "card",
 };
 
-const STORAGE_KEY = "my-diary:settings:v1";
+/** A48: 설정 화면의 색감 미리보기 도트 — 테마마다 포인트 세 가지를 보여 줍니다. */
+export const THEME_OPTIONS: { value: ThemeKey; label: string; hint: string; dots: string[]; canvas: string }[] = [
+  { value: "tone", label: "차분한 톤다운", hint: "기본", dots: ["#a87a69", "#718a5d", "#8d82a3"], canvas: "#f6f4f0" },
+  { value: "vivid", label: "선명한 비비드", hint: "또렷하게", dots: ["#dd5233", "#3a9e4d", "#7a56ff"], canvas: "#f2f4f7" },
+  { value: "pastel", label: "포근한 파스텔", hint: "부드럽게", dots: ["#c76c63", "#6d9f62", "#9b86b8"], canvas: "#f7f1e8" },
+  { value: "sage", label: "숲속 세이지", hint: "초록 결", dots: ["#b07048", "#789c62", "#6d9482"], canvas: "#eef2e8" },
+  { value: "mono", label: "시크 모노", hint: "무채색", dots: ["#84767c", "#647d68", "#6b8ba6"], canvas: "#f4f4f5" },
+];
+
+export const FONT_OPTIONS: { value: FontKey; label: string; hint: string; sample: string; family: string }[] = [
+  { value: "gothic", label: "깔끔한 고딕", hint: "기본", sample: "오늘의 기록", family: "var(--font-app)" },
+  { value: "serif", label: "책 같은 명조", hint: "차분하게", sample: "오늘의 기록", family: "var(--font-serif)" },
+  { value: "hand", label: "손글씨 느낌", hint: "다이어리처럼", sample: "오늘의 기록", family: "var(--font-hand)" },
+];
+
+export const DENSITY_OPTIONS: { value: DensityKey; label: string }[] = [
+  { value: "comfortable", label: "여유롭게" },
+  { value: "compact", label: "촘촘히" },
+];
 
 /**
  * A41: 설정을 바꾸면 무엇이 바뀌었는지 한 줄로 알립니다 — 모든 변경에 토스트를 붙이는
@@ -125,6 +169,16 @@ function settingsToast(key: keyof Settings, value: Settings[keyof Settings]): st
       return value === "ruled" ? "속지를 줄노트로 했습니다" : value === "grid" ? "속지를 모눈으로 했습니다" : "속지를 무지로 했습니다";
     case "archiveDefaultCategory":
       return `아카이브 기본 분류를 ${value}로 했습니다`;
+    case "theme":
+      return `색감을 ${THEME_OPTIONS.find((option) => option.value === value)?.label ?? ""}으로 바꿨습니다`;
+    case "font":
+      return `글꼴을 ${FONT_OPTIONS.find((option) => option.value === value)?.label ?? ""}으로 바꿨습니다`;
+    case "density":
+      return value === "compact" ? "화면을 촘촘히 배치했습니다" : "화면을 여유롭게 배치했습니다";
+    case "timeFormat":
+      return value === "ampm" ? "시간을 오전·오후로 표기합니다" : "시간을 24시간제로 표기합니다";
+    case "archiveView":
+      return value === "list" ? "아카이브를 한 줄 목록으로 봅니다" : "아카이브를 카드로 봅니다";
     default:
       return null;
   }
@@ -140,6 +194,8 @@ interface SettingsContextValue {
 }
 
 const SettingsContext = createContext<SettingsContextValue | null>(null);
+
+const STORAGE_KEY = "my-diary:settings:v1";
 
 /**
  * A18: 글자 크기 9단계. 1~3은 새로 더한 작은 단계이고, 6단계가 `html { font-size: 15px }`
@@ -204,6 +260,19 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     document.documentElement.style.setProperty("--fs", String(fontSizeScale(settings.fontSize)));
     document.documentElement.dataset.fontSize = String(settings.fontSize);
   }, [settings.fontSize]);
+
+  /** A48: 색감·글꼴·밀도는 `<html data-…>` 로 두고, globals.css 의 테마 블록이 값을 정합니다. */
+  useEffect(() => {
+    const root = document.documentElement;
+    root.dataset.theme = settings.theme;
+    root.dataset.font = settings.font;
+    root.dataset.density = settings.density;
+  }, [settings.theme, settings.font, settings.density]);
+
+  /** A48: 시간 표기 — 화면 곳곳의 시간이 이 값을 따릅니다. */
+  useEffect(() => {
+    setClockFormat(settings.timeFormat);
+  }, [settings.timeFormat]);
 
   const set = useCallback(<K extends keyof Settings>(key: K, value: Settings[K]) => {
     setSettings((current) => {

@@ -2,7 +2,7 @@
 
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import type { CalendarEvent, ProjectTask } from "@/lib/types";
-import { formatShort, timeRangeLabel, weekdayKo } from "@/lib/date";
+import { formatClock, formatShort, timeRangeLabel, weekdayKo } from "@/lib/date";
 import { holidayName } from "@/lib/holidays";
 import { cn } from "@/lib/utils";
 import { taskTone } from "@/components/common/tone";
@@ -244,7 +244,7 @@ export function DayListPanel({
                   return (
                     <li key={event.id} className="flex items-center gap-2">
                       <span className={cn("w-[5.3rem] flex-none whitespace-nowrap text-[calc(14px*var(--fs))] tabular-nums", tone.text)}>
-                        {event.startTime}
+                        {formatClock(event.startTime)}
                         {event.endTime ? `–${event.endTime}` : ""}
                       </span>
                       <button
@@ -330,7 +330,7 @@ export function DayListPanel({
                 onClick={() => onCreateEvent(startTime ?? null)}
                 className="btn-outline btn-xs flex-none whitespace-nowrap px-1.5"
               >
-                + 일정{startTime ? ` ${startTime}` : ""}
+                + 일정{startTime ? ` ${formatClock(startTime)}` : ""}
               </button>
             ) : null}
             {onCreateTask ? (

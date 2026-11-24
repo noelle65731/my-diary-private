@@ -7,6 +7,7 @@ import { useTabReset, useUi } from "@/state/ui";
 import {
   addDaysISO,
   diaryTitle,
+  formatClock,
   formatFullKo,
   isoWeekNumber,
   formatMonthKo,
@@ -27,6 +28,8 @@ import { EmptyState } from "@/components/common/primitives";
 import { TagInput } from "@/components/editors/shared";
 import { pushToast } from "@/lib/toast-bus";
 import { paperBackground, PAPER_OPTIONS, type PaperStyle } from "@/lib/paper";
+import { docFromMarkdown, docToMarkdown, emptyDoc, type Doc } from "@/lib/doc";
+import { DocView, RichDocEditor } from "@/components/editors/RichDocEditor";
 import { BinderEditor } from "@/components/editors/BinderEditor";
 import { BinderDetail } from "@/components/detail/BinderDetail";
 import { eventCoversDay, tasksForDay } from "@/components/calendar/calendar-utils";
@@ -50,7 +53,7 @@ interface AgendaItem {
 }
 
 export function BinderTab() {
-  const { data, update, create } = useData();
+  const { data, update, create, fetchBody, saveBody } = useData();
   const { settings, set: setSetting } = useSettings();
   const { focus, clearFocus, pendingBinderDate, consumeBinderDate, setSearchOpen, views, setView: setTabView } = useUi();
 
@@ -63,6 +66,8 @@ export function BinderTab() {
   const [editorDraft, setEditorDraft] = useState<{ date?: string; kind?: "일기" | "노트" } | null>(null);
   /** One row at a time writes in place; a click on another day moves the caret there. */
   const [writingDay, setWritingDay] = useState<string | null>(null);
+  /** A48: 주간 바인더 전체 펼치기 — 7일 일기를 데일리 양식 그대로 펼쳐 봅니다. */
+  const [expandAll, setExpandAll] = useState(false);
   /** A24: 위클리 화면의 참고 창이 어느 주를 보여 줄지 — 쓰기 시작한 날짜를 따라갑니다. */
   const [scheduleScope, setScheduleScope] = useState<"current" | "last">("current");
 
@@ -146,6 +151,9 @@ export function BinderTab() {
       lines={settings.binderPreviewLines}
       paper={settings.binderPaper}
       writing={writingDay === day}
+      expanded={expandAll}
+      onLoadDoc={(id) => fetchBody("binder", id)}
+      onSaveDoc={(id, doc) => saveBody("binder", id, doc)}
       onStartWriting={() => startWriting(day)}
       onStopWriting={() => setWritingDay((current) => (current === day ? null : current))}
       onCreateInline={(body) => createInline(day, body)}
@@ -235,6 +243,17 @@ export function BinderTab() {
               ))}
             </div>
           )}
+          {view === "weekly" ? (
+            <button
+              type="button"
+              data-binder-expand-all
+              aria-pressed={expandAll}
+              onClick={() => setExpandAll((current) => !current)}
+              className={cn("btn-outline btn-xs", expandAll && "border-ink-900 bg-ink-900 text-white hover:bg-ink-800 hover:text-white")}
+            >
+              {expandAll ? "전체 접기" : "전체 펼치기"}
+            </button>
+          ) : null}
           {view === "weekly" ? (
             <button
               type="button"
@@ -392,6 +411,9 @@ function DiaryRow({
   lines,
   paper,
   writing,
+  expanded,
+  onLoadDoc,
+  onSaveDoc,
   onStartWriting,
   onStopWriting,
   onCreateInline,
@@ -405,6 +427,10 @@ function DiaryRow({
   lines: number;
   paper: PaperStyle;
   writing: boolean;
+  /** A48: 전체 펼치기 — 이 칸도 데일리 양식 그대로 펼쳐 보입니다. */
+  expanded: boolean;
+  onLoadDoc: (id: string) => Promise<{ doc?: Doc | null } | null>;
+  onSaveDoc: (id: string, doc: Doc) => Promise<boolean>;
   onStartWriting: () => void;
   onStopWriting: () => void;
   onCreateInline: (body: string) => Promise<string | null>;
@@ -418,71 +444,112 @@ function DiaryRow({
   const dow = new Date(`${day}T12:00:00`).getDay();
   const preview = entry ? previewText(entry.body, Math.max(3, lines)) : [];
 
-  const [text, setText] = useState(entry?.body ?? "");
   const [saved, setSaved] = useState<"idle" | "saving" | "saved">("idle");
-  const area = useRef<HTMLTextAreaElement | null>(null);
+  /**
+   * A48: 칸을 펼치면 서식 문서(`Doc`)로 열립니다 — 날씨·기분 스탬프, 굵기·색·형광펜, 인용구·
+   * 강조 박스·체크리스트가 그대로 남고, 저장하면 노션 블록으로 기록됩니다.
+   */
+  const [doc, setDoc] = useState<Doc | null>(null);
+  const docRef = useRef<Doc | null>(null);
   const idRef = useRef<string | null>(entry?.id ?? null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const latest = useRef(text);
-  latest.current = text;
+  const dirty = useRef(false);
+  /** 어느 기록의 문서를 이미 읽었는지 — 저장하며 본문이 바뀌어도 다시 읽지 않습니다. */
+  const loadedFor = useRef<string | null | undefined>(undefined);
+  const active = writing || expanded;
 
-  const flush = async (value = latest.current) => {
-    const body = value;
-    if (!body.trim() && !idRef.current) return;
-    setSaved("saving");
-    if (!idRef.current) {
-      const created = await onCreateInline(body);
-      if (created) idRef.current = created;
-      setSaved(created ? "saved" : "idle");
+  useEffect(() => {
+    if (!active) {
+      loadedFor.current = undefined;
+      setDoc(null);
       return;
     }
-    const patch: Record<string, unknown> = { body };
-    // A16: only a title the app wrote is refreshed; one the user typed stays as it is.
-    if (isAutoTitle(entry?.title, day)) patch.title = autoTitle(day);
-    const ok = await onSaveInline(idRef.current, patch);
+    const id = entry?.id ?? null;
+    if (loadedFor.current === id) return;
+    loadedFor.current = id;
+    let alive = true;
+    void (async () => {
+      const base = id
+        ? ((await onLoadDoc(id))?.doc ?? docFromMarkdown(entry?.body ?? ""))
+        : docFromMarkdown(entry?.body ?? "");
+      if (!alive) return;
+      docRef.current = base;
+      setDoc(base);
+    })();
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, entry?.id]);
+
+  useEffect(() => {
+    if (entry?.id) idRef.current = entry.id;
+  }, [entry?.id]);
+
+  /** 본문(마크다운)은 속성에, 서식은 노션 블록에 함께 저장합니다. */
+  const persist = async (next: Doc) => {
+    const markdown = docToMarkdown(next);
+    if (!markdown.trim() && !idRef.current) return;
+    setSaved("saving");
+    let id = idRef.current;
+    if (!id) {
+      const created = await onCreateInline(markdown);
+      if (!created) {
+        setSaved("idle");
+        return;
+      }
+      id = created;
+      idRef.current = created;
+      loadedFor.current = created;
+    } else {
+      const patch: Record<string, unknown> = { body: markdown };
+      // A16: only a title the app wrote is refreshed; one the user typed stays as it is.
+      if (isAutoTitle(entry?.title, day)) patch.title = autoTitle(day);
+      await onSaveInline(id, patch);
+    }
+    const ok = await onSaveDoc(id, next);
+    dirty.current = false;
     setSaved(ok ? "saved" : "idle");
   };
 
-  /** Another row took the caret: write what is pending before the column changes. */
-  useEffect(() => {
-    if (writing) {
-      setText(entry?.body ?? "");
-      idRef.current = entry?.id ?? null;
-      const node = area.current;
-      if (node) {
-        node.focus({ preventScroll: true });
-        node.setSelectionRange(node.value.length, node.value.length);
-      }
-      return;
-    }
+  const flush = () => {
     if (timer.current) {
       clearTimeout(timer.current);
       timer.current = null;
-      void flush();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [writing]);
+    const latest = docRef.current;
+    if (!dirty.current || !latest) return;
+    dirty.current = false;
+    void persist(latest);
+  };
 
+  /** 타이핑이 잠시 멈추면(900ms) 저장합니다 — 편집기 전체를 한 번에 보냅니다. */
+  const queue = (next: Doc) => {
+    docRef.current = next;
+    setDoc(next);
+    dirty.current = true;
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => {
+      timer.current = null;
+      const latest = docRef.current;
+      if (!latest) return;
+      dirty.current = false;
+      void persist(latest);
+    }, 900);
+  };
+
+  /** 다른 칸으로 옮겨 가기 전에 쓰던 내용을 저장합니다. */
   useEffect(() => {
     if (writing) return;
-    if (entry?.id === idRef.current) return;
-    idRef.current = entry?.id ?? null;
-    setText(entry?.body ?? "");
-  }, [entry?.id, entry?.body, writing]);
+    flush();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [writing]);
 
   useEffect(() => {
     return () => {
       if (timer.current) clearTimeout(timer.current);
     };
   }, []);
-
-  const schedule = (value: string) => {
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => {
-      timer.current = null;
-      void flush(value);
-    }, 900);
-  };
 
   /** A press that becomes a drag moves the record to another day; a plain tap writes. */
   const startDrag = (event: React.PointerEvent<HTMLElement>) => {
@@ -554,55 +621,67 @@ function DiaryRow({
 
         {writing ? (
           <div className="min-w-0" data-binder-expanded={day}>
-            <textarea
-              ref={area}
-              value={text}
-              onChange={(event) => {
-                setText(event.target.value);
-                const node = event.target;
-                // A45: 줄 수 제한 없이 쓴 만큼 아래로 계속 늘어납니다.
-                node.style.height = "auto";
-                node.style.height = `${node.scrollHeight}px`;
-                schedule(event.target.value);
-              }}
-              onBlur={() => {
-                if (timer.current) {
-                  clearTimeout(timer.current);
-                  timer.current = null;
-                }
-                void flush();
-                onStopWriting();
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "Escape") {
-                  event.preventDefault();
-                  if (timer.current) {
-                    clearTimeout(timer.current);
-                    timer.current = null;
-                  }
-                  void flush();
-                  onStopWriting();
-                }
-              }}
-              rows={15}
-              autoFocus
-              placeholder="바로 적어 보세요"
-              /* A45: 눌러서 쓰는 동안에는 그 칸만 넉넉히(15줄) 펼쳐집니다 — 쓴 만큼 더 늘어나고,
-                  닫으면 다시 세 줄 미리보기로 돌아갑니다. */
-              style={{ minHeight: "22rem", ...paperBackground(paper) }}
-              className="binder-input min-h-[22rem]"
-            />
+            {/* A48: 펼친 칸은 평문 대신 꾸미기 편집기 — 스탬프·굵기·색·형광펜·인용·강조·체크가
+                그대로 열리고, 닫으면 노션 블록으로 저장됩니다. */}
+            {doc ? (
+              <RichDocEditor
+                doc={doc}
+                onChange={queue}
+                paper={paper}
+                minHeight={200}
+                compact
+                placeholder="바로 적어 보세요"
+              />
+            ) : (
+              <p className="py-6 text-center text-[calc(13.5px*var(--fs))] text-ink-400">불러오는 중…</p>
+            )}
             <div className="mt-1 flex items-center justify-between text-[calc(12px*var(--fs))] text-ink-400">
               <span>{saved === "saving" ? "저장 중…" : saved === "saved" ? "저장됨" : "자동 저장 (잠시 멈추면)"}</span>
               <button
                 type="button"
                 onMouseDown={(event) => event.preventDefault()}
-                onClick={onStopWriting}
+                onClick={() => {
+                  flush();
+                  onStopWriting();
+                }}
                 className="rounded-full border border-paper-300 px-2 py-0.5 hover:border-ink-400 hover:text-ink-800"
               >
                 닫기
               </button>
             </div>
+          </div>
+        ) : expanded ? (
+          /* A48: 전체 펼치기 — 데일리 다이어리에서 쓴 양식 그대로 보여 줍니다. */
+          <div className="min-w-0 pb-1" data-binder-expanded-all={day}>
+            {entry ? (
+              doc ? (
+                <>
+                  <DocView doc={doc} className="pb-0.5" />
+                  <button
+                    type="button"
+                    onPointerDown={(event) => event.stopPropagation()}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onOpenEntry(entry.id);
+                    }}
+                    className="mt-1 text-[calc(12.5px*var(--fs))] text-ink-400 underline decoration-paper-400 underline-offset-2 hover:text-ink-800"
+                  >
+                    자세히
+                  </button>
+                </>
+              ) : (
+                <p className="py-3 text-center text-[calc(13px*var(--fs))] text-ink-300">불러오는 중…</p>
+              )
+            ) : (
+              <button
+                type="button"
+                onClick={onStartWriting}
+                onPointerDown={startDrag}
+                className="flex min-h-[2.6rem] w-full items-center text-left text-[calc(13.5px*var(--fs))] text-ink-400 hover:text-ink-700"
+              >
+                + 눌러서 바로 쓰기
+              </button>
+            )}
           </div>
         ) : (
           <div
@@ -721,7 +800,7 @@ function agendaForDay(day: string, events: CalendarEvent[], tasks: ProjectTask[]
       id: event.id,
       kind: "일정",
       title: event.title,
-      time: event.allDay ? "종일" : event.startTime ?? "",
+      time: event.allDay ? "종일" : formatClock(event.startTime),
       allDay: event.allDay,
       done: event.done || event.canceled,
       waiting: false,
@@ -738,7 +817,7 @@ function agendaForDay(day: string, events: CalendarEvent[], tasks: ProjectTask[]
       id: task.id,
       kind: "할 일",
       title: task.title,
-      time: task.startTime ?? "",
+      time: formatClock(task.startTime),
       allDay: false,
       done: task.status === "완료",
       waiting: task.status === "대기 중",
@@ -900,7 +979,7 @@ function WeekSchedule({
                         )}
                       />
                       <span className="w-[2.6rem] flex-none tabular-nums text-ink-500">
-                        {event.allDay ? "종일" : event.startTime ?? "—"}
+                        {event.allDay ? "종일" : formatClock(event.startTime) || "—"}
                       </span>
                       <span
                         className={cn(
@@ -925,7 +1004,7 @@ function WeekSchedule({
                           task.status === "완료" ? "bg-sage-400" : task.status === "대기 중" ? "bg-amber-400" : "bg-dusk-500",
                         )}
                       />
-                      <span className="w-[2.6rem] flex-none tabular-nums text-ink-500">{task.startTime ?? ""}</span>
+                      <span className="w-[2.6rem] flex-none tabular-nums text-ink-500">{formatClock(task.startTime)}</span>
                       <span
                         className={cn(
                           "min-w-0 flex-1 break-words text-ink-700",
@@ -1139,7 +1218,7 @@ function DailyView({
                 onBlur={flush}
                 placeholder={"# 오늘\n\n있었던 일을 천천히 적어 보세요.\n\n- 기억하고 싶은 장면\n- 내일의 다짐"}
                 // A45: 설정한 속지(무지·줄노트·모눈)를 그대로 따릅니다.
-                style={{ lineHeight: "28px", ...paperBackground(paper) }}
+                style={{ lineHeight: "var(--doc-rule)", ...paperBackground(paper) }}
                 className="min-h-[360px] w-full resize-y border-none bg-transparent px-0 py-0 text-[calc(16px*var(--fs))] text-ink-800 outline-none placeholder:text-ink-300"
               />
             )}
@@ -1215,7 +1294,7 @@ function DaySchedule({ events, tasks }: { events: CalendarEvent[]; tasks: Projec
                     )}
                   />
                   <span className="w-[4.6rem] flex-none text-[calc(13.5px*var(--fs))] tabular-nums text-ink-600">
-                    {event.allDay ? "종일" : event.startTime ?? "시간 없음"}
+                    {event.allDay ? "종일" : formatClock(event.startTime) || "시간 없음"}
                   </span>
                   <span className={cn("min-w-0 flex-1 break-words", (event.canceled || event.done) && "text-ink-400 line-through")}>
                     {event.title}

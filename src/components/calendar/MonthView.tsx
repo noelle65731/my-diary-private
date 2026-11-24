@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { calendarEventMode, type CalendarEvent, type ModeFilter, type ProjectTask, type Routine } from "@/lib/types";
-import { addDaysISO, daysInMonth, diffDays, formatShort, isSameISO, monthMatrix, timeRangeLabel, todayISO, weekdayKo } from "@/lib/date";
+import { addDaysISO, daysInMonth, diffDays, formatClock, formatShort, isSameISO, monthMatrix, timeRangeLabel, todayISO, weekdayKo } from "@/lib/date";
 import { holidayName } from "@/lib/holidays";
 import { cn, matchesMode } from "@/lib/utils";
 import { routineTone, taskTone } from "@/components/common/tone";
@@ -519,7 +519,7 @@ export function MonthView({
                             />
                           ) : null}
                           <span className={cn("min-w-0 flex-1 truncate", onResizeSpan && "pl-1.5")}>
-                            {segment.event.startTime ? <span className="mr-1 hidden tabular-nums opacity-80 md:inline">{segment.event.startTime}</span> : null}
+                            {segment.event.startTime ? <span className="mr-1 hidden tabular-nums opacity-80 md:inline">{formatClock(segment.event.startTime)}</span> : null}
                             {segment.event.title}
                           </span>
                           {segment.cutEnd ? <span className="flex-none opacity-70">›</span> : null}
@@ -599,7 +599,7 @@ export function MonthView({
                                     item.event.done && "line-through opacity-60",
                                   )}
                                 >
-                                  {item.event.startTime ? <span className="hidden flex-none tabular-nums opacity-80 md:inline">{item.event.startTime}</span> : null}
+                                  {item.event.startTime ? <span className="hidden flex-none tabular-nums opacity-80 md:inline">{formatClock(item.event.startTime)}</span> : null}
                                   <span className="line-clamp-2 md:line-clamp-1">{item.event.title}</span>
                                 </button>
                               );

@@ -2,7 +2,21 @@
 
 import { useState } from "react";
 import { useData } from "@/state/store";
-import { useSettings, DEFAULT_SETTINGS, FONT_STEPS, fontSizeToPx, type CalendarViewKey } from "@/state/settings";
+import {
+  useSettings,
+  DEFAULT_SETTINGS,
+  FONT_STEPS,
+  fontSizeToPx,
+  THEME_OPTIONS,
+  FONT_OPTIONS,
+  DENSITY_OPTIONS,
+  type CalendarViewKey,
+  type DensityKey,
+  type FontKey,
+  type ThemeKey,
+  type TimeFormatKey,
+  type ArchiveViewKey,
+} from "@/state/settings";
 import { useUi } from "@/state/ui";
 import { Modal, Segmented, Toggle } from "@/components/common/primitives";
 import { cn } from "@/lib/utils";
@@ -99,6 +113,88 @@ export function SettingsDialog() {
                   </p>
                 </div>
               </div>
+              {/* A48: 색감 테마 다섯 가지 — 도트로 미리 봅니다. */}
+              <div data-theme-options="true">
+                <div className="mb-2 flex items-baseline justify-between">
+                  <p className="text-[calc(15.5px*var(--fs))] font-medium text-ink-800">색감 테마</p>
+                  <span className="text-[calc(14px*var(--fs))] text-ink-400">
+                    {THEME_OPTIONS.find((option) => option.value === settings.theme)?.label}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {THEME_OPTIONS.map((option) => {
+                    const active = settings.theme === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        data-theme-option={option.value}
+                        aria-pressed={active}
+                        onClick={() => set("theme", option.value as ThemeKey)}
+                        className={cn(
+                          "flex flex-col items-start gap-1.5 rounded-xl border px-2.5 py-2 text-left transition",
+                          active ? "border-ink-900 bg-white ring-1 ring-ink-900" : "border-paper-300 bg-white/70 hover:border-paper-400",
+                        )}
+                      >
+                        <span className="flex items-center gap-1" aria-hidden>
+                          {option.dots.map((dot) => (
+                            <span key={dot} className="h-[13px] w-[13px] rounded-full ring-1 ring-black/10" style={{ backgroundColor: dot }} />
+                          ))}
+                          <span className="ml-0.5 h-[13px] w-[13px] rounded-full ring-1 ring-black/10" style={{ backgroundColor: option.canvas }} />
+                        </span>
+                        <span className="text-[calc(14.5px*var(--fs))] font-medium leading-tight text-ink-900">{option.label}</span>
+                        <span className="text-[calc(12.5px*var(--fs))] leading-none text-ink-400">{option.hint}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="mt-1 text-[calc(14px*var(--fs))] leading-relaxed text-ink-400">
+                  어느 테마를 골라도 일정 막대·할 일·프로젝트 색은 바탕과 또렷하게 구분되도록 맞췄습니다.
+                </p>
+              </div>
+
+              {/* A48: 글꼴 세 가지 — 미리보기 글자가 그 글꼴로 보입니다. */}
+              <div data-font-options="true">
+                <p className="label">글꼴</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {FONT_OPTIONS.map((option) => {
+                    const active = settings.font === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        data-font-option={option.value}
+                        aria-pressed={active}
+                        onClick={() => set("font", option.value as FontKey)}
+                        className={cn(
+                          "flex flex-col items-start gap-1 rounded-xl border px-2.5 py-2 text-left transition",
+                          active ? "border-ink-900 bg-white ring-1 ring-ink-900" : "border-paper-300 bg-white/70 hover:border-paper-400",
+                        )}
+                      >
+                        <span className="truncate text-[calc(16px*var(--fs))] text-ink-900" style={{ fontFamily: option.family }}>
+                          {option.sample}
+                        </span>
+                        <span className="text-[calc(13px*var(--fs))] leading-tight text-ink-600">{option.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* A48: 화면 밀도 — 노트북에서는 촘촘히, 폰에서는 여유롭게. */}
+              <div data-density-options="true">
+                <p className="label">화면 밀도</p>
+                <Segmented<DensityKey>
+                  value={settings.density}
+                  onChange={(value) => set("density", value)}
+                  size="sm"
+                  options={DENSITY_OPTIONS.map((option) => ({ value: option.value, label: option.label }))}
+                />
+                <p className="mt-1 text-[calc(14px*var(--fs))] leading-relaxed text-ink-400">
+                  촘촘히를 고르면 카드·날짜 칸의 세로 여백과 글줄 간격이 줄어 한 화면에 더 많이 담깁니다.
+                </p>
+              </div>
+
               <div className="rounded-xl border border-paper-300 bg-paper-50/60 px-3 py-2.5 text-[calc(14.5px*var(--fs))] leading-relaxed text-ink-500">
                 설정은 브라우저(localStorage)에 저장되어 기기마다 따로 적용됩니다. 폰과 PC에서 각각 맞춰 쓰세요.
               </div>
@@ -128,6 +224,24 @@ export function SettingsDialog() {
                     { value: "three", label: "3일" },
                     { value: "day", label: "일" },
                     { value: "habit", label: "루틴" },
+                  ]}
+                />
+              </div>
+              {/* A48: 시간 표기 — 캘린더·프로젝트·바인더의 시간이 모두 이 설정을 따릅니다. */}
+              <div data-time-format="true">
+                <div className="mb-1 flex items-baseline justify-between">
+                  <p className="text-[calc(15.5px*var(--fs))] text-ink-800">시간 표기</p>
+                  <span className="text-[calc(14px*var(--fs))] tabular-nums text-ink-400">
+                    {settings.timeFormat === "ampm" ? "오후 2:30" : "14:30"}
+                  </span>
+                </div>
+                <Segmented<TimeFormatKey>
+                  value={settings.timeFormat}
+                  onChange={(value) => set("timeFormat", value)}
+                  size="sm"
+                  options={[
+                    { value: "24", label: "24시간제" },
+                    { value: "ampm", label: "오전·오후" },
                   ]}
                 />
               </div>
@@ -388,7 +502,24 @@ export function SettingsDialog() {
           ) : null}
 
           {section === "archive" ? (
-            <div>
+            <div className="space-y-4">
+              {/* A48: 아카이브를 카드로 볼지, 한 줄 목록으로 볼지. */}
+              <div data-archive-view-options="true">
+                <p className="label">기본 보기</p>
+                <Segmented<ArchiveViewKey>
+                  value={settings.archiveView}
+                  onChange={(value) => set("archiveView", value)}
+                  size="sm"
+                  options={[
+                    { value: "card", label: "카드형" },
+                    { value: "list", label: "한 줄 목록형" },
+                  ]}
+                />
+                <p className="mt-1 text-[calc(14px*var(--fs))] leading-relaxed text-ink-400">
+                  아카이브 위쪽 전환 버튼과 같은 값입니다. 두 보기 모두에서 여러 개 고르기·고정핀·끌어 옮기기·삭제가 똑같이 됩니다.
+                </p>
+              </div>
+              <div>
               <p className="label">기본 분류</p>
               <div className="flex flex-wrap gap-1.5">
                 {(["전체", ...ARCHIVE_KINDS] as const).map((kind) => (
@@ -406,6 +537,7 @@ export function SettingsDialog() {
                     {kind}
                   </button>
                 ))}
+              </div>
               </div>
             </div>
           ) : null}

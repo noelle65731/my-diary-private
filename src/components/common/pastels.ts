@@ -29,17 +29,19 @@ export interface Pastel {
 
 /* A18: 카드·행 배경이 너무 진하다는 요청에 채도를 절반으로 낮춘 톤만 남깁니다.
  * 흰 바탕에 아주 은은하게 비치는 정도라, 열 가지가 서로 구분되면서도 무겁지 않습니다. */
+/* A48: 색값은 `globals.css` 의 `--pastel-*` 변수에 있습니다 — 설정의 색감 테마를 바꾸면
+ * 열 가지 파스텔도 함께 바뀌되, 어떤 테마에서도 흰 바탕에 또렷하게 구분되는 톤을 씁니다. */
 export const PASTELS: Pastel[] = [
-  { key: "rose", label: "로즈", bg: "bg-[#faf4f5]", border: "border-[#f1e5e8]", dot: "bg-[#e8a3b3]", line: "#e8a3b3" },
-  { key: "peach", label: "피치", bg: "bg-[#f9f4f0]", border: "border-[#eee4da]", dot: "bg-[#eab185]", line: "#eab185" },
-  { key: "lemon", label: "레몬", bg: "bg-[#f8f7ee]", border: "border-[#e7e4d0]", dot: "bg-[#dcc464]", line: "#dcc464" },
-  { key: "mint", label: "민트", bg: "bg-[#f1f7f4]", border: "border-[#dee9e4]", dot: "bg-[#7cc9a8]", line: "#7cc9a8" },
-  { key: "sky", label: "스카이", bg: "bg-[#f2f6f9]", border: "border-[#e3eaf2]", dot: "bg-[#86b7e4]", line: "#86b7e4" },
-  { key: "lavender", label: "라벤더", bg: "bg-[#f6f4fa]", border: "border-[#e9e6f3]", dot: "bg-[#a897e0]", line: "#a897e0" },
-  { key: "sage", label: "세이지", bg: "bg-[#f3f6f1]", border: "border-[#e4e9e0]", dot: "bg-[#a3bf8c]", line: "#a3bf8c" },
-  { key: "cream", label: "크림", bg: "bg-[#faf7f3]", border: "border-[#ebe5dd]", dot: "bg-[#d8bd93]", line: "#d8bd93" },
-  { key: "aqua", label: "아쿠아", bg: "bg-[#f1f7f7]", border: "border-[#dee9e8]", dot: "bg-[#7fcbc6]", line: "#7fcbc6" },
-  { key: "lilac", label: "라일락", bg: "bg-[#f8f3f8]", border: "border-[#eee3ed]", dot: "bg-[#cf9ccb]", line: "#cf9ccb" },
+  { key: "rose", label: "로즈", bg: "bg-[var(--pastel-rose-bg)]", border: "border-[var(--pastel-rose-border)]", dot: "bg-[var(--pastel-rose-dot)]", line: "var(--pastel-rose-dot)" },
+  { key: "peach", label: "피치", bg: "bg-[var(--pastel-peach-bg)]", border: "border-[var(--pastel-peach-border)]", dot: "bg-[var(--pastel-peach-dot)]", line: "var(--pastel-peach-dot)" },
+  { key: "lemon", label: "레몬", bg: "bg-[var(--pastel-lemon-bg)]", border: "border-[var(--pastel-lemon-border)]", dot: "bg-[var(--pastel-lemon-dot)]", line: "var(--pastel-lemon-dot)" },
+  { key: "mint", label: "민트", bg: "bg-[var(--pastel-mint-bg)]", border: "border-[var(--pastel-mint-border)]", dot: "bg-[var(--pastel-mint-dot)]", line: "var(--pastel-mint-dot)" },
+  { key: "sky", label: "스카이", bg: "bg-[var(--pastel-sky-bg)]", border: "border-[var(--pastel-sky-border)]", dot: "bg-[var(--pastel-sky-dot)]", line: "var(--pastel-sky-dot)" },
+  { key: "lavender", label: "라벤더", bg: "bg-[var(--pastel-lavender-bg)]", border: "border-[var(--pastel-lavender-border)]", dot: "bg-[var(--pastel-lavender-dot)]", line: "var(--pastel-lavender-dot)" },
+  { key: "sage", label: "세이지", bg: "bg-[var(--pastel-sage-bg)]", border: "border-[var(--pastel-sage-border)]", dot: "bg-[var(--pastel-sage-dot)]", line: "var(--pastel-sage-dot)" },
+  { key: "cream", label: "크림", bg: "bg-[var(--pastel-cream-bg)]", border: "border-[var(--pastel-cream-border)]", dot: "bg-[var(--pastel-cream-dot)]", line: "var(--pastel-cream-dot)" },
+  { key: "aqua", label: "아쿠아", bg: "bg-[var(--pastel-aqua-bg)]", border: "border-[var(--pastel-aqua-border)]", dot: "bg-[var(--pastel-aqua-dot)]", line: "var(--pastel-aqua-dot)" },
+  { key: "lilac", label: "라일락", bg: "bg-[var(--pastel-lilac-bg)]", border: "border-[var(--pastel-lilac-border)]", dot: "bg-[var(--pastel-lilac-dot)]", line: "var(--pastel-lilac-dot)" },
 ];
 
 const BY_KEY = new Map(PASTELS.map((pastel) => [pastel.key, pastel]));

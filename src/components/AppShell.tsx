@@ -194,7 +194,7 @@ export function AppShell() {
   if (status?.authRequired && !status.authenticated) return <LoginScreen />;
 
   return (
-    <div className="flex h-dvh flex-col overflow-hidden bg-white">
+    <div className="flex h-dvh flex-col overflow-hidden bg-paper-50">
       {/* Chrome (나의 다이어리 · 검색 · 휴지통 · 설정) is an overlay: the page uses the full
           height, and the bar slides down when the pointer reaches the top edge. */}
       <div className="pointer-events-none fixed inset-x-0 top-0 z-40 print:hidden" ref={chromeRef}>

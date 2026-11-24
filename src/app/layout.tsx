@@ -50,6 +50,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           rel="stylesheet"
           href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap"
         />
+        {/* A48: 설정의 글꼴 세 가지 — 명조(Noto Serif KR)·손글씨(Gaegu)를 실제로 불러옵니다. */}
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@400;500;600;700&family=Gaegu:wght@400;700&display=swap"
+        />
       </head>
       <body>{children}</body>
     </html>

@@ -1172,6 +1172,8 @@ function ProjectCard({
   /** 기본 보기 아래 '최근 기록'은 토글과 상관없이 늘 보이고, 최근 두 개까지만 보여 줍니다. */
   const recent = doneOnly ? [] : completed.slice(0, RECENT_LOG_MAX);
   const last = [...children].sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""))[0];
+  /** A48: 제목 옆 미니 진행률 — 완료·취소를 뺀 완료 비율. */
+  const donePercent = children.length > 0 ? Math.round((completed.length / children.length) * 100) : 0;
 
   return (
     <article
@@ -1201,7 +1203,23 @@ function ProjectCard({
           <ProjectIcon icon={project.icon} seed={project.id} category={project.category} className="h-full w-full" />
         </span>
         <button type="button" onClick={() => onOpenProject(project.id)} className="min-w-0 flex-1 text-left">
-          <p className="truncate text-[calc(17px*var(--fs))] font-semibold tracking-tight text-ink-900">{project.title}</p>
+          {/* A48: 진행률은 제목과 같은 줄에 작게 — 카드 세로 높이가 늘지 않습니다. */}
+          <span className="flex items-center gap-1.5">
+            <span className="min-w-0 truncate text-[calc(17px*var(--fs))] font-semibold tracking-tight text-ink-900">{project.title}</span>
+            <span data-project-progress={project.id} className="flex flex-none items-center gap-1" title={`완료 ${donePercent}%`}>
+              <span className="text-[calc(12px*var(--fs))] font-medium leading-none tabular-nums text-ink-500">{donePercent}%</span>
+              <span
+                role="progressbar"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={donePercent}
+                aria-label={`${project.title} 완료율`}
+                className="block h-[4px] w-[24px] overflow-hidden rounded-full bg-black/[0.09]"
+              >
+                <span className="block h-full rounded-full bg-sage-500 transition-all" style={{ width: `${donePercent}%` }} />
+              </span>
+            </span>
+          </span>
           {/* A45: 제목 밑의 `~ 기록`(시작일) 문구를 지우고, 그 자리에 완료율 막대를 둘니다. */}
           {mode === "history" ? (
             <p className="truncate text-[calc(14px*var(--fs))] text-ink-500">
@@ -1241,23 +1259,6 @@ function ProjectCard({
           <ChevronRightIcon size={15} />
         </button>
       </header>
-
-      {/* A45: 얇은 진행률 막대 — 완료·취소를 뺀 완료 비율. */}
-      <div className="mt-1.5" data-project-progress={project.id}>
-        <div
-          role="progressbar"
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={children.length > 0 ? Math.round((completed.length / children.length) * 100) : 0}
-          aria-label={`${project.title} 완료율`}
-          className="h-[5px] w-full overflow-hidden rounded-full bg-black/[0.07]"
-        >
-          <div
-            className="h-full rounded-full bg-sage-500 transition-all"
-            style={{ width: `${children.length > 0 ? Math.round((completed.length / children.length) * 100) : 0}%` }}
-          />
-        </div>
-      </div>
 
       <p className="mt-1.5 text-[calc(14px*var(--fs))] text-ink-500">
         {doneOnly ? `완료·취소한 할 일 ${completed.length}` : `남은 할 일 ${open.length}`}

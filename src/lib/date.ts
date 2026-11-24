@@ -194,13 +194,43 @@ export function formatMonthKo(iso: string): string {
   return `${d.getFullYear()}년 ${d.getMonth() + 1}월`;
 }
 
-/** `오전 9:30` style label from `HH:MM`. *//**
+/**
+ * A48: 시간 표기 설정 — 화면의 모든 시간이 이 한 곳을 거칩니다.
+ * `24` 는 `14:30`, `ampm` 은 `오후 2:30` 입니다. 설정을 바꾸면 `SettingsProvider` 가
+ * 이 값을 갱신하고, 화면이 다시 그려질 때 새 표기로 보입니다.
+ */
+export type ClockFormat = "24" | "ampm";
+let clockFormat: ClockFormat = "24";
+
+export function setClockFormat(format: ClockFormat): void {
+  clockFormat = format === "ampm" ? "ampm" : "24";
+}
+
+export function clockFormatNow(): ClockFormat {
+  return clockFormat;
+}
+
+/** `HH:MM` 하나를 설정한 표기로. */
+export function formatClock(time: string | null | undefined, format: ClockFormat = clockFormat): string {
+  if (!time) return "";
+  const [rawHour, rawMinute] = time.split(":");
+  const hour = Number(rawHour);
+  if (!Number.isFinite(hour)) return time;
+  const minute = (rawMinute ?? "00").padStart(2, "0");
+  if (format === "24") return `${String(hour).padStart(2, "0")}:${minute}`;
+  const ampm = hour < 12 ? "오전" : "오후";
+  const h12 = hour % 12 === 0 ? 12 : hour % 12;
+  return `${ampm} ${h12}:${minute}`;
+}
+
+/**
  * `14:00~15:30` / `14:00` — the short 시간 지정 label a task row carries next to its date
- * (blank when the task has no start time, i.e. it is all-day).
+ * (blank when the task has no start time, i.e. it is all-day). 표기 설정을 따릅니다.
  */
 export function timeRangeLabel(start: string | null | undefined, end: string | null | undefined): string {
   if (!start) return "";
-  return end && end > start ? `${start}~${end}` : start;
+  const head = formatClock(start);
+  return end && end > start ? `${head}~${formatClock(end)}` : head;
 }
 
 export function formatTimeKo(time: string | null | undefined): string {
@@ -208,6 +238,7 @@ export function formatTimeKo(time: string | null | undefined): string {
   const parts = time.split(":");
   const h = Number(parts[0] ?? 0);
   const m = Number(parts[1] ?? 0);
+  if (clockFormat === "24") return `${pad2(h)}:${pad2(m)}`;
   const ampm = h < 12 ? "오전" : "오후";
   const h12 = h % 12 === 0 ? 12 : h % 12;
   return m === 0 ? `${ampm} ${h12}시` : `${ampm} ${h12}:${pad2(m)}`;

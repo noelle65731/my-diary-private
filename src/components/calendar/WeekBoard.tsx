@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import type { CalendarEvent, ModeFilter, ProjectTask, Routine } from "@/lib/types";
-import { isSameISO, timeRangeLabel, todayISO, weekdayKo } from "@/lib/date";
+import { formatClock, isSameISO, timeRangeLabel, todayISO, weekdayKo } from "@/lib/date";
 import { holidayName } from "@/lib/holidays";
 import { cn } from "@/lib/utils";
 import { mergeCategories } from "@/state/categories";
@@ -540,7 +540,7 @@ export function WeekBoard({
             return point.y > target.rect.top + target.rect.height / 2 ? "아래로 순서 바꾸기" : "위로 순서 바꾸기";
           }
           if (nextDay === day) return null;
-          const keeps = item.startTime && !item.allDay ? ` (${item.startTime} 유지)` : "";
+          const keeps = item.startTime && !item.allDay ? ` (${formatClock(item.startTime)} 유지)` : "";
           return `${nextDay.slice(5).replace("-", "/")}로 옮기기${keeps}`;
         },
       },

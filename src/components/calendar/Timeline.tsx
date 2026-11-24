@@ -1,5 +1,6 @@
 "use client";
 
+import { formatClock } from "@/lib/date";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CalendarEvent } from "@/lib/types";
 import { todayISO } from "@/lib/date";
@@ -436,7 +437,7 @@ export function Timeline({
                             const nextDay = target.data.day;
                             if (!nextDay) return null;
                             const stamp = nextDay.slice(5).replace("-", "/");
-                            const keeps = nextDay !== event.date && event.startTime ? ` (${event.startTime} 유지)` : "";
+                            const keeps = nextDay !== event.date && event.startTime ? ` (${formatClock(event.startTime)} 유지)` : "";
                             if (target.zone === "allday-day" || target.zone === "allday-bar") {
                               if (nextDay === event.date) return onMoveAllDayDate ? `${stamp} 종일로 돌리기` : null;
                               return `${stamp}로 옮기기${keeps}`;
