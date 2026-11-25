@@ -22,6 +22,8 @@ import { ARCHIVE_KINDS, type ArchiveEntry, type ArchiveKind } from "@/lib/types"
 import { notionPageUrl } from "@/lib/utils";
 import { PhotoEditor, PhotoGallery } from "@/components/common/PhotoField";
 import { docFromMarkdown, docToMarkdown, type Doc } from "@/lib/doc";
+import { useArchiveSend } from "@/components/archive/use-archive-send";
+import { CalendarIcon, ListIcon } from "@/components/icons";
 
 interface ArchiveForm {
   title: string;
@@ -102,6 +104,7 @@ function ArchiveDetailInner({
   onCloseDetail: () => void;
 }) {
   const { update, remove, fetchBody, saveBody } = useData();
+  const send = useArchiveSend();
   const { draft, set, markSaved, changedKeys, isDirty } = useDetailDraft(formFromEntry(entry));
   const [field, setField] = useState<string | null>(null);
   /** A45: 메모의 서식 문서 — 저장된 블록이 있으면 그것을, 없으면 `기록 데이터` 에서 만듭니다. */
@@ -196,6 +199,16 @@ function ArchiveDetailInner({
             flags={[{ key: "favorite", label: "즐겨찾기", on: draft.favorite }]}
             onToggle={() => set("favorite", !draft.favorite)}
           />
+        </div>
+
+        {/* A51: 이 메모를 다이어리로 바로 보냅니다 — 누르면 할 일·일정이 하나 생깁니다. */}
+        <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+          <button type="button" data-archive-send-task onClick={() => void send.toTask(entry)} className="btn-outline btn-xs">
+            <ListIcon size={11} /> 할 일로 보내기
+          </button>
+          <button type="button" data-archive-send-event onClick={() => void send.toEvent(entry)} className="btn-outline btn-xs">
+            <CalendarIcon size={11} /> 일정으로 보내기
+          </button>
         </div>
 
         <DetailSection title="기록 정보">

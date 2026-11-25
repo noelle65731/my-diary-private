@@ -539,6 +539,12 @@ export function SettingsDialog() {
                 ))}
               </div>
               </div>
+              <Toggle
+                checked={settings.archiveShowRating}
+                onChange={(value) => set("archiveShowRating", value)}
+                label="카드에 별점 보기"
+                description="아카이브 목록 카드에 별점을 함께 보여 줍니다. 끄면 목록이 깔끔해지고, 상세·편집에서는 늘 볼 수 있습니다"
+              />
             </div>
           ) : null}
 

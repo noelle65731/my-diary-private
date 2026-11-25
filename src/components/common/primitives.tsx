@@ -512,7 +512,7 @@ export function StarRating({
   size?: number;
 }) {
   return (
-    <div className="flex items-center gap-0.5">
+    <div data-star-rating="true" className="flex items-center gap-0.5">
       {[1, 2, 3, 4, 5].map((star) => (
         <button
           key={star}

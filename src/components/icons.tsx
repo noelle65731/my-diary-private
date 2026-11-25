@@ -267,6 +267,16 @@ export function ArrowLeftIcon(props: IconProps) {
   );
 }
 
+export function ImageIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <rect x="3.5" y="4.5" width="17" height="15" rx="2.4" />
+      <circle cx="9" cy="10" r="1.5" />
+      <path d="M4.5 17.2 9.6 12l3.1 3 2.4-2.2 4.4 4.2" />
+    </svg>
+  );
+}
+
 /** A45: 상단 고정핀 — 노트·아카이브의 `즐겨찾기`(고정) 토글. */
 export function PinIcon({ filled, ...props }: IconProps & { filled?: boolean }) {
   return (

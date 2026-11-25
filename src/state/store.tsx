@@ -311,7 +311,7 @@ function draftItem(resource: Resource, patch: Patch, id = uid("new")): AnyItem {
       tags: (patch["tags"] as string[]) ?? [],
       archiveFlag: false,
       body: (patch["body"] as string) ?? "",
-      photos: [],
+      photos: (patch["photos"] as string[]) ?? [],
     } satisfies BinderEntry;
   }
   return {
@@ -319,11 +319,11 @@ function draftItem(resource: Resource, patch: Patch, id = uid("new")): AnyItem {
     kind: (patch["kind"] as ArchiveEntry["kind"]) ?? "메모",
     date: (patch["date"] as string | null) ?? todayISO(),
     baseDate: (patch["date"] as string | null) ?? todayISO(),
-    rating: null,
+    rating: (patch["rating"] as number | null) ?? null,
     link: (patch["link"] as string) ?? "",
     tags: (patch["tags"] as string[]) ?? [],
     body: (patch["body"] as string) ?? "",
-    photos: [],
+    photos: (patch["photos"] as string[]) ?? [],
   } satisfies ArchiveEntry;
 }
 

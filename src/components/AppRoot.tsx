@@ -4,6 +4,7 @@ import { DataProvider } from "@/state/store";
 import { CategoryColorProvider } from "@/state/category-colors";
 import { EventColorProvider } from "@/state/event-colors";
 import { ProjectColorProvider } from "@/state/project-colors";
+import { ArchiveLookProvider } from "@/state/archive-look";
 import { SettingsProvider } from "@/state/settings";
 import { UiProvider } from "@/state/ui";
 import { AppShell } from "@/components/AppShell";
@@ -17,9 +18,11 @@ export function AppRoot() {
           <CategoryColorProvider>
             <EventColorProvider>
               <ProjectColorProvider>
-                <DndProvider>
-                  <AppShell />
-                </DndProvider>
+                <ArchiveLookProvider>
+                  <DndProvider>
+                    <AppShell />
+                  </DndProvider>
+                </ArchiveLookProvider>
               </ProjectColorProvider>
             </EventColorProvider>
           </CategoryColorProvider>

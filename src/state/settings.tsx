@@ -71,6 +71,8 @@ export interface Settings {
   timeFormat: TimeFormatKey;
   /** A48: 아카이브 기본 보기 (기본: 카드형). */
   archiveView: ArchiveViewKey;
+  /** A51: 아카이브 카드에 별점을 보여 줄지 (기본: 숨김 — 상세·편집에서는 늘 보입니다). */
+  archiveShowRating: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -104,6 +106,7 @@ export const DEFAULT_SETTINGS: Settings = {
   density: "comfortable",
   timeFormat: "24",
   archiveView: "card",
+  archiveShowRating: false,
 };
 
 /** A48: 설정 화면의 색감 미리보기 도트 — 테마마다 포인트 세 가지를 보여 줍니다. */
@@ -179,6 +182,8 @@ function settingsToast(key: keyof Settings, value: Settings[keyof Settings]): st
       return value === "ampm" ? "시간을 오전·오후로 표기합니다" : "시간을 24시간제로 표기합니다";
     case "archiveView":
       return value === "list" ? "아카이브를 한 줄 목록으로 봅니다" : "아카이브를 카드로 봅니다";
+    case "archiveShowRating":
+      return value ? "아카이브 카드에 별점을 보여 줍니다" : "아카이브 카드의 별점을 숨겼습니다";
     default:
       return null;
   }
